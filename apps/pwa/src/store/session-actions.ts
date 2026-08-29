@@ -58,6 +58,7 @@ const remove = async (
     boxLink.reportError(i, error);
     return { ok: false, dirty: null };
   }
+  boxLink.clearActionError(i);
   await boxLink.refreshSessions(i);
   return { ok: true };
 };

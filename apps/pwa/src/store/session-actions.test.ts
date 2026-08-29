@@ -60,17 +60,23 @@ test('a dirty refusal is the outcome, not an error', async () => {
 test('any other refusal lands in state.error', async () => {
   const { store, calls } = await refusing('git_error');
   expect(await store.deleteSession('s1', options)).toEqual({ ok: false, dirty: null });
-  expect(store.state.error).toBe('why');
+  expect(store.state.error).toEqual({ message: 'why', kind: 'action' });
   expect(calls('sessions.list')).toEqual([]);
   store.stop();
 });
 
-test('a delete that went through refreshes the list', async () => {
+test('a delete that went through refreshes the list and clears a standing action error', async () => {
   const { store, calls } = await pairedStore([], {
+    'sessions.clear': () => {
+      throw new ClientError('internal', 'earlier');
+    },
     'sessions.archive': () => ({}),
     'sessions.list': () => [],
   });
+  expect(await store.clearSession('s1')).toBe(false);
+  expect(store.state.error).toEqual({ message: 'earlier', kind: 'action' });
   expect(await store.deleteSession('s1', { ...options, discard: true })).toEqual({ ok: true });
+  expect(store.state.error).toBeNull();
   expect(calls('sessions.archive')).toEqual([{ session: 's1', ...options, discard: true }]);
   await until(() => store.state.sessions.length === 0);
   store.stop();
