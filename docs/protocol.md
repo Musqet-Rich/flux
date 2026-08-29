@@ -55,10 +55,9 @@ After that, all messages are binary and opaque to the relay:
 
 Limits (initial, hard-coded): frame ≤ 1 MiB, guests per room ≤ 8, connections per IP per minute ≤ 30.
 
-Web Push:
+Room tokens: the relay cannot derive a token (it never sees `boxPub`), so the first host to claim a room registers its token and later claims must present the same one. Tokens are kept in memory for the relay's lifetime, so a squatter cannot take the host slot while the real box is reconnecting.
 
-- `POST /push/<roomId>` with header `Authorization: Bearer <roomToken>`, body `{ subscriptions: PushSubscriptionJSON[] }`. Replaces the stored set.
-- `POST /push/<roomId>/send` same auth, body `{ payload: string }` (already encrypted by the box, ≤ 2 KiB). Relay sends to every stored subscription and prunes ones that return 404/410.
+Web Push is sent by the box directly to the push services; the relay has no push routes and holds no subscriptions (`adr/0013`).
 
 ## 3. Encrypted channel
 
@@ -79,7 +78,7 @@ Device initiates. Each side has a static keypair and generates an ephemeral X255
 1. Device → box (kind `0x01`, plaintext payload):
    `{ v: 1, devPub, devEph, nonceD }` where `nonceD` is 16 random bytes.
 2. Box → device (kind `0x01`, plaintext payload):
-   `{ v: 1, boxEph, nonceB }`.
+   `{ v: 1, boxEph, nonceB, to }` where `to` is the device's fingerprint (below), so the other guests in the room, who also receive this broadcast, can ignore it.
 3. Both compute:
    ```
    ss = X25519(static_self, static_peer)
@@ -90,7 +89,7 @@ Device initiates. Each side has a static keypair and generates an ephemeral X255
    k_d2b = keys[0..32]    // device → box
    k_b2d = keys[32..64]   // box → device
    ```
-4. Box sends the first data frame: `hello.ok { serverTime, deviceId | null }`. If `devPub` is not trusted and no pairing secret is live, the box instead closes the connection without responding. A device that can decrypt `hello.ok` knows the box holds `boxPriv`; a box that receives a validly encrypted next frame knows the device holds `devPriv`.
+4. The device sends the first data frame: the `hello` RPC (§ 7). If `devPub` is not trusted and no pairing secret is live, the box does not answer the handshake at all. A device that can decrypt the `hello` result knows the box holds `boxPriv`; a box that receives a validly encrypted frame knows the device holds `devPriv`. An untrusted device may only call `pair.request` until it is paired (`not_paired` otherwise).
 
 Properties: mutual authentication via `ss`, forward secrecy via `es`. Replay across connections is impossible because `es` and `salt` are fresh. Nonces are counters per direction starting at 0; a receiver rejects any nonce ≤ the last seen.
 
@@ -242,7 +241,7 @@ Device → box. All params and results are validated by type guards on both ends
 
 | method                          | params                                                   | result                                                                                 |
 | ------------------------------- | -------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `hello`                         | `{ protocol: 1; client: string }`                        | `{ protocol: 1; daemon: string; sessions: SessionSummary[] }`                          |
+| `hello`                         | `{ protocol: 1; client: string }`                        | `{ protocol: 1; daemon: string; sessions: SessionSummary[]; vapidPublicKey?: string }` |
 | `events.sync`                   | `{ session; since: number }`                             | `{ events: FluxEvent[]; complete: boolean }` (paged, 500 per call)                     |
 | `sessions.list`                 | `{}`                                                     | `SessionSummary[]`                                                                     |
 | `sessions.cost`                 | `{ session }`                                            | `{ costUsd: number; usage: TokenUsage; turns: number }` (aggregated from `turn.ended`) |
@@ -264,7 +263,7 @@ Device → box. All params and results are validated by type guards on both ends
 | `pair.request`                  | `{ devPub; proof }`                                      | `{ deviceId }`                                                                         |
 | `devices.list`                  | `{}`                                                     | `Device[]` (P2)                                                                        |
 | `devices.remove`                | `{ deviceId }`                                           | `{}` (P2)                                                                              |
-| `push.subscribe`                | `{ subscription: PushSubscriptionJSON }`                 | `{}`                                                                                   |
+| `push.subscribe`                | `{ subscription: PushSubscriptionJSON }`                 | `{}` (stored on the box, which sends pushes itself, `adr/0013`)                        |
 | `settings.get` / `settings.set` | P2                                                       | P2                                                                                     |
 
 ```ts

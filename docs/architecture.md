@@ -94,7 +94,7 @@ Hono on Node 24. Two jobs:
 
 1. `GET /*` serves the PWA build.
 2. `GET /ws/:room` WebSocket. First frame declares role `host` or `guest`. One host per room; the second host is rejected. Frames from host fan out to all guests; frames from a guest go to the host only. Frames are opaque binary. No persistence, no logging of room ids beyond ephemeral metrics.
-3. `POST /push/:room` (from host, authenticated by the room token) stores Web Push subscriptions for that room and sends pushes on request. Subscriptions are opaque endpoints. This is the only state the relay holds, and it is a cache: the daemon re-sends subscriptions on connect.
+   The relay holds no state beyond live connections. Web Push is sent by the daemon directly (`adr/0013`).
 
 Limits: max frame size, max guests per room, per-IP connection rate. All hard-coded initially.
 
@@ -115,7 +115,7 @@ State: one store per session holding `events[]`, `lastSeq`, `pendingComments[]`,
 
 ## Notifications
 
-Triggered by the daemon on `ask` and on `session.state idle` (after `running`) and on `notify done|blocked`. The daemon asks the relay to send a Web Push to all subscriptions for the room. Payload is encrypted with the room key (Web Push payloads are themselves encrypted to the browser, but the relay assembles them, so keep content minimal: session id and event type). The service worker opens the right session on tap.
+Triggered by the daemon on `ask` and on `session.state idle` (after `running`) and on `notify done|blocked`. The daemon holds the subscriptions (`push.subscribe`) and sends Web Push itself, encrypted per RFC 8291 and signed with its VAPID key (`adr/0013`). Content stays minimal: session id and event type. The service worker opens the right session on tap.
 
 ## Failure modes
 

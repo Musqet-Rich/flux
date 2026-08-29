@@ -18,3 +18,4 @@ Format: Context, Decision, Consequences. Keep each under a page.
 | 0010 | Dependency ledger                                                     | living   |
 | 0011 | Hono for the relay HTTP layer                                         | accepted |
 | 0012 | Pairing via QR in URL fragment, X25519 static keys, one-time secret   | accepted |
+| 0013 | The daemon sends Web Push itself; the relay holds no subscriptions    | accepted |

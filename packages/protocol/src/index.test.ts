@@ -16,6 +16,7 @@ test('exports every runtime module', () => {
     'frame',
     'guards',
     'handshake',
+    'isCodeRef',
     'pairing',
     'protocolVersion',
     'relayMessage',

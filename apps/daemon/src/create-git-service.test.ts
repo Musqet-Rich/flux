@@ -115,6 +115,8 @@ test('branches and worktrees', async () => {
   await expect(git.addWorktree(repo, path, 'main', 'main')).rejects.toMatchObject({
     code: 'git_error',
   });
+  await git.addWorktree(repo, path, 'feature', null);
+  expect(await git.show(path, 'a.txt', 'worktree')).toEqual({ content: 'one\n', binary: false });
 });
 
 test('listRepos finds git repositories directly under a root, with their branches', async () => {
