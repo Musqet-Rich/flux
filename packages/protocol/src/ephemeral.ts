@@ -7,9 +7,11 @@ export type Ephemeral =
   | { type: 'delta'; session: string; forSeq: number; text: string }
   | { type: 'typing'; session: string; deviceId: string }
   | { type: 'agent.status'; session: string; status: 'thinking' | 'tool' | 'idle' }
+  | { type: 'agent.thinking'; session: string; active: boolean; estimatedTokens?: number }
+  | { type: 'vcs.changed'; session: string; kind: string }
   | { type: 'device.revoked'; deviceId: string };
 
-const { isString, isInteger, isRecord, isOneOf } = guards;
+const { isString, isInteger, isBoolean, isRecord, isOneOf, isOptional } = guards;
 
 const is = (v: unknown): v is Ephemeral => {
   if (!isRecord(v)) return false;
@@ -22,6 +24,10 @@ const is = (v: unknown): v is Ephemeral => {
       return isString(v['deviceId']);
     case 'agent.status':
       return isOneOf(v['status'], ['thinking', 'tool', 'idle']);
+    case 'agent.thinking':
+      return isBoolean(v['active']) && isOptional(v['estimatedTokens'], isInteger);
+    case 'vcs.changed':
+      return isString(v['kind']);
     default:
       return false;
   }

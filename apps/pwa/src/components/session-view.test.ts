@@ -58,6 +58,51 @@ test('raw and rate_limit events are kept in the log but not shown', async () => 
   store.stop();
 });
 
+const pr = {
+  provider: 'github',
+  url: 'https://github.com/o/r/pull/19',
+  repo: 'o/r',
+  identifier: '19',
+  action: 'created',
+};
+
+// A long think used to look like a hang; now the streaming bubble says so, with Claude's token
+// estimate once it arrives, and the reply's first text takes its place.
+test('shows the thinking indicator until text streams, and the PR link once one is published', async () => {
+  const box = await pairedStore([]);
+  const { store, relay, event } = box;
+  const wrapper = mount(SessionView, { props: { store, session: 's1' } });
+  await until(() => store.state.logs['s1'] !== undefined);
+  expect(wrapper.find('.streaming').exists()).toBe(false);
+  await relay.ephemeral({ type: 'agent.thinking', session: 's1', active: true });
+  await until(() => store.state.logs['s1']?.thinking !== null);
+  await flushPromises();
+  expect(wrapper.find('.streaming .thinking').text()).toBe('Thinking…');
+  await relay.ephemeral({
+    type: 'agent.thinking',
+    session: 's1',
+    active: true,
+    estimatedTokens: 1250,
+  });
+  await until(() => store.state.logs['s1']?.thinking?.estimatedTokens === 1250);
+  await flushPromises();
+  expect(wrapper.find('.streaming .thinking').text()).toBe('Thinking… ~1.3k tokens');
+  await relay.ephemeral({ type: 'delta', session: 's1', forSeq: 1, text: 'Here' });
+  await until(() => store.state.logs['s1']?.streaming === 'Here');
+  await flushPromises();
+  expect(wrapper.find('.streaming .thinking').exists()).toBe(false);
+  expect(wrapper.find('.streaming').text()).toBe('Here');
+  expect(wrapper.find('.toolbar .pr').exists()).toBe(false);
+  await relay.emit(event(1, 'pr.published', pr));
+  await until(() => store.state.logs['s1']?.lastSeq === 1);
+  await flushPromises();
+  const link = wrapper.find('.toolbar .pr');
+  expect(link.text()).toBe('PR #19');
+  expect(link.attributes()).toMatchObject({ href: pr.url, rel: 'noopener noreferrer' });
+  expect(wrapper.find('.timeline a.link').text()).toBe('Pull request #19 created · o/r');
+  store.stop();
+});
+
 test('a failed action keeps the draft and surfaces the box error', async () => {
   const box = await pairedStore([]);
   const { store, relay, event } = box;

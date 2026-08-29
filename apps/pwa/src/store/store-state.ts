@@ -23,10 +23,18 @@ export type StorePhase = 'booting' | 'unpaired' | 'pairing' | 'paired';
 // stored on the box, `on` after that.
 export type PushState = 'unavailable' | 'off' | 'on';
 
+// The agent is inside a thinking block; the count is Claude's running estimate once reported.
+export interface Thinking {
+  estimatedTokens: number | null;
+}
+
 export interface LogView {
   events: FluxEvent[];
   streaming: string;
   lastSeq: number;
+  thinking: Thinking | null;
+  // Bumps on every `vcs.changed` notice, so the changes screen knows to refetch.
+  changes: number;
 }
 
 // Unsaved editor text, kept across navigation so leaving the editor loses nothing. Keyed by

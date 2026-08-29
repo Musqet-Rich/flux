@@ -50,6 +50,19 @@ const prOptions = (
 
 // The PR's base branch: the caller's, else the session's base when that is a branch of the
 // repository (it is usually a commit, in which case gh picks the repository's default branch).
+// `gh` prints https://github.com/<owner>/<repo>/pull/<n>; anything else is kept as the URL alone.
+const prIdentity = (
+  url: string,
+): { provider: string; url: string; repo: string; identifier: string } => {
+  const match = /^https:\/\/github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)$/u.exec(url);
+  return {
+    provider: 'github',
+    url,
+    repo: match?.[1] ?? '',
+    identifier: match?.[2] ?? '',
+  };
+};
+
 const prBase = async (
   ctx: HandlerContext,
   record: { repo: string; base: string },
@@ -112,7 +125,12 @@ export const createRepoHandlers = (ctx: HandlerContext): RepoHandlers => {
     'git.pr': async (p) => {
       const record = ctx.sessions.get(p.session);
       const base = await prBase(ctx, record, p.base);
-      return { url: await ctx.git.pr(record.worktree, prOptions(p, base)) };
+      const { url, created } = await ctx.git.pr(record.worktree, prOptions(p, base));
+      // Logged like the agent's own `code_change_published`, so the PWA has one source for
+      // the session's PR whichever side opened it (protocol.md § 5).
+      const payload = { ...prIdentity(url), action: created ? 'created' : 'existing' };
+      ctx.log.append(p.session, { type: 'pr.published', payload });
+      return { url };
     },
     ...fileHandlers(ctx, worktreeOf),
     'repos.list': async () => ({ repos: await ctx.git.listRepos(ctx.settings.get().reposDir) }),

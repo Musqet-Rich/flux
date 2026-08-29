@@ -67,6 +67,43 @@ test('everything else is a one-line note', () => {
   }
 });
 
+const pr = {
+  provider: 'github',
+  url: 'https://github.com/o/r/pull/19',
+  repo: 'o/r',
+  identifier: '19',
+  action: 'created',
+};
+
+test('tasks are notes, a published PR is a link, a failed hook keeps stderr behind a summary', () => {
+  const task = { taskId: 't', toolUseId: 'u', description: 'Run tests', background: true };
+  expect(
+    mount(EventItem, { props: { event: ev('task.started', task) } })
+      .find('.note')
+      .text(),
+  ).toBe('Background task: Run tests');
+  const ended = ev('task.ended', { taskId: 't', status: 'failed', summary: 'Run tests' });
+  const failed = mount(EventItem, { props: { event: ended } });
+  expect(failed.find('.note').text()).toBe('Task failed: Run tests');
+  expect(failed.find('.item').classes()).toContain('warn');
+  const link = mount(EventItem, { props: { event: ev('pr.published', pr) } }).find('a.link');
+  expect(link.text()).toBe('Pull request #19 created · o/r');
+  expect(link.attributes()).toMatchObject({
+    href: 'https://github.com/o/r/pull/19',
+    target: '_blank',
+    rel: 'noopener noreferrer',
+  });
+  const hook = { hookName: 'Stop:lint', hookEvent: 'Stop', exitCode: 2, stderr: 'lint: 3 errors' };
+  const warning = mount(EventItem, { props: { event: ev('hook.failed', hook) } });
+  expect(warning.find('details summary').text()).toBe('Hook Stop:lint failed (exit 2)');
+  expect(warning.find('.stderr').text()).toBe('lint: 3 errors');
+  expect(warning.find('.item').classes()).toContain('warn');
+  const quiet = ev('hook.failed', { hookName: 'h', hookEvent: 'Stop', stderr: '' });
+  const bare = mount(EventItem, { props: { event: quiet } });
+  expect(bare.find('details').exists()).toBe(false);
+  expect(bare.find('.note').text()).toBe('Hook h failed');
+});
+
 // A newer box may log types this build does not know (protocol.md § 8); they render like raw.
 test('raw and unknown types show their name with the payload behind a tap', async () => {
   const raw = mount(EventItem, {

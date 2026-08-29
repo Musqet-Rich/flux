@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { FileStatus } from '@flux/protocol';
 import { fluxEvent } from '@flux/protocol';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 
 import type { Store } from '../store/create-store.ts';
 import GitActions from './GitActions.vue';
@@ -57,6 +57,14 @@ onMounted(() => {
   void props.store.open(props.session);
   void refresh();
 });
+// The agent committed or pushed (`vcs.changed`, protocol.md § 6): the list is stale. The view
+// appearing (undefined to 0) is the open above, already refreshed.
+watch(
+  () => props.store.state.logs[props.session]?.changes,
+  (count, before) => {
+    if (count !== undefined && before !== undefined) void refresh();
+  },
+);
 </script>
 
 <template>

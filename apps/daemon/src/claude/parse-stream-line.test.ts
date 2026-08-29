@@ -20,9 +20,96 @@ test('every fixture line parses to a known kind', () => {
       'tool_result',
       'result',
       'rate_limit',
+      'block_stop',
       'other',
     ]),
   );
+});
+
+const signals = readFileSync(
+  new URL('../../test/fixtures/claude/session-thinking-tasks-pr.jsonl', import.meta.url),
+  'utf8',
+)
+  .split('\n')
+  .filter((l) => l.trim() !== '')
+  .map((l) => parseStreamLine(l));
+
+test('the signal session parses thinking, tasks, the push and the PR', () => {
+  const kinds = signals.map((l) => String(l?.kind));
+  expect(kinds).not.toContain('undefined');
+  expect(kinds.filter((k) => k === 'thinking_start')).toHaveLength(5);
+  expect(kinds.filter((k) => k === 'thinking_tokens')).toHaveLength(14);
+  expect(kinds.filter((k) => k === 'block_stop')).toHaveLength(29);
+  expect(kinds.filter((k) => k === 'task_started')).toHaveLength(4);
+  expect(kinds.filter((k) => k === 'task_ended')).toHaveLength(4);
+  expect(signals.find((l) => l?.kind === 'thinking_start')).toEqual({
+    kind: 'thinking_start',
+    index: 0,
+  });
+  expect(signals.find((l) => l?.kind === 'thinking_tokens')).toEqual({
+    kind: 'thinking_tokens',
+    estimatedTokens: 50,
+  });
+  expect(signals.find((l) => l?.kind === 'vcs_changed')).toEqual({
+    kind: 'vcs_changed',
+    vcsKind: 'push',
+  });
+  expect(signals.find((l) => l?.kind === 'pr_published')).toEqual({
+    kind: 'pr_published',
+    provider: 'github',
+    url: 'https://github.com/Musqet-Rich/flux/pull/19',
+    repo: 'Musqet-Rich/flux',
+    identifier: '19',
+    action: 'created',
+  });
+  // Successful hooks stay unread; the fixture has two.
+  expect(kinds.filter((k) => k === 'hook_failed')).toHaveLength(0);
+});
+
+const hookLine = (extra: Record<string, unknown>): string =>
+  JSON.stringify({
+    type: 'system',
+    subtype: 'hook_response',
+    hook_name: 'Stop:lint',
+    hook_event: 'Stop',
+    outcome: 'failure',
+    ...extra,
+  });
+
+test('a hook_response that did not succeed parses as hook_failed', () => {
+  const line = hookLine;
+  expect(parseStreamLine(line({ exit_code: 2, stderr: 'lint failed' }))).toEqual({
+    kind: 'hook_failed',
+    hookName: 'Stop:lint',
+    hookEvent: 'Stop',
+    exitCode: 2,
+    stderr: 'lint failed',
+  });
+  expect(parseStreamLine(line({ exit_code: null, stderr: 7 }))).toEqual({
+    kind: 'hook_failed',
+    hookName: 'Stop:lint',
+    hookEvent: 'Stop',
+    stderr: '',
+  });
+  const ok = JSON.stringify({ type: 'system', subtype: 'hook_response', outcome: 'success' });
+  expect(parseStreamLine(ok)?.kind).toBe('other');
+});
+
+test('malformed signals fall back to other rather than half-parsed', () => {
+  const bad = [
+    { type: 'system', subtype: 'thinking_tokens', estimated_tokens: 'many' },
+    { type: 'system', subtype: 'task_started', task_id: 1 },
+    { type: 'system', subtype: 'task_notification', task_id: 't' },
+    { type: 'system', subtype: 'code_change_published', provider: 'github' },
+    { type: 'system', subtype: 'vcs_state_changed' },
+    { type: 'stream_event', event: 'nope' },
+    {
+      type: 'stream_event',
+      event: { type: 'content_block_start', content_block: { type: 'text' } },
+    },
+    { type: 'stream_event', event: { type: 'content_block_stop' } },
+  ];
+  for (const value of bad) expect(parseStreamLine(JSON.stringify(value))?.kind).toBe('other');
 });
 
 test('init carries the agent session id and model', () => {

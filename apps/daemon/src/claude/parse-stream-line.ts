@@ -52,6 +52,28 @@ export type ClaudeLine =
       usage?: Usage;
     }
   | { kind: 'rate_limit'; windows: Record<string, RateWindowInfo> }
+  // A thinking block opening, and any block closing (the mapper knows which index is thinking).
+  | { kind: 'thinking_start'; index: number }
+  | { kind: 'block_stop'; index: number; data: unknown }
+  | { kind: 'thinking_tokens'; estimatedTokens: number }
+  | {
+      kind: 'task_started';
+      taskId: string;
+      toolUseId: string;
+      description: string;
+      background: boolean;
+    }
+  | { kind: 'task_ended'; taskId: string; status: string; summary: string }
+  | {
+      kind: 'pr_published';
+      provider: string;
+      url: string;
+      repo: string;
+      identifier: string;
+      action: string;
+    }
+  | { kind: 'vcs_changed'; vcsKind: string }
+  | { kind: 'hook_failed'; hookName: string; hookEvent: string; exitCode?: number; stderr: string }
   | { kind: 'other'; data: unknown };
 
 const { isString, isNumber, isInteger, isRecord, isArrayOf, isBoolean, isOptional } = guards;
@@ -107,6 +129,58 @@ const contentOf = (line: Record<string, unknown>): unknown[] => {
   return isRecord(message) && Array.isArray(message['content']) ? message['content'] : [];
 };
 
+// The system signals seen dogfooding 2.1.251 (fixtures/claude/session-thinking-tasks-pr): a
+// task around a tool call, a PR the agent opened itself, a push, a hook that did not succeed.
+const systemSignal = (line: Record<string, unknown>): ClaudeLine | null => {
+  const s = line['subtype'];
+  const str = (key: string): string => (isString(line[key]) ? line[key] : '');
+  if (s === 'thinking_tokens' && isInteger(line['estimated_tokens'])) {
+    return { kind: 'thinking_tokens', estimatedTokens: line['estimated_tokens'] };
+  }
+  if (s === 'task_started' && isString(line['task_id']) && isString(line['tool_use_id'])) {
+    return {
+      kind: 'task_started',
+      taskId: line['task_id'],
+      toolUseId: line['tool_use_id'],
+      description: str('description'),
+      background: line['is_backgrounded'] === true,
+    };
+  }
+  if (s === 'task_notification' && isString(line['task_id']) && isString(line['status'])) {
+    return {
+      kind: 'task_ended',
+      taskId: line['task_id'],
+      status: line['status'],
+      summary: str('summary'),
+    };
+  }
+  if (s === 'code_change_published' && isString(line['url'])) {
+    return {
+      kind: 'pr_published',
+      provider: str('provider'),
+      url: line['url'],
+      repo: str('repo'),
+      identifier: str('identifier'),
+      action: str('action'),
+    };
+  }
+  if (s === 'vcs_state_changed' && isString(line['kind'])) {
+    return { kind: 'vcs_changed', vcsKind: line['kind'] };
+  }
+  return null;
+};
+
+const hookResponse = (line: Record<string, unknown>): ClaudeLine | null => {
+  if (line['subtype'] !== 'hook_response' || line['outcome'] === 'success') return null;
+  return {
+    kind: 'hook_failed',
+    hookName: isString(line['hook_name']) ? line['hook_name'] : '',
+    hookEvent: isString(line['hook_event']) ? line['hook_event'] : '',
+    ...(isInteger(line['exit_code']) ? { exitCode: line['exit_code'] } : {}),
+    stderr: isString(line['stderr']) ? line['stderr'] : '',
+  };
+};
+
 const system = (line: Record<string, unknown>): ClaudeLine => {
   if (line['subtype'] === 'init' && isString(line['session_id'])) {
     return {
@@ -118,16 +192,30 @@ const system = (line: Record<string, unknown>): ClaudeLine => {
   if (line['subtype'] === 'status' && isString(line['status'])) {
     return { kind: 'status', status: line['status'] };
   }
-  return { kind: 'other', data: line };
+  return systemSignal(line) ?? hookResponse(line) ?? { kind: 'other', data: line };
 };
 
 const streamEvent = (line: Record<string, unknown>): ClaudeLine => {
   const event = line['event'];
-  if (isRecord(event) && event['type'] === 'content_block_delta') {
+  if (!isRecord(event)) return { kind: 'other', data: line };
+  if (event['type'] === 'content_block_delta') {
     const delta = event['delta'];
     if (isRecord(delta) && delta['type'] === 'text_delta' && isString(delta['text'])) {
       return { kind: 'delta', text: delta['text'] };
     }
+  }
+  const index = event['index'];
+  const block = event['content_block'];
+  if (
+    event['type'] === 'content_block_start' &&
+    isInteger(index) &&
+    isRecord(block) &&
+    block['type'] === 'thinking'
+  ) {
+    return { kind: 'thinking_start', index };
+  }
+  if (event['type'] === 'content_block_stop' && isInteger(index)) {
+    return { kind: 'block_stop', index, data: line };
   }
   return { kind: 'other', data: line };
 };

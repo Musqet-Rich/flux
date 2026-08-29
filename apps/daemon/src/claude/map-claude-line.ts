@@ -12,7 +12,13 @@ import { toolSummary } from './tool-summary.ts';
 
 export interface Pending {
   tools: Map<string, string>;
+  // Index of the thinking block being streamed, so its content_block_stop ends the indicator
+  // while every other block's stop stays raw.
+  thinking: number | null;
 }
+
+// Hook stderr is for the timeline, not an archive (protocol.md § 5).
+const maxStderrBytes = 2 * 1024;
 
 const maxOutputBytes = 64 * 1024;
 
@@ -104,6 +110,64 @@ const result = (line: ClaudeLine & { kind: 'result' }): Mapped => ({
   ],
 });
 
+const raw = (data: unknown): Mapped => ({
+  events: [{ type: 'raw', payload: { agent: 'claude', data } }],
+});
+
+const truncateStderr = (stderr: string): string => {
+  if (Buffer.byteLength(stderr) <= maxStderrBytes) return stderr;
+  return `${Buffer.from(stderr).subarray(0, maxStderrBytes).toString()}\n[truncated]`;
+};
+
+// The signals a session logs as events of their own (protocol.md § 5); null for the rest.
+const signal = (line: ClaudeLine): Mapped | null => {
+  if (line.kind === 'task_started') {
+    const { taskId, toolUseId, description, background } = line;
+    const payload = { taskId, toolUseId, description, background };
+    return { events: [{ type: 'task.started', payload }] };
+  }
+  if (line.kind === 'task_ended') {
+    const { taskId, status, summary } = line;
+    return { events: [{ type: 'task.ended', payload: { taskId, status, summary } }] };
+  }
+  if (line.kind === 'pr_published') {
+    const { provider, url, repo, identifier, action } = line;
+    const payload = { provider, url, repo, identifier, action };
+    return { events: [{ type: 'pr.published', payload }] };
+  }
+  if (line.kind === 'hook_failed') {
+    const { hookName, hookEvent, exitCode, stderr } = line;
+    const payload = {
+      hookName,
+      hookEvent,
+      ...(exitCode === undefined ? {} : { exitCode }),
+      stderr: truncateStderr(stderr),
+    };
+    return { events: [{ type: 'hook.failed', payload }] };
+  }
+  if (line.kind === 'vcs_changed') return { events: [], vcsChanged: line.vcsKind };
+  return null;
+};
+
+// Thinking is ephemeral: on at the block's start, a token count on each report, off at the
+// block's stop. A count outside a thinking block would leave the indicator stuck, so it stays raw.
+const thinking = (line: ClaudeLine, pending: Pending): Mapped | null => {
+  if (line.kind === 'thinking_start') {
+    pending.thinking = line.index;
+    return { events: [], thinking: { active: true } };
+  }
+  if (line.kind === 'thinking_tokens') {
+    if (pending.thinking === null) return raw(line);
+    return { events: [], thinking: { active: true, estimatedTokens: line.estimatedTokens } };
+  }
+  if (line.kind === 'block_stop') {
+    if (line.index !== pending.thinking) return raw(line.data);
+    pending.thinking = null;
+    return { events: [], thinking: { active: false } };
+  }
+  return null;
+};
+
 // An if-chain rather than a switch: the lint set wants a default branch and an exhaustive
 // switch at once, and a chain satisfies both with the `other` case as the final return.
 export const mapClaudeLine = (line: ClaudeLine, pending: Pending, cwd: string): Mapped => {
@@ -116,5 +180,7 @@ export const mapClaudeLine = (line: ClaudeLine, pending: Pending, cwd: string): 
   if (line.kind === 'rate_limit') {
     return { events: [{ type: 'rate_limit', payload: { windows: rateWindows(line.windows) } }] };
   }
-  return { events: [{ type: 'raw', payload: { agent: 'claude', data: line.data } }] };
+  const mapped = thinking(line, pending) ?? signal(line);
+  if (mapped !== null) return mapped;
+  return raw(line.kind === 'other' ? line.data : line);
 };

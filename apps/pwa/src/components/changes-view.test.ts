@@ -69,6 +69,21 @@ test('ticked files narrow the commit, and a commit refreshes the list and clears
   box.store.stop();
 });
 
+test('a vcs.changed notice from the box refetches the status', async () => {
+  let files = [{ path: 'a.ts', status: 'M' as const }];
+  const box = await pairedStore([], { 'git.status': () => ({ files }) });
+  const wrapper = mount(ChangesView, { props: { store: box.store, session: 's1' } });
+  await until(() => box.calls('git.status').length === 1);
+  await until(() => box.store.state.logs['s1'] !== undefined);
+  files = [];
+  await box.relay.ephemeral({ type: 'vcs.changed', session: 's1', kind: 'commit' });
+  await until(() => box.calls('git.status').length === 2);
+  await until(() => Reflect.get(wrapper.vm, 'loading') === false);
+  await flushPromises();
+  expect(wrapper.find('.empty').exists()).toBe(true);
+  box.store.stop();
+});
+
 test('falls back to the last files.changed event when git.status is unavailable', async () => {
   const box = await pairedStore([]);
   const changed = box.event(1, 'files.changed', { files: [{ path: 'x.ts', status: 'A' }] });

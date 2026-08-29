@@ -6,15 +6,17 @@ import { computed, ref } from 'vue';
 
 import { renderMarkdown } from '../markdown/render-markdown.ts';
 
-// One entry of the session timeline. Every event type renders as one of four shapes so the
-// template stays a switch on `kind`; the detail (tool input/output) opens on tap.
+// One entry of the session timeline. Every event type renders as one of six shapes so the
+// template stays a switch on `kind`; the detail (tool input/output) opens on tap, a `link`
+// opens in a new tab, and a `warning` keeps its text (hook stderr) behind a disclosure.
 
 interface View {
-  kind: 'user' | 'assistant' | 'tool' | 'note';
+  kind: 'user' | 'assistant' | 'tool' | 'note' | 'link' | 'warning';
   text: string;
   // The value behind the tap, stringified lazily; `undefined` means there is nothing to open.
   detail: unknown;
   tone: 'ok' | 'warn' | 'error' | null;
+  href?: string;
 }
 
 const props = defineProps<{ event: FluxEvent }>();
@@ -74,6 +76,40 @@ const describeNote = (event: KnownEvent): View => {
   }
 };
 
+// Claude Code's own signals (protocol.md § 5): a task around a tool call, a PR the agent
+// opened, a hook that failed. Null for every other type.
+const describeSignal = (event: KnownEvent): View | null => {
+  switch (event.type) {
+    case 'task.started': {
+      const { background, description } = event.payload;
+      return note(`${background ? 'Background task' : 'Task'}: ${description}`);
+    }
+    case 'task.ended': {
+      const { status, summary } = event.payload;
+      return note(`Task ${status}: ${summary}`, status === 'completed' ? null : 'warn');
+    }
+    case 'pr.published': {
+      const { identifier, action, repo, url } = event.payload;
+      const name = identifier === '' ? 'Pull request' : `Pull request #${identifier}`;
+      return {
+        kind: 'link',
+        text: `${name} ${action} · ${repo}`,
+        detail: undefined,
+        tone: 'ok',
+        href: url,
+      };
+    }
+    case 'hook.failed': {
+      const { hookName, exitCode, stderr } = event.payload;
+      const exit = exitCode === undefined ? '' : ` (exit ${exitCode})`;
+      const detail = stderr === '' ? undefined : stderr;
+      return { kind: 'warning', text: `Hook ${hookName} failed${exit}`, detail, tone: 'warn' };
+    }
+    default:
+      return null;
+  }
+};
+
 // Any type this build does not know (protocol.md § 8) shows its name with the payload behind a
 // tap, so a newer box never leaves a blank line in the timeline. `raw` renders the same way,
 // though `SessionView` keeps it out of the timeline.
@@ -108,7 +144,7 @@ const describe = (event: FluxEvent): View => {
         tone: event.payload.ok ? 'ok' : 'error',
       };
     default:
-      return describeNote(event);
+      return describeSignal(event) ?? describeNote(event);
   }
 };
 
@@ -133,6 +169,18 @@ const toggle = (): void => {
       </button>
       <pre v-if="detail !== null" class="detail">{{ detail }}</pre>
     </template>
+    <a
+      v-else-if="view.kind === 'link'"
+      class="note link"
+      :href="view.href"
+      target="_blank"
+      rel="noopener noreferrer"
+      >{{ view.text }}</a
+    >
+    <details v-else-if="view.kind === 'warning' && hasDetail" class="disclosure">
+      <summary class="note">{{ view.text }}</summary>
+      <pre class="detail stderr">{{ view.detail }}</pre>
+    </details>
     <span v-else class="note">{{ view.text }}</span>
   </article>
 </template>
@@ -208,5 +256,25 @@ const toggle = (): void => {
   align-self: center;
   color: var(--muted);
   font-size: 0.8rem;
+}
+
+.ok .link {
+  color: var(--ok);
+}
+
+.disclosure {
+  align-self: stretch;
+  text-align: center;
+}
+
+.disclosure summary {
+  cursor: pointer;
+}
+
+.stderr {
+  text-align: left;
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 </style>

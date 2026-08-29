@@ -22,7 +22,7 @@ export interface GitActions {
   // Sets the upstream on a branch's first push (or when asked); a plain `git push` otherwise.
   push: (worktree: string, setUpstream: boolean) => Promise<{ remote: string; branch: string }>;
   // The URL of the branch's open PR, created now or already open.
-  pr: (worktree: string, options: PrOptions) => Promise<string>;
+  pr: (worktree: string, options: PrOptions) => Promise<{ url: string; created: boolean }>;
 }
 
 // Absolute paths inside the worktree: `inside` refuses anything that climbs out of it, and the
@@ -97,17 +97,21 @@ const openPrUrl = (json: string): string | null => {
   }
 };
 
-const pr = async (gh: Runner, worktree: string, options: PrOptions): Promise<string> => {
+const pr = async (
+  gh: Runner,
+  worktree: string,
+  options: PrOptions,
+): Promise<{ url: string; created: boolean }> => {
   if (options.title.trim() === '') throw new DaemonError('bad_params', 'empty PR title');
   // `gh pr view` fails when the branch has no PR; then create one. Any other failure (gh missing,
   // not logged in) surfaces from `gh pr create` with gh's own message.
   const existing = await gh(worktree, ['pr', 'view', '--json', 'url,state']).catch(() => null);
   const url = existing === null ? null : openPrUrl(existing);
-  if (url !== null) return url;
+  if (url !== null) return { url, created: false };
   const args = ['pr', 'create', '--title', options.title, '--body', options.body ?? ''];
   if (options.base !== undefined) args.push('--base', options.base);
   if (options.draft === true) args.push('--draft');
-  return (await gh(worktree, args)).trim();
+  return { url: (await gh(worktree, args)).trim(), created: true };
 };
 
 export const gitActions = (git: Runner, gh: Runner): GitActions => ({

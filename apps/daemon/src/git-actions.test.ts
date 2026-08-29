@@ -200,7 +200,7 @@ test('push without a remote, or off a branch, is a git_error that says which', a
 test('pr creates a pull request with gh, passing each option as its own argument', async () => {
   const title = '-Title with spaces';
   const body = 'First line\n\nsecond --paragraph';
-  const url = await git.pr(repo, { title, body, base: 'main', draft: true });
+  const { url } = await git.pr(repo, { title, body, base: 'main', draft: true });
   expect(url).toBe('https://github.com/o/r/pull/8');
   expect(await ghCalls()).toEqual([
     view,
@@ -218,7 +218,10 @@ test('pr returns the open pull request instead of creating another', async () =>
     join(root, 'existing-pr'),
     '{"url":"https://github.com/o/r/pull/3","state":"OPEN"}',
   );
-  expect(await git.pr(repo, { title: 'T' })).toBe('https://github.com/o/r/pull/3');
+  expect(await git.pr(repo, { title: 'T' })).toEqual({
+    url: 'https://github.com/o/r/pull/3',
+    created: false,
+  });
   expect(await ghCalls()).toEqual([view]);
 });
 
@@ -227,20 +230,20 @@ test('pr creates a new pull request when the branch only has a closed or merged 
     join(root, 'existing-pr'),
     '{"url":"https://github.com/o/r/pull/3","state":"MERGED"}',
   );
-  expect(await git.pr(repo, { title: 'T' })).toBe('https://github.com/o/r/pull/8');
+  expect((await git.pr(repo, { title: 'T' })).url).toBe('https://github.com/o/r/pull/8');
   await writeFile(
     join(root, 'existing-pr'),
     '{"url":"https://github.com/o/r/pull/3","state":"CLOSED"}',
   );
-  expect(await git.pr(repo, { title: 'T' })).toBe('https://github.com/o/r/pull/8');
+  expect((await git.pr(repo, { title: 'T' })).url).toBe('https://github.com/o/r/pull/8');
   expect((await ghCalls()).map((call) => call[1])).toEqual(['view', 'create', 'view', 'create']);
 });
 
 test('pr falls through to create when gh pr view prints something unusable', async () => {
   await writeFile(join(root, 'existing-pr'), 'not json');
-  expect(await git.pr(repo, { title: 'T' })).toBe('https://github.com/o/r/pull/8');
+  expect((await git.pr(repo, { title: 'T' })).url).toBe('https://github.com/o/r/pull/8');
   await writeFile(join(root, 'existing-pr'), '{"url":7,"state":"OPEN"}');
-  expect(await git.pr(repo, { title: 'T' })).toBe('https://github.com/o/r/pull/8');
+  expect((await git.pr(repo, { title: 'T' })).url).toBe('https://github.com/o/r/pull/8');
   expect(await ghCalls()).toHaveLength(4);
 });
 

@@ -14,7 +14,7 @@ const cwd =
   '/private/tmp/claude-501/-Users-richhenderson-code-flux/73ccd0c9-0938-49eb-9548-e002f2d31a8d/scratchpad/fixture-repo';
 
 const replay = (source = fixture): { mapped: Mapped[]; events: EventInput[] } => {
-  const pending: Pending = { tools: new Map() };
+  const pending: Pending = { tools: new Map(), thinking: null };
   const lines = readFileSync(source, 'utf8')
     .split('\n')
     .filter((l) => l.trim() !== '');
@@ -57,15 +57,102 @@ test('unrecognised lines become raw events so nothing is lost', () => {
 
 // Operator hooks and the streaming envelopes around a reply (message_start, content_block_stop,
 // thinking deltas, ...) were first seen dogfooding against Claude Code 2.1.251; every one of them
-// must land as `raw`, and none may throw.
-test('hook and stream_event lines all map to raw without throwing', () => {
+// must land as `raw` or drive the thinking indicator, and none may throw.
+test('hook and stream_event lines all map to raw or thinking without throwing', () => {
   const { mapped, events } = replay(noise);
   expect(mapped.length).toBeGreaterThan(0);
-  expect(events).toHaveLength(mapped.length);
+  const thinking = mapped.filter((m) => m.thinking !== undefined);
+  expect(events.length + thinking.length).toBe(mapped.length);
   expect(new Set(events.map((e) => e.type))).toEqual(new Set(['raw']));
   const subtypes = events.map((e) => JSON.stringify(e.payload));
   expect(subtypes.some((s) => s.includes('"hook_started"'))).toBe(true);
   expect(subtypes.some((s) => s.includes('"message_start"'))).toBe(true);
+});
+
+const signals = new URL(
+  '../../test/fixtures/claude/session-thinking-tasks-pr.jsonl',
+  import.meta.url,
+);
+
+// The session that opened PR #19 itself: five thinking blocks, four tasks, a push and the PR.
+test('thinking, tasks, a push and a published PR are surfaced from the raw log', () => {
+  const { mapped, events } = replay(signals);
+  expect(events.filter((e) => e.type !== 'raw').map((e) => describe(e))).toEqual([
+    'task.started',
+    'task.ended',
+    'task.started',
+    'task.ended',
+    'task.started',
+    'task.ended',
+    'task.started',
+    'task.ended',
+    'pr.published',
+  ]);
+  const thinking = mapped.map((m) => m.thinking).filter((t) => t !== undefined);
+  expect(thinking.filter((t) => JSON.stringify(t) === '{"active":true}')).toHaveLength(5);
+  expect(thinking.filter((t) => JSON.stringify(t) === '{"active":false}')).toHaveLength(5);
+  expect(thinking.filter((t) => t.estimatedTokens !== undefined)).toHaveLength(14);
+  expect(thinking.slice(0, 4)).toEqual([
+    { active: true },
+    { active: true, estimatedTokens: 50 },
+    { active: true, estimatedTokens: 225 },
+    { active: false },
+  ]);
+  expect(mapped.filter((m) => m.vcsChanged !== undefined).map((m) => m.vcsChanged)).toEqual([
+    'push',
+  ]);
+  expect(events.find((e) => e.type === 'pr.published')?.payload).toEqual({
+    provider: 'github',
+    url: 'https://github.com/Musqet-Rich/flux/pull/19',
+    repo: 'Musqet-Rich/flux',
+    identifier: '19',
+    action: 'created',
+  });
+  expect(events.find((e) => e.type === 'task.started')?.payload).toEqual({
+    taskId: 'b2p95t4gg',
+    toolUseId: 'toolu_017DYy5cyosSSd37SDiYV7vi',
+    description: 'Add test and run it',
+    background: false,
+  });
+  expect(events.find((e) => e.type === 'task.ended')?.payload).toEqual({
+    taskId: 'b2p95t4gg',
+    status: 'completed',
+    summary: 'Add test and run it',
+  });
+  // Every content_block_stop of a text or tool_use block is still raw: 29 stops, 5 thinking.
+  const stops = events.filter((e) => JSON.stringify(e.payload).includes('"content_block_stop"'));
+  expect(stops).toHaveLength(24);
+});
+
+// No hook has failed in a real session yet, so the shape is the documented one with a
+// non-success outcome; a stray token count outside a thinking block must not stick the indicator.
+test('a failed hook is logged with its stderr capped, a stray token count stays raw', () => {
+  const pending: Pending = { tools: new Map(), thinking: null };
+  const failed = mapClaudeLine(
+    {
+      kind: 'hook_failed',
+      hookName: 'h',
+      hookEvent: 'Stop',
+      exitCode: 2,
+      stderr: 'x'.repeat(3000),
+    },
+    pending,
+    cwd,
+  );
+  expect(failed.events[0]?.type).toBe('hook.failed');
+  const payload = failed.events[0]?.payload;
+  expect(payload).toMatchObject({ hookName: 'h', hookEvent: 'Stop', exitCode: 2 });
+  expect(JSON.stringify(payload).length).toBeLessThan(2200);
+  expect(JSON.stringify(payload)).toContain('[truncated]');
+  const noExit = mapClaudeLine(
+    { kind: 'hook_failed', hookName: 'h', hookEvent: 'Stop', stderr: '' },
+    pending,
+    cwd,
+  );
+  expect(noExit.events[0]?.payload).toEqual({ hookName: 'h', hookEvent: 'Stop', stderr: '' });
+  const stray = mapClaudeLine({ kind: 'thinking_tokens', estimatedTokens: 5 }, pending, cwd);
+  expect(stray.thinking).toBeUndefined();
+  expect(stray.events[0]?.type).toBe('raw');
 });
 
 test('deltas, session id, running and turn flags are surfaced', () => {
@@ -108,7 +195,7 @@ test('rate_limit windows are normalised to 0..1 and ISO times', () => {
 });
 
 test('a failed tool result is not ok, does not flag files, and output is capped', () => {
-  const pending: Pending = { tools: new Map([['t1', 'Write']]) };
+  const pending: Pending = { tools: new Map([['t1', 'Write']]), thinking: null };
   const line: ClaudeLine = {
     kind: 'tool_result',
     blocks: [
@@ -130,7 +217,7 @@ test('a failed tool result is not ok, does not flag files, and output is capped'
 });
 
 test('object tool output is kept as is when small, empty text is not a message', () => {
-  const pending: Pending = { tools: new Map() };
+  const pending: Pending = { tools: new Map(), thinking: null };
   const tool = mapClaudeLine(
     {
       kind: 'tool_result',
