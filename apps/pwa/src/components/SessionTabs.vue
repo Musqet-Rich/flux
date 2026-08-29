@@ -13,7 +13,10 @@ defineEmits<{ select: [session: string]; create: [] }>();
 const byCreation = (a: SessionSummary, b: SessionSummary): number =>
   (a.createdAt ?? '').localeCompare(b.createdAt ?? '') || a.session.localeCompare(b.session);
 
-const ordered = computed(() => props.sessions.toSorted(byCreation));
+// Archived sessions live in the list screen's Archived section, not in the strip.
+const ordered = computed(() =>
+  props.sessions.filter((s) => s.archived !== true).toSorted(byCreation),
+);
 
 // The last seq each tab was seen at: kept current while it is active, frozen once it is not, so
 // the difference is what arrived behind the operator's back. A session first seen (hello, a

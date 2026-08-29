@@ -25,6 +25,22 @@ const fixture = fileURLToPath(
   new URL('./fixtures/claude/session-two-turns.jsonl', import.meta.url),
 );
 
+// The fake agent, spawned the way the pool spawns Claude, every request and process kept.
+const spawner =
+  (h: Pick<SessionHarness, 'spawns' | 'agents'>, command: string, extraEnv: NodeJS.ProcessEnv) =>
+  (request: SpawnRequest): AgentProcess => {
+    h.spawns.push(request);
+    const agent = spawnClaude({
+      cwd: request.cwd,
+      command,
+      ...(request.resume === undefined ? {} : { resume: request.resume }),
+      env: { ...process.env, FLUX_FAKE_FIXTURE: fixture, ...extraEnv },
+      close: { graceMs: 100 },
+    });
+    h.agents.push(agent);
+    return agent;
+  };
+
 export interface SessionHarness {
   supervisor: SessionSupervisor;
   log: EventLog;
@@ -35,6 +51,8 @@ export interface SessionHarness {
   // Every process spawned, for a test that must see one exit.
   agents: AgentProcess[];
   worktree: string;
+  // A fresh supervisor over the stored record, the way the pool makes one after a close.
+  reopen: () => SessionSupervisor;
 }
 
 // `adapter` replaces the real Claude read side, for tests of what the supervisor does with a
@@ -61,30 +79,22 @@ export const sessionHarness = async (
   const ephemeral: Ephemeral[] = [];
   const spawns: SpawnRequest[] = [];
   const agents: AgentProcess[] = [];
-  const supervisor = createSessionSupervisor({
-    record,
-    log,
-    sessions,
-    git: createGitService(),
-    adapter: adapter ?? claudeAdapter(worktree),
-    spawn: (request) => {
-      spawns.push(request);
-      const agent = spawnClaude({
-        cwd: request.cwd,
-        command,
-        ...(request.resume === undefined ? {} : { resume: request.resume }),
-        env: { ...process.env, FLUX_FAKE_FIXTURE: fixture, ...extraEnv },
-        close: { graceMs: 100 },
-      });
-      agents.push(agent);
-      return agent;
-    },
-    emit: (event) => {
-      emitted.push(event);
-    },
-    emitEphemeral: (message) => {
-      ephemeral.push(message);
-    },
-  });
-  return { supervisor, log, sessions, emitted, ephemeral, spawns, agents, worktree };
+  const build = (r: typeof record): SessionSupervisor =>
+    createSessionSupervisor({
+      record: r,
+      log,
+      sessions,
+      git: createGitService(),
+      adapter: adapter ?? claudeAdapter(worktree),
+      spawn: spawner({ spawns, agents }, command, extraEnv),
+      emit: (event) => {
+        emitted.push(event);
+      },
+      emitEphemeral: (message) => {
+        ephemeral.push(message);
+      },
+    });
+  const supervisor = build(record);
+  const reopen = (): SessionSupervisor => build(sessions.get(record.session));
+  return { supervisor, log, sessions, emitted, ephemeral, spawns, agents, worktree, reopen };
 };

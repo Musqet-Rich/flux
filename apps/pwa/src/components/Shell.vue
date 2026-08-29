@@ -3,6 +3,7 @@ import { computed } from 'vue';
 
 import type { Route, Router } from '../router/create-router.ts';
 import type { Store } from '../store/create-store.ts';
+import ArchivedSessions from './ArchivedSessions.vue';
 import NewSessionView from './NewSessionView.vue';
 import SessionScreens from './SessionScreens.vue';
 import SessionTabs from './SessionTabs.vue';
@@ -17,6 +18,7 @@ const state = props.store.state;
 const route = computed(() => props.router.current.route);
 const active = computed(() => ('session' in route.value ? route.value.session : null));
 const error = computed(() => state.error?.message ?? null);
+const live = computed(() => state.sessions.filter((s) => s.archived !== true));
 // The status bar's context-window reading is per-session, kept with the open session's log view
 // (like `thinking`); off a session there is nothing to show.
 const context = computed(() =>
@@ -54,11 +56,14 @@ const enablePush = (): void => {
     </button>
   </header>
   <main class="body">
-    <section v-if="route.name === 'sessions'" class="empty">
-      <p v-if="state.sessions.length === 0">No sessions yet.</p>
-      <p v-else>Pick a session above.</p>
-      <button type="button" @click="go({ name: 'new' })">New session</button>
-    </section>
+    <template v-if="route.name === 'sessions'">
+      <section class="empty">
+        <p v-if="live.length === 0">No sessions yet.</p>
+        <p v-else>Pick a session above.</p>
+        <button type="button" @click="go({ name: 'new' })">New session</button>
+      </section>
+      <ArchivedSessions :store="store" @reopened="openSession" />
+    </template>
     <NewSessionView v-else-if="route.name === 'new'" :store="store" @created="openSession" />
     <SettingsView
       v-else-if="route.name === 'settings'"

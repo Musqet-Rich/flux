@@ -3,6 +3,8 @@ import { fluxEvent } from '@flux/protocol';
 
 // Comments the operator has left but not yet sent (architecture.md § PWA `pendingComments`):
 // every `comment.added` that no later `comment.sent` names and no `comment.removed` withdrew.
+// A `session.cleared` marker is not a boundary here: the comments are about the code, not the
+// conversation, and go with the next message to the fresh agent.
 
 export interface PendingComment {
   commentId: string;

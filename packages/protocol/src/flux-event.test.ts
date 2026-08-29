@@ -53,6 +53,7 @@ test('lists every event type from protocol.md § 5', () => {
       'session.created',
       'session.state',
       'session.renamed',
+      'session.cleared',
       'msg.user',
       'msg.assistant',
       'tool.start',

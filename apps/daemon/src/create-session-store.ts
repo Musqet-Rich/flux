@@ -1,4 +1,5 @@
 import type { AgentKind, SessionState, SessionSummary } from '@flux/protocol';
+import { existsSync } from 'node:fs';
 import type { DatabaseSync } from 'node:sqlite';
 
 import { DaemonError } from './daemon-error.ts';
@@ -28,9 +29,11 @@ export interface NewSession {
 export interface SessionStore {
   create: (input: NewSession) => SessionRecord;
   get: (session: string) => SessionRecord;
+  // Every session, archived ones included, each saying whether its worktree is still there.
   list: () => SessionSummary[];
   setState: (session: string, state: SessionState) => void;
-  setAgentSessionId: (session: string, id: string) => void;
+  // Null forgets the id: the next spawn starts a fresh agent context (sessions.clear).
+  setAgentSessionId: (session: string, id: string | null) => void;
   setTitle: (session: string, title: string) => void;
   setArchived: (session: string, archived: boolean) => void;
 }
@@ -39,6 +42,8 @@ export interface SessionStoreOptions {
   db: DatabaseSync;
   lastSeq: (session: string) => number;
   now?: () => Date;
+  // Whether a worktree path is still on disk; the default asks the filesystem.
+  worktreeExists?: (path: string) => boolean;
 }
 
 const agentOf = (value: unknown): AgentKind => (value === 'pi' ? 'pi' : 'claude');
@@ -73,7 +78,7 @@ const toRecord = (row: Record<string, unknown>, lastSeq: number): SessionRecord 
   updatedAt: String(row['updated_at']),
 });
 
-const toSummary = (record: SessionRecord): SessionSummary => ({
+const toSummary = (record: SessionRecord, worktreeExists: boolean): SessionSummary => ({
   session: record.session,
   title: record.title,
   repo: record.repo,
@@ -83,6 +88,8 @@ const toSummary = (record: SessionRecord): SessionSummary => ({
   lastSeq: record.lastSeq,
   createdAt: record.createdAt,
   updatedAt: record.updatedAt,
+  archived: record.archived,
+  worktreeExists,
 });
 
 const prepareStatements = (db: DatabaseSync) => {
@@ -93,9 +100,7 @@ const prepareStatements = (db: DatabaseSync) => {
       `INSERT INTO sessions (${columns}) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 'idle', 0, ?, ?)`,
     ),
     select: db.prepare(`SELECT ${columns} FROM sessions WHERE session = ?`),
-    selectAll: db.prepare(
-      `SELECT ${columns} FROM sessions WHERE archived = 0 ORDER BY updated_at DESC`,
-    ),
+    selectAll: db.prepare(`SELECT ${columns} FROM sessions ORDER BY updated_at DESC`),
     state: update('state'),
     agentSessionId: update('agent_session_id'),
     title: update('title'),
@@ -103,10 +108,22 @@ const prepareStatements = (db: DatabaseSync) => {
   };
 };
 
+type Statements = ReturnType<typeof prepareStatements>;
+
+// One column of one row updated, with the timestamp; a missing row is `not_found`.
+const setter =
+  (now: () => Date) =>
+  (statement: Statements['state'], session: string, value: string | number | null): void => {
+    const changed = statement.run(value, now().toISOString(), session).changes;
+    if (changed === 0) throw new DaemonError('not_found', `no session ${session}`);
+  };
+
 export const createSessionStore = (options: SessionStoreOptions): SessionStore => {
   const { db, lastSeq } = options;
   const now = options.now ?? ((): Date => new Date());
+  const worktreeExists = options.worktreeExists ?? existsSync;
   const st = prepareStatements(db);
+  const set = setter(now);
   const record = (row: Record<string, unknown>): SessionRecord =>
     toRecord(row, lastSeq(String(row['session'])));
 
@@ -116,11 +133,6 @@ export const createSessionStore = (options: SessionStoreOptions): SessionStore =
     return record(row);
   };
 
-  const set = (statement: typeof st.state, session: string, value: string | number): void => {
-    const changed = statement.run(value, now().toISOString(), session).changes;
-    if (changed === 0) throw new DaemonError('not_found', `no session ${session}`);
-  };
-
   const create = (input: NewSession): SessionRecord => {
     const ts = now().toISOString();
     const { session, title, repo, worktree, branch, base, agent } = input;
@@ -128,10 +140,15 @@ export const createSessionStore = (options: SessionStoreOptions): SessionStore =
     return get(session);
   };
 
+  const summary = (row: Record<string, unknown>): SessionSummary => {
+    const r = record(row);
+    return toSummary(r, worktreeExists(r.worktree));
+  };
+
   return {
     create,
     get,
-    list: () => st.selectAll.all().map((row) => toSummary(record(row))),
+    list: () => st.selectAll.all().map((row) => summary(row)),
     setState: (session, state) => {
       set(st.state, session, state);
     },

@@ -130,3 +130,10 @@ test('a long detail is truncated with a marker', async () => {
   expect(text.length).toBeLessThan(65 * 1024);
   expect(text.endsWith('… truncated at 64 KiB')).toBe(true);
 });
+
+test('a cleared context is a rule across the timeline', () => {
+  const wrapper = mount(EventItem, { props: { event: ev('session.cleared', {}) } });
+  expect(wrapper.find('.item').classes()).toContain('divider');
+  expect(wrapper.find('.rule').attributes('role')).toBe('separator');
+  expect(wrapper.text()).toBe('Context cleared');
+});

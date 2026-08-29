@@ -39,7 +39,9 @@ const isSessionSummary = (v: unknown): v is SessionSummary =>
   isOneOf(v['state'], sessionStates) &&
   isInteger(v['lastSeq'], 0) &&
   isOptional(v['createdAt'], isString) &&
-  isString(v['updatedAt']);
+  isString(v['updatedAt']) &&
+  isOptional(v['archived'], isBoolean) &&
+  isOptional(v['worktreeExists'], isBoolean);
 
 const isTokenUsage = (v: unknown): v is TokenUsage =>
   isRecord(v) &&
@@ -97,6 +99,8 @@ export const rpcResults: ResultGuards = {
     isRecord(v) && isNumber(v['costUsd']) && isTokenUsage(v['usage']) && isInteger(v['turns'], 0),
   'sessions.create': isSessionSummary,
   'sessions.archive': isEmpty,
+  'sessions.unarchive': isEmpty,
+  'sessions.clear': isEmpty,
   'sessions.restart': isEmpty,
   'agent.send': (v): v is { seq: number } => isRecord(v) && isInteger(v['seq'], 1),
   'agent.answer': isEmpty,

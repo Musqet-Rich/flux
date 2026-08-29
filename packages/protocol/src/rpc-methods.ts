@@ -19,6 +19,12 @@ export interface SessionSummary {
   // Absent from a daemon built before it was sent (2026-08-29); the device then orders by id.
   createdAt?: string;
   updatedAt: string;
+  // Both absent from a daemon built before 2026-08-29, which listed live sessions only: read
+  // as not archived, worktree present.
+  archived?: boolean;
+  // False once the worktree is gone from the box (removed on archive, or by hand); such a
+  // session cannot be reopened.
+  worktreeExists?: boolean;
 }
 
 export interface FileStatus {
@@ -89,7 +95,22 @@ export interface RpcMethods {
     params: { repo: string; branch: string; base?: string; agent: AgentKind; title?: string };
     result: SessionSummary;
   };
-  'sessions.archive': { params: { session: string }; result: Record<string, never> };
+  // Closes the agent and hides the session. `removeWorktree` also removes the worktree, refused
+  // as `dirty` while it holds uncommitted files or unpushed commits unless `discard`;
+  // `deleteBranch` (with `removeWorktree` only) then deletes the branch.
+  'sessions.archive': {
+    params: {
+      session: string;
+      removeWorktree?: boolean;
+      deleteBranch?: boolean;
+      discard?: boolean;
+    };
+    result: Record<string, never>;
+  };
+  // Shows an archived session again; `not_found` when its worktree is gone.
+  'sessions.unarchive': { params: { session: string }; result: Record<string, never> };
+  // Drops the agent's context, keeps the worktree and the log: the next send starts fresh.
+  'sessions.clear': { params: { session: string }; result: Record<string, never> };
   'sessions.restart': { params: { session: string }; result: Record<string, never> };
   'agent.send': {
     params: { session: string; text: string; commentIds?: string[] };
@@ -161,6 +182,7 @@ export type RpcErrorCode =
   | 'git_error'
   | 'gh_error'
   | 'conflict'
+  | 'dirty'
   | 'internal';
 
 type ParamGuards = { [M in RpcMethod]: (value: unknown) => value is RpcMethods[M]['params'] };
@@ -186,7 +208,13 @@ export const rpcMethods: ParamGuards = {
     isOptional(v['base'], isString) &&
     isOneOf(v['agent'], ['claude', 'pi']) &&
     isOptional(v['title'], isString),
-  'sessions.archive': withSession,
+  'sessions.archive': (v): v is RpcMethods['sessions.archive']['params'] =>
+    withSession(v) &&
+    isOptional(v['removeWorktree'], isBoolean) &&
+    isOptional(v['deleteBranch'], isBoolean) &&
+    isOptional(v['discard'], isBoolean),
+  'sessions.unarchive': withSession,
+  'sessions.clear': withSession,
   'sessions.restart': withSession,
   'agent.send': (v): v is RpcMethods['agent.send']['params'] =>
     withSession(v) &&

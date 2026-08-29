@@ -111,6 +111,22 @@ test('an agent that dies ends the session, and the next message resumes it', asy
   await supervisor.close();
 });
 
+// sessions.clear: the id is forgotten in the store, so the supervisor made for the next message
+// spawns without --resume and the agent starts a fresh context in the same worktree.
+test('a forgotten agent session id makes the next message spawn without resume', async () => {
+  const { supervisor, sessions, emitted, spawns, reopen } = await setup();
+  await supervisor.send('first');
+  await untilEvent(emitted, 'turn.ended');
+  expect(sessions.get('s1').agentSessionId).not.toBeNull();
+  await supervisor.close();
+  sessions.setAgentSessionId('s1', null);
+  const fresh = reopen();
+  await fresh.send('again');
+  expect(spawns).toHaveLength(2);
+  expect(spawns[1]?.resume).toBeUndefined();
+  await fresh.close();
+});
+
 test('interrupt kills the agent', async () => {
   const { supervisor, emitted } = await setup();
   await supervisor.send('first');

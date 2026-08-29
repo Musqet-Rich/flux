@@ -6,12 +6,13 @@ import { computed, ref } from 'vue';
 
 import { renderMarkdown } from '../markdown/render-markdown.ts';
 
-// One entry of the session timeline. Every event type renders as one of six shapes so the
+// One entry of the session timeline. Every event type renders as one of seven shapes so the
 // template stays a switch on `kind`; the detail (tool input/output) opens on tap, a `link`
-// opens in a new tab, and a `warning` keeps its text (hook stderr) behind a disclosure.
+// opens in a new tab, a `warning` keeps its text (hook stderr) behind a disclosure, and a
+// `divider` rules across the timeline where the agent's context was cleared.
 
 interface View {
-  kind: 'user' | 'assistant' | 'tool' | 'note' | 'link' | 'warning';
+  kind: 'user' | 'assistant' | 'tool' | 'note' | 'link' | 'warning' | 'divider';
   text: string;
   // The value behind the tap, stringified lazily; `undefined` means there is nothing to open.
   detail: unknown;
@@ -53,6 +54,8 @@ const describeNote = (event: KnownEvent): View => {
       );
     case 'session.renamed':
       return note(`Renamed to ${event.payload.title}`);
+    case 'session.cleared':
+      return { kind: 'divider', text: 'Context cleared', detail: undefined, tone: null };
     case 'turn.ended':
       return note(`Turn ended${money(event.payload.costUsd)}`);
     case 'rate_limit':
@@ -181,6 +184,7 @@ const toggle = (): void => {
       <summary class="note">{{ view.text }}</summary>
       <pre class="detail stderr">{{ view.detail }}</pre>
     </details>
+    <span v-else-if="view.kind === 'divider'" class="rule" role="separator">{{ view.text }}</span>
     <span v-else class="note">{{ view.text }}</span>
   </article>
 </template>
@@ -260,6 +264,25 @@ const toggle = (): void => {
 
 .ok .link {
   color: var(--ok);
+}
+
+.divider {
+  align-self: stretch;
+}
+
+.rule {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.rule::before,
+.rule::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid var(--border);
 }
 
 .disclosure {

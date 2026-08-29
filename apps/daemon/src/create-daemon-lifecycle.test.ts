@@ -87,6 +87,32 @@ test('stop answers an ask in flight as aborted on its connection and in the log'
   ]);
 });
 
+// sessions.clear mid-ask (ADR 0018): the ask is answered on its connection and in the log
+// before the marker, once; the connection drop that follows adds nothing after it.
+test('clear answers an ask in flight as aborted, logged before the marker', async () => {
+  const { repo, dataDir } = await setup();
+  const d = await device();
+  await pair(d);
+  await call(d, 'hello', { protocol: 1 });
+  const created = (await call(d, 'sessions.create', { repo, branch: 'b', agent: 'claude' })) as {
+    session: string;
+  };
+  const asked = controlAsk(created.session);
+  await untilEvent(d, 'ask');
+  await call(d, 'sessions.clear', { session: created.session });
+  expect(await asked.reply).toEqual({ ok: true, result: { answer: '', by: 'aborted' } });
+  asked.end();
+  await daemon.stop();
+  const log = createEventLog({ db: openDatabase(join(dataDir, 'flux.sqlite')) });
+  const tail = log.read(created.session, 0).events.slice(-4);
+  expect(tail.map((e) => [e.type, e.payload])).toEqual([
+    ['session.state', { state: 'waiting_user' }],
+    ['ask.answered', { askId: expect.any(String), answer: '', by: 'aborted' }],
+    ['session.state', { state: 'idle', reason: 'agent closed' }],
+    ['session.cleared', {}],
+  ]);
+});
+
 // A shutdown that cannot wait for stop(): the lock goes at once, so the next daemon on this
 // directory starts instead of refusing. (What it does to agents: create-session-supervisor.test.)
 test('abandon releases the lock synchronously, so a new daemon can start', async () => {

@@ -53,6 +53,15 @@ test('a daemon that sends no createdAt still gets a stable order, by id', () => 
   expect(titles(wrapper)).toEqual(['T b', 'T a', 'T c']);
 });
 
+test('archived sessions get no tab', () => {
+  const sessions = [
+    s('a', '2026-01-01T00:00:00Z', 'idle'),
+    { ...s('b', '2026-01-02T00:00:00Z', 'idle'), archived: true },
+  ];
+  const wrapper = mount(SessionTabs, { props: { sessions, active: 'a' } });
+  expect(titles(wrapper)).toEqual(['T a']);
+});
+
 test('activity never reorders the tabs', async () => {
   const sessions = [s('a', '2026-01-01T00:00:00Z', 'idle'), s('b', '2026-01-02T00:00:00Z', 'idle')];
   const wrapper = mount(SessionTabs, { props: { sessions, active: 'a' } });

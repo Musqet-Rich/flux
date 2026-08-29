@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, expect, test } from 'vitest';
@@ -130,13 +130,45 @@ test('branches and worktrees', async () => {
   await git.addWorktree(repo, path, 'flux/task', 'main');
   expect(await git.branches(repo)).toContain('flux/task');
   expect(await git.show(path, 'a.txt', 'worktree')).toMatchObject({ content: 'one\n' });
-  await git.removeWorktree(repo, path);
+  await writeFile(join(path, 'wip.txt'), 'w\n');
+  await expect(git.removeWorktree(repo, path, false)).rejects.toMatchObject({ code: 'git_error' });
+  await git.removeWorktree(repo, path, true);
   await expect(git.show(path, 'a.txt', 'worktree')).rejects.toThrow(DaemonError);
+  await git.deleteBranch(repo, 'flux/task');
+  expect(await git.branches(repo)).toEqual(['feature', 'main']);
+  await expect(git.deleteBranch(repo, 'main')).rejects.toMatchObject({ code: 'git_error' });
   await expect(git.addWorktree(repo, path, 'main', 'main')).rejects.toMatchObject({
     code: 'git_error',
   });
   await git.addWorktree(repo, path, 'feature', null);
   expect(await git.show(path, 'a.txt', 'worktree')).toMatchObject({ content: 'one\n' });
+});
+
+// A worktree removed by hand leaves git thinking its branch is still checked out.
+test('a branch of a worktree that is gone can be deleted once pruned', async () => {
+  const path = join(root, 'wt');
+  await git.addWorktree(repo, path, 'flux/gone', 'main');
+  await rm(path, { recursive: true, force: true });
+  await expect(git.deleteBranch(repo, 'flux/gone')).rejects.toMatchObject({ code: 'git_error' });
+  await git.pruneWorktrees(repo);
+  await git.deleteBranch(repo, 'flux/gone');
+  expect(await git.branches(repo)).toEqual(['main']);
+});
+
+test('unpushed counts commits beyond the upstream, or beyond the base without one', async () => {
+  const path = join(root, 'wt');
+  await git.addWorktree(repo, path, 'flux/task', 'main');
+  expect(await git.unpushed(path, 'main')).toBe(0);
+  await writeFile(join(path, 'b.txt'), 'b\n');
+  sh(path, ['add', 'b.txt']);
+  sh(path, ['commit', '-q', '-m', 'one']);
+  await writeFile(join(path, 'c.txt'), 'c\n');
+  sh(path, ['add', 'c.txt']);
+  sh(path, ['commit', '-q', '-m', 'two']);
+  expect(await git.unpushed(path, 'main')).toBe(2);
+  sh(repo, ['branch', 'tracker', 'flux/task~1']);
+  sh(path, ['branch', '--set-upstream-to=tracker']);
+  expect(await git.unpushed(path, 'main')).toBe(1);
 });
 
 test('show sends the first MiB of a large file, committed or not, and hashes all of it', async () => {

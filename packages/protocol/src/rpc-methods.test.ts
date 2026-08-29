@@ -25,6 +25,14 @@ const cases: [RpcMethod, unknown, boolean][] = [
   ['sessions.create', { repo: '/r', branch: 'b', agent: 'claude', base: 1 }, false],
   ['sessions.create', { repo: '/r', branch: 'b', agent: 'claude', title: 1 }, false],
   ['sessions.archive', s, true],
+  ['sessions.archive', { ...s, removeWorktree: true, deleteBranch: true, discard: true }, true],
+  ['sessions.archive', { ...s, removeWorktree: 'yes' }, false],
+  ['sessions.archive', { ...s, deleteBranch: 1 }, false],
+  ['sessions.archive', { ...s, discard: null }, false],
+  ['sessions.unarchive', s, true],
+  ['sessions.unarchive', {}, false],
+  ['sessions.clear', s, true],
+  ['sessions.clear', { session: 1 }, false],
   ['sessions.restart', s, true],
   ['agent.send', { ...s, text: 'go' }, true],
   ['agent.send', { ...s, text: 'go', commentIds: ['c'] }, true],
@@ -99,5 +107,5 @@ test.each(cases)('%s params %j accepted=%s', (method, value, expected) => {
 });
 
 test('covers every method in protocol.md § 7', () => {
-  expect(Object.keys(rpcMethods)).toHaveLength(29);
+  expect(Object.keys(rpcMethods)).toHaveLength(31);
 });

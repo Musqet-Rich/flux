@@ -165,6 +165,24 @@ const reloadCold = async (page: Page, stack: Stack): Promise<void> => {
   );
 };
 
+// Archiving takes the session off the strip and into the Archived section of the list screen;
+// reopening brings it back with its timeline whole.
+const archiveAndReopen = async (page: Page): Promise<void> => {
+  const items = page.locator('.timeline .item');
+  const before = await items.allInnerTexts();
+  await page.getByRole('button', { name: 'Session menu' }).click();
+  await page.getByRole('menuitem', { name: 'Archive' }).click();
+  await expect(page.getByText('No sessions yet.')).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Sessions' }).getByRole('button')).toHaveText([
+    '+',
+  ]);
+  await page.getByText('Archived (1)').click();
+  await page.getByRole('button', { name: 'Reopen' }).click();
+  await expect(page).toHaveURL(/\/s\/[0-9a-f-]{36}$/u);
+  await expect(page.locator('.branch')).toHaveText('e2e/greeting');
+  await expect(items).toHaveText(before);
+};
+
 test('pair, run an agent, comment on its diff, send, reload', async ({ page, stack }) => {
   await test.step('pair by pasting the link flux pair printed', () => pair(page, stack));
   const other = await test.step('a second tab connects as the same device', () =>
@@ -177,4 +195,6 @@ test('pair, run an agent, comment on its diff, send, reload', async ({ page, sta
     sendWithComment(page, stack));
   await test.step('wiped and reloaded, the timeline is the event log, whole', () =>
     reloadCold(page, stack));
+  await test.step('archived into the list, reopened with its timeline', () =>
+    archiveAndReopen(page));
 });

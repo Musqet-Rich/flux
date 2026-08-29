@@ -6,17 +6,17 @@ import { renderMarkdown } from '../markdown/render-markdown.ts';
 import type { Store } from '../store/create-store.ts';
 import { openAsk } from '../store/open-ask.ts';
 import { pendingComments } from '../store/pending-comments.ts';
-import { sessionPr } from '../store/session-pr.ts';
 import AskCard from './AskCard.vue';
 import CommentTray from './CommentTray.vue';
 import EventItem from './EventItem.vue';
+import SessionToolbar from './SessionToolbar.vue';
 
-// One session: its timeline, the streaming reply, the agent's open question, the comments
-// waiting to go and the composer. The store owns the data and reports failures; this only
+// One session: its toolbar (SessionToolbar), timeline, the streaming reply, the agent's open
+// question, the comments waiting to go and the composer. The store owns the data and reports failures; this only
 // renders and dispatches.
 
 const props = defineProps<{ store: Store; session: string }>();
-defineEmits<{ changes: [] }>();
+defineEmits<{ changes: []; closed: [] }>();
 
 const hiddenTypes = new Set(['raw', 'rate_limit']);
 const draft = ref('');
@@ -44,10 +44,6 @@ const thinkingText = computed(() => {
   const label = tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}k` : String(tokens);
   return `Thinking… ~${label} tokens`;
 });
-const pr = computed(() => sessionPr(events.value));
-const prLabel = computed(() =>
-  pr.value?.identifier === '' ? 'PR' : `PR #${pr.value?.identifier}`,
-);
 const ask = computed(() => openAsk(events.value));
 const pending = computed(() => pendingComments(events.value));
 const summary = computed(() => props.store.state.sessions.find((s) => s.session === props.session));
@@ -105,14 +101,16 @@ watch(thinking, (state) => {
 
 <template>
   <section class="session">
-    <div class="toolbar">
-      <span class="branch">{{ summary?.branch ?? session }}</span>
-      <a v-if="pr !== null" class="pr" :href="pr.url" target="_blank" rel="noopener noreferrer">{{
-        prLabel
-      }}</a>
-      <button v-if="busy" type="button" class="secondary" @click="interrupt">Stop</button>
-      <button type="button" class="secondary" @click="$emit('changes')">Changes</button>
-    </div>
+    <SessionToolbar
+      :store="store"
+      :session="session"
+      :events="events"
+      :branch="summary?.branch ?? session"
+      :busy="busy"
+      @interrupt="interrupt"
+      @changes="$emit('changes')"
+      @closed="$emit('closed')"
+    />
     <div class="log">
       <div ref="scroller" class="timeline" @scroll="tail.measure">
         <EventItem v-for="e in timeline" :key="e.seq" :event="e" />
@@ -150,25 +148,6 @@ watch(thinking, (state) => {
   min-height: 0;
   display: flex;
   flex-direction: column;
-}
-
-.toolbar {
-  flex: none;
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-  padding: 0.4rem 0.75rem;
-  border-bottom: 1px solid var(--border);
-}
-
-.branch {
-  flex: 1;
-  color: var(--muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.85rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .log {
@@ -217,13 +196,6 @@ watch(thinking, (state) => {
 
 .thinking .loader {
   margin-right: 0.5rem;
-}
-
-.pr {
-  flex: none;
-  color: var(--accent);
-  font-size: 0.85rem;
-  text-decoration: none;
 }
 
 .composer {

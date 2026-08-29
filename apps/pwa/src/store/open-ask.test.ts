@@ -34,3 +34,8 @@ test('the latest unanswered ask is open; an answered one is not', () => {
     ]),
   ).toEqual(ask('b'));
 });
+
+test('a cleared context settles whatever was asked before it', () => {
+  expect(openAsk([ev(1, 'ask', ask('a')), ev(2, 'session.cleared', {})])).toBeNull();
+  expect(openAsk([ev(1, 'session.cleared', {}), ev(2, 'ask', ask('b'))])).toEqual(ask('b'));
+});
