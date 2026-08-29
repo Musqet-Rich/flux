@@ -25,6 +25,7 @@ const internals = (): StoreInternals => ({
   refreshing: null,
   deviceId: null,
   errorTimer: null,
+  connectionError: null,
 });
 
 test('appends to the view and writes only the chunks the new tail touches', async () => {

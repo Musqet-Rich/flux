@@ -123,7 +123,9 @@ const afterConnect = async (i: StoreInternals): Promise<void> => {
   // Back in touch with the box: whatever the outage said is over.
   storeErrors.clear(i);
   i.vapidPublicKey = hello.vapidPublicKey ?? null;
-  if (i.state.push === 'unavailable' && i.vapidPublicKey !== null) i.state.push = 'off';
+  // Push is on offer once the box has a key, unless this page can never subscribe.
+  const offerPush = i.vapidPublicKey !== null && i.options.subscribePush !== undefined;
+  if (i.state.push === 'unavailable' && offerPush) i.state.push = 'off';
   await Promise.all([...i.logs.values()].map((log) => syncLog(i, log)));
   await enablePush(i, false);
 };

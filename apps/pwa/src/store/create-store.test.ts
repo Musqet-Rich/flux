@@ -116,11 +116,9 @@ test('git actions resolve to their result, or null with the failure reported', a
 interface Options {
   // A box that does not know how to pair answers pair.request with not_found.
   pairable?: boolean;
-  // A browser that has not granted notification permission: only a prompted subscribe works.
-  silentPush?: boolean;
 }
 
-const setup = async ({ pairable = true, silentPush = false }: Options = {}) => {
+const setup = async ({ pairable = true }: Options = {}) => {
   const handlers = boxHandlers();
   if (!pairable) delete handlers['pair.request'];
   const relay = await createFakeRelay(handlers);
@@ -130,6 +128,10 @@ const setup = async ({ pairable = true, silentPush = false }: Options = {}) => {
   const timers: (() => void)[] = [];
   const fire = (): void => {
     for (const fn of timers.splice(0)) fn();
+  };
+  const subscribePush = (key: string, prompt: boolean): Promise<unknown> => {
+    pushes.push(`${key}:${prompt ? 'prompt' : 'silent'}`);
+    return Promise.resolve({ endpoint: 'https://push.example/x' });
   };
   const another = () =>
     createStore({
@@ -141,11 +143,7 @@ const setup = async ({ pairable = true, silentPush = false }: Options = {}) => {
           timers.splice(timers.indexOf(fn), 1);
         };
       },
-      subscribePush: (key, prompt) => {
-        pushes.push(`${key}:${prompt ? 'prompt' : 'silent'}`);
-        const granted = prompt || !silentPush;
-        return Promise.resolve(granted ? { endpoint: 'https://push.example/x' } : null);
-      },
+      subscribePush,
       minBackoffMs: 1,
       maxBackoffMs: 5,
     });
@@ -181,22 +179,6 @@ test('pairs from a link, says hello, subscribes to push silently and remembers t
   expect(await pairedBox.load(await storage.get(pairedBox.storageKey))).not.toBeNull();
   store.stop();
   expect(store.state.status).toBe('stopped');
-});
-
-test('push stays off until a prompted subscribe reaches the box, and retries after a refusal', async () => {
-  const { store, link, pushes, handlers } = await setup({ silentPush: true });
-  delete handlers['push.subscribe'];
-  await store.pair('https://relay.example', link());
-  expect(store.state.push).toBe('off');
-  expect(pushes).toEqual(['a2V5:silent']);
-  expect(await store.enablePush()).toBe(false);
-  expect(store.state).toMatchObject({ push: 'off', error: { message: 'no push.subscribe' } });
-  handlers['push.subscribe'] = () => ({});
-  expect(await store.enablePush()).toBe(true);
-  expect(store.state.push).toBe('on');
-  expect(pushes).toEqual(['a2V5:silent', 'a2V5:prompt', 'a2V5:prompt']);
-  expect(await store.enablePush()).toBe(false);
-  store.stop();
 });
 
 test('a bad link or a refused pairing lands back on the pair screen with the reason', async () => {

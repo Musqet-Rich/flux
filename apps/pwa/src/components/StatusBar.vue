@@ -125,8 +125,8 @@ const absolute = computed(() =>
     <button v-if="push === 'off'" type="button" class="secondary push" @click="$emit('enablePush')">
       Enable notifications
     </button>
-    <span v-if="error !== null" class="error" role="alert">
-      {{ error }}
+    <span v-if="error !== null" class="error">
+      <span role="alert">{{ error }}</span>
       <button type="button" class="dismiss" aria-label="Dismiss error" @click="$emit('dismiss')">
         ×
       </button>

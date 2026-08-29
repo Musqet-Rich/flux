@@ -23,6 +23,7 @@ test('the error carries a labelled button that asks to dismiss it', async () => 
   const wrapper = mount(StatusBar, {
     props: { status: 'connected', daemon: null, error: 'oops', push: 'on', rateWindows: [] },
   });
+  expect(wrapper.find('.error [role="alert"]').text()).toBe('oops');
   const dismiss = wrapper.find('.error button');
   expect(dismiss.attributes('aria-label')).toBe('Dismiss error');
   await dismiss.trigger('click');

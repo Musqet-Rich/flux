@@ -161,6 +161,20 @@ const gitActions = (i: StoreInternals): Pick<Store, 'commit' | 'push' | 'openPr'
     outcome(i, async () => (await boxLink.call(i, 'git.pr', { session, ...pr })).url),
 });
 
+// The status bar's "Enable notifications": a refusal is an action error with the reason the
+// browser gave; one that says push can never work here takes the offer away for good.
+const enablePush = async (i: StoreInternals): Promise<boolean> => {
+  try {
+    return await boxLink.enablePush(i, true);
+  } catch (error) {
+    if (error instanceof ClientError && error.code === 'push_unsupported') {
+      i.state.push = 'unavailable';
+    }
+    boxLink.reportError(i, error);
+    return false;
+  }
+};
+
 const controls = (i: StoreInternals): Pick<Store, 'dismissError' | 'stop'> => ({
   dismissError: () => {
     boxLink.clearError(i);
@@ -182,6 +196,7 @@ export const createStore = (options: StoreOptions): Store => {
     refreshing: null,
     deviceId: null,
     errorTimer: null,
+    connectionError: null,
   };
   return {
     ...settingsActions(i),
@@ -202,14 +217,7 @@ export const createStore = (options: StoreOptions): Store => {
     removeComment: (session, commentId) =>
       boxLink.attempt(i, () => boxLink.call(i, 'comments.remove', { session, commentId })),
     saveFile: (session, path, content, ifMatch) => saveFile(i, session, path, content, ifMatch),
-    enablePush: async () => {
-      try {
-        return await boxLink.enablePush(i, true);
-      } catch (error) {
-        boxLink.reportError(i, error);
-        return false;
-      }
-    },
+    enablePush: () => enablePush(i),
     createSession: (params) => createSession(i, params),
     refreshSessions: () => boxLink.refreshSessions(i),
     ...gitActions(i),

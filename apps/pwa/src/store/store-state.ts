@@ -83,8 +83,12 @@ export interface StoreState {
 export interface StoreOptions {
   storage: Storage;
   socket: SocketFactory;
-  // Resolves to the browser's PushSubscription JSON, or null when push is unavailable. With
-  // `prompt` false it must not ask the user for permission (there is no gesture to ask under).
+  // Resolves to the browser's PushSubscription JSON. With `prompt` false it must not ask the
+  // user for permission (there is no gesture to ask under) and resolves to null when it cannot
+  // subscribe silently; with `prompt` true it rejects with a `ClientError` whose code says why
+  // (`push_unsupported`, `push_denied`, `push_no_worker`, `push_failed`). Left out where push
+  // can never work (the dev server, a browser without it): `state.push` then stays
+  // `unavailable` and the status bar offers nothing.
   subscribePush?: (vapidPublicKey: string, prompt: boolean) => Promise<unknown>;
   minBackoffMs?: number;
   maxBackoffMs?: number;
@@ -105,6 +109,8 @@ export interface StoreInternals {
   deviceId: string | null;
   // Cancels the auto-clear of the shown action error, if one is pending.
   errorTimer: (() => void) | null;
+  // The standing connection error, kept while an action error covers it (store-errors.ts).
+  connectionError: StoreError | null;
 }
 
 // A fresh, empty state, before boot.

@@ -30,6 +30,7 @@ const internals = () => {
     refreshing: null,
     deviceId: null,
     errorTimer: null,
+    connectionError: null,
   };
   return { i, timers };
 };
@@ -59,5 +60,24 @@ test('a connection error has no clock and survives a success; clear takes anythi
   storeErrors.report(i, new Error('failed'));
   storeErrors.clearAction(i);
   expect(i.state.error).toBeNull();
+  expect(timers).toEqual([]);
+});
+
+// The connection is still broken after a failed send is old news, so it is back on screen once
+// the action error goes; a dismissal is the operator saying they have seen both.
+test('an action error only covers a connection error, and dismissal clears both', () => {
+  const { i, timers } = internals();
+  storeErrors.report(i, new Error('gone'), 'connection');
+  storeErrors.report(i, new Error('send failed'));
+  expect(i.state.error).toEqual({ message: 'send failed', kind: 'action' });
+  timers[0]?.fn();
+  expect(i.state.error).toEqual({ message: 'gone', kind: 'connection' });
+  storeErrors.report(i, new Error('again'));
+  storeErrors.clearAction(i);
+  expect(i.state.error).toEqual({ message: 'gone', kind: 'connection' });
+  storeErrors.report(i, new Error('once more'));
+  storeErrors.clear(i);
+  expect(i.state.error).toBeNull();
+  expect(i.connectionError).toBeNull();
   expect(timers).toEqual([]);
 });
