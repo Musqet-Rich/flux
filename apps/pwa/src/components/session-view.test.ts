@@ -148,3 +148,31 @@ test('follows the tail only while at it, with a pill to catch up', async () => {
   expect(el.scrollTop).toBe(1000);
   store.stop();
 });
+
+// The delta buffer goes through the same Markdown pass as the final message: a fence that has
+// not closed yet is already a code block, and closing it (or the reply landing) leaves the
+// same block with no stray backticks.
+test('the streaming bubble renders an open fence as a code block until it closes', async () => {
+  const box = await pairedStore([]);
+  const { store, relay, event } = box;
+  const wrapper = mount(SessionView, { props: { store, session: 's1' } });
+  await until(() => store.state.logs['s1'] !== undefined);
+  await relay.ephemeral({ type: 'delta', session: 's1', forSeq: 1, text: 'Run:\n```sh\nls -' });
+  await until(() => store.state.logs['s1']?.streaming === 'Run:\n```sh\nls -');
+  await flushPromises();
+  expect(wrapper.find('.streaming p').text()).toBe('Run:');
+  expect(wrapper.find('.streaming pre.open > code.language-sh').text()).toBe('ls -');
+  expect(wrapper.find('.streaming').text()).not.toContain('`');
+  await relay.ephemeral({ type: 'delta', session: 's1', forSeq: 1, text: 'la\n```\n' });
+  await until(() => store.state.logs['s1']?.streaming === 'Run:\n```sh\nls -la\n```\n');
+  await flushPromises();
+  expect(wrapper.find('.streaming pre.open').exists()).toBe(false);
+  expect(wrapper.find('.streaming pre > code.language-sh').text()).toBe('ls -la');
+  expect(wrapper.find('.streaming').text()).not.toContain('`');
+  await relay.emit(event(1, 'msg.assistant', { text: 'Run:\n```sh\nls -la\n```\n' }));
+  await until(() => store.state.logs['s1']?.lastSeq === 1);
+  await flushPromises();
+  expect(wrapper.find('.streaming').exists()).toBe(false);
+  expect(wrapper.find('.item.assistant pre > code.language-sh').text()).toBe('ls -la');
+  store.stop();
+});

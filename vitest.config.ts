@@ -6,7 +6,7 @@ import { configDefaults, defineConfig } from 'vitest/config';
 // `extends: true` makes each one pick up `include` and `allowOnly` below, and the pwa extends
 // its own vite.config.ts (it needs the Vue plugin) with the same options restated.
 //
-// PWA component and editor tests (@vue/test-utils `mount`, engineering.md § Testing) need a DOM,
+// PWA component, editor and markdown tests (@vue/test-utils `mount`, engineering.md § Testing) need a DOM,
 // so they run in a second pwa project under happy-dom (ADR 0010 ledger); everything else in the
 // pwa (client, store, router) is plain TypeScript and runs in Node like the other packages.
 
@@ -17,7 +17,11 @@ const testRules = {
   include: ['{src,test}/**/*.test.ts'],
   allowOnly: false,
 };
-const pwaDom = ['src/components/**/*.test.ts', 'src/editor/**/*.test.ts'];
+const pwaDom = [
+  'src/components/**/*.test.ts',
+  'src/editor/**/*.test.ts',
+  'src/markdown/render-markdown.test.ts',
+];
 
 export default defineConfig({
   test: {

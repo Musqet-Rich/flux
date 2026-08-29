@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import type { FluxEvent, KnownEvent } from '@flux/protocol';
 import { fluxEvent } from '@flux/protocol';
+import type { VNode } from 'vue';
 import { computed, ref } from 'vue';
+
+import { renderMarkdown } from '../markdown/render-markdown.ts';
 
 // One entry of the session timeline. Every event type renders as one of four shapes so the
 // template stays a switch on `kind`; the detail (tool input/output) opens on tap.
@@ -110,6 +113,9 @@ const describe = (event: FluxEvent): View => {
 };
 
 const view = computed(() => describe(props.event));
+// The agent writes Markdown; the operator's own text stays as typed. A functional component so
+// the VNode tree is built inside its own render, not in the template.
+const Markdown = (): VNode => renderMarkdown(view.value.text);
 const hasDetail = computed(() => view.value.detail !== undefined);
 const detail = computed(() => (expanded.value && hasDetail.value ? json(view.value.detail) : null));
 const toggle = (): void => {
@@ -119,7 +125,8 @@ const toggle = (): void => {
 
 <template>
   <article class="item" :class="[view.kind, view.tone]">
-    <pre v-if="view.kind === 'user' || view.kind === 'assistant'" class="text">{{ view.text }}</pre>
+    <pre v-if="view.kind === 'user'" class="text">{{ view.text }}</pre>
+    <Markdown v-else-if="view.kind === 'assistant'" />
     <template v-else-if="view.kind === 'tool'">
       <button type="button" class="summary" :disabled="!hasDetail" @click="toggle">
         {{ view.text }}

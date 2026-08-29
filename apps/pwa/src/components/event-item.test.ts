@@ -20,6 +20,20 @@ test('renders messages as bubbles on the right side', () => {
   expect(bot.find('.item').classes()).toContain('assistant');
 });
 
+test('assistant messages are rendered as Markdown; user messages stay as typed', () => {
+  const bot = mount(EventItem, {
+    props: { event: ev('msg.assistant', { text: '## Done\n\n- `a.ts` **saved**\n\n<b>x</b>' }) },
+  });
+  expect(bot.find('.markdown p.heading strong').text()).toBe('Done');
+  expect(bot.find('.markdown li code').text()).toBe('a.ts');
+  expect(bot.find('.markdown li strong').text()).toBe('saved');
+  expect(bot.find('b').exists()).toBe(false);
+  expect(bot.text()).toContain('<b>x</b>');
+  const user = mount(EventItem, { props: { event: ev('msg.user', { text: '**not** bold' }) } });
+  expect(user.find('.markdown').exists()).toBe(false);
+  expect(user.find('pre.text').text()).toBe('**not** bold');
+});
+
 test('tool events show their summary and open the detail on tap', async () => {
   const wrapper = mount(EventItem, {
     props: {
