@@ -55,6 +55,19 @@ const cases: [RpcMethod, unknown, boolean][] = [
   ['git.log', s, true],
   ['git.log', { ...s, limit: 10 }, true],
   ['git.log', { ...s, limit: 0 }, false],
+  ['git.commit', { ...s, message: 'm' }, true],
+  ['git.commit', { ...s, message: 'm', paths: ['a', 'b'] }, true],
+  ['git.commit', { ...s, message: 'm', paths: 'a' }, false],
+  ['git.commit', s, false],
+  ['git.push', s, true],
+  ['git.push', { ...s, setUpstream: true }, true],
+  ['git.push', { ...s, setUpstream: 'yes' }, false],
+  ['git.pr', { ...s, title: 't' }, true],
+  ['git.pr', { ...s, title: 't', body: 'b', base: 'main', draft: true }, true],
+  ['git.pr', { ...s, title: 't', body: 1 }, false],
+  ['git.pr', { ...s, title: 't', base: 1 }, false],
+  ['git.pr', { ...s, title: 't', draft: 'no' }, false],
+  ['git.pr', s, false],
   ['fs.read', { ...s, path: 'a' }, true],
   ['fs.read', s, false],
   ['fs.list', { ...s, path: '.' }, true],
@@ -71,5 +84,5 @@ test.each(cases)('%s params %j accepted=%s', (method, value, expected) => {
 });
 
 test('covers every method in protocol.md § 7 that is in P1', () => {
-  expect(Object.keys(rpcMethods)).toHaveLength(21);
+  expect(Object.keys(rpcMethods)).toHaveLength(24);
 });

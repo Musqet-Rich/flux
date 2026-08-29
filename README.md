@@ -47,11 +47,11 @@ The relay listens on `127.0.0.1:8787`; Caddy terminates TLS and proxies the WebS
 
 ### Box (daemon)
 
-The daemon runs as a `flux` user whose home holds the repositories and the Claude Code login. Checkout at `/home/flux/flux`.
+The daemon runs as a `flux` user whose home holds the repositories and the Claude Code login. Checkout at `/home/flux/flux`. The box needs `git`, `claude` and `gh` on the daemon's PATH: `gh` (logged in as `flux`) is what "Open PR" in the PWA runs; without it commit and push still work and Open PR reports that `gh` is missing.
 
 ```sh
 sudo useradd --create-home --shell /bin/bash flux
-sudo -u flux -i                     # as flux: install claude, log in, put repos in ~/repos
+sudo -u flux -i                     # as flux: install claude and gh, log in to both, put repos in ~/repos
 git clone https://github.com/Musqet-Rich/flux.git && cd flux
 corepack pnpm install --frozen-lockfile && corepack pnpm run build
 exit

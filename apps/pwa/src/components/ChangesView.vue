@@ -4,16 +4,18 @@ import { fluxEvent } from '@flux/protocol';
 import { computed, onMounted, ref } from 'vue';
 
 import type { Store } from '../store/create-store.ts';
+import GitActions from './GitActions.vue';
 
 // The worktree's changed files. The last `files.changed` event renders at once; `git.status`
 // refreshes it, since that event only follows an agent write. A rename opens with its old
-// path too, which is the one the base revision knows.
+// path too, which is the one the base revision knows. Ticked files narrow a commit to them.
 
 const props = defineProps<{ store: Store; session: string }>();
 const emit = defineEmits<{ open: [path: string, from: string | null]; back: [] }>();
 
 const fresh = ref<FileStatus[] | null>(null);
 const loading = ref(false);
+const selected = ref<string[]>([]);
 
 const fromLog = computed((): FileStatus[] => {
   const events = props.store.state.logs[props.session]?.events ?? [];
@@ -36,6 +38,12 @@ const refresh = async (): Promise<void> => {
   }
 };
 
+// A commit or push changed the worktree: the ticks no longer refer to anything.
+const acted = (): void => {
+  selected.value = [];
+  void refresh();
+};
+
 const open = (file: FileStatus): void => {
   emit('open', file.path, file.status === 'R' ? (file.from ?? null) : null);
 };
@@ -55,7 +63,8 @@ onMounted(() => {
     </div>
     <p v-if="files.length === 0" class="empty">No changes in the worktree.</p>
     <ul v-else class="list">
-      <li v-for="f in files" :key="f.path">
+      <li v-for="f in files" :key="f.path" class="row">
+        <input v-model="selected" type="checkbox" class="pick" :value="f.path" />
         <button type="button" class="file" :disabled="f.status === 'D'" @click="open(f)">
           <span class="status" :class="f.status">{{ f.status }}</span>
           <span class="path">{{ f.path }}</span>
@@ -63,6 +72,7 @@ onMounted(() => {
         </button>
       </li>
     </ul>
+    <GitActions :store="store" :session="session" :selected="selected" @done="acted" />
   </section>
 </template>
 
@@ -89,20 +99,35 @@ onMounted(() => {
 }
 
 .empty {
+  flex: 1;
   color: var(--muted);
   text-align: center;
   margin: 2rem 0;
 }
 
 .list {
+  flex: 1;
   list-style: none;
   margin: 0;
   padding: 0;
   overflow-y: auto;
 }
 
+.row {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+}
+
+.pick {
+  flex: none;
+  width: auto;
+  margin: 0 0 0 0.75rem;
+}
+
 .file {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-wrap: wrap;
   gap: 0.6rem;
@@ -110,7 +135,6 @@ onMounted(() => {
   background: transparent;
   color: var(--fg);
   border-radius: 0;
-  border-bottom: 1px solid var(--border);
   padding: 0.6rem 0.75rem;
   text-align: left;
 }

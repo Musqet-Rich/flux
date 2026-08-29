@@ -20,6 +20,9 @@ export type RepoHandlers = Pick<
   | 'git.diff'
   | 'git.show'
   | 'git.log'
+  | 'git.commit'
+  | 'git.push'
+  | 'git.pr'
   | 'fs.read'
   | 'fs.list'
   | 'repos.list'
@@ -31,6 +34,13 @@ const diffOptions = (p: { path?: string; from?: string; to?: string }) => ({
   ...(p.path === undefined ? {} : { path: p.path }),
   ...(p.from === undefined ? {} : { from: p.from }),
   ...(p.to === undefined ? {} : { to: p.to }),
+});
+
+const prOptions = (p: { title: string; body?: string; base?: string; draft?: boolean }) => ({
+  title: p.title,
+  ...(p.body === undefined ? {} : { body: p.body }),
+  ...(p.base === undefined ? {} : { base: p.base }),
+  ...(p.draft === undefined ? {} : { draft: p.draft }),
 });
 
 const listDir = async (worktree: string, path: string) => {
@@ -52,6 +62,13 @@ export const createRepoHandlers = (ctx: HandlerContext): RepoHandlers => {
     'git.show': (p) => ctx.git.show(worktreeOf(p.session).worktree, p.path, p.rev),
     'git.log': async (p) => ({
       commits: await ctx.git.log(worktreeOf(p.session).worktree, p.limit ?? 50),
+    }),
+    'git.commit': async (p) => ({
+      sha: await ctx.git.commit(worktreeOf(p.session).worktree, p.message, p.paths),
+    }),
+    'git.push': (p) => ctx.git.push(worktreeOf(p.session).worktree, p.setUpstream === true),
+    'git.pr': async (p) => ({
+      url: await ctx.git.pr(worktreeOf(p.session).worktree, prOptions(p)),
     }),
     'fs.read': (p) => {
       const { worktree } = worktreeOf(p.session);

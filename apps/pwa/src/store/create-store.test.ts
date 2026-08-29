@@ -56,6 +56,24 @@ const boxHandlers = (): Handlers => ({
   'push.subscribe': () => ({}),
   'sessions.list': () => [summary('s1'), summary('s2')],
   'sessions.create': (p) => summary('s3', { branch: p.branch }),
+  'git.commit': (p) => ({ sha: `sha-${p.paths?.length ?? 'all'}` }),
+  'git.push': () => ({ remote: 'origin', branch: 'main' }),
+});
+
+test('git actions resolve to their result, or null with the failure reported', async () => {
+  const { store, link, called } = await setup();
+  await store.pair('https://relay.example', link());
+  expect(await store.commit('s1', 'msg')).toBe('sha-all');
+  expect(await store.commit('s1', 'msg', ['a', 'b'])).toBe('sha-2');
+  expect(called('git.commit').map((c) => c.params)).toEqual([
+    { session: 's1', message: 'msg' },
+    { session: 's1', message: 'msg', paths: ['a', 'b'] },
+  ]);
+  expect(await store.push('s1')).toEqual({ remote: 'origin', branch: 'main' });
+  expect(await store.openPr('s1', { title: 'T', draft: true })).toBeNull();
+  expect(store.state.error).toBe('no git.pr');
+  expect(called('git.pr')[0]?.params).toEqual({ session: 's1', title: 'T', draft: true });
+  store.stop();
 });
 
 interface Options {

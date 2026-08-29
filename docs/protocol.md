@@ -251,32 +251,35 @@ type Ephemeral =
 
 Device → box. Params are validated by type guards on the box (`rpcMethods`), results on the device (`rpcResults`); a result that fails its guard is a `bad_reply` on the device, never a trusted value.
 
-| method                          | params                                                   | result                                                                                 |
-| ------------------------------- | -------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `hello`                         | `{ protocol: 1; client: string }`                        | `{ protocol: 1; daemon: string; sessions: SessionSummary[]; vapidPublicKey?: string }` |
-| `events.sync`                   | `{ session; since: number }`                             | `{ events: FluxEvent[]; complete: boolean }` (paged, 500 per call)                     |
-| `sessions.list`                 | `{}`                                                     | `SessionSummary[]`                                                                     |
-| `sessions.cost`                 | `{ session }`                                            | `{ costUsd: number; usage: TokenUsage; turns: number }` (aggregated from `turn.ended`) |
-| `sessions.create`               | `{ repo; branch; base?: string; agent; title? }`         | `SessionSummary`                                                                       |
-| `sessions.archive`              | `{ session }`                                            | `{}`                                                                                   |
-| `sessions.restart`              | `{ session }`                                            | `{}` (respawns agent with resume)                                                      |
-| `agent.send`                    | `{ session; text; commentIds?: string[] }`               | `{ seq: number }`                                                                      |
-| `agent.answer`                  | `{ session; askId; answer }`                             | `{}`                                                                                   |
-| `agent.interrupt`               | `{ session }`                                            | `{}`                                                                                   |
-| `comments.add`                  | `{ session; ref: CodeRef; text }`                        | `{ commentId }`                                                                        |
-| `comments.remove`               | `{ session; commentId }`                                 | `{}`                                                                                   |
-| `git.status`                    | `{ session }`                                            | `{ files: FileStatus[] }`                                                              |
-| `git.diff`                      | `{ session; path?: string; from?: string; to?: string }` | `{ diff: string }` (unified, `from` defaults to `base`, `to` defaults to `worktree`)   |
-| `git.show`                      | `{ session; path; rev }`                                 | `{ content: string; binary: boolean }`                                                 |
-| `git.log`                       | `{ session; limit? }`                                    | `{ commits: Commit[] }`                                                                |
-| `fs.read`                       | `{ session; path }`                                      | `{ content: string; binary: boolean }`                                                 |
-| `fs.list`                       | `{ session; path }`                                      | `{ entries: { name; kind: 'file' \| 'dir' }[] }`                                       |
-| `repos.list`                    | `{}`                                                     | `{ repos: { path; name; branches: string[] }[] }`                                      |
-| `pair.request`                  | `{ devPub; proof }`                                      | `{ deviceId }`                                                                         |
-| `devices.list`                  | `{}`                                                     | `Device[]` (P2)                                                                        |
-| `devices.remove`                | `{ deviceId }`                                           | `{}` (P2)                                                                              |
-| `push.subscribe`                | `{ subscription: PushSubscriptionJSON }`                 | `{}` (stored on the box, which sends pushes itself, `adr/0013`)                        |
-| `settings.get` / `settings.set` | P2                                                       | P2                                                                                     |
+| method                          | params                                                   | result                                                                                    |
+| ------------------------------- | -------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `hello`                         | `{ protocol: 1; client: string }`                        | `{ protocol: 1; daemon: string; sessions: SessionSummary[]; vapidPublicKey?: string }`    |
+| `events.sync`                   | `{ session; since: number }`                             | `{ events: FluxEvent[]; complete: boolean }` (paged, 500 per call)                        |
+| `sessions.list`                 | `{}`                                                     | `SessionSummary[]`                                                                        |
+| `sessions.cost`                 | `{ session }`                                            | `{ costUsd: number; usage: TokenUsage; turns: number }` (aggregated from `turn.ended`)    |
+| `sessions.create`               | `{ repo; branch; base?: string; agent; title? }`         | `SessionSummary`                                                                          |
+| `sessions.archive`              | `{ session }`                                            | `{}`                                                                                      |
+| `sessions.restart`              | `{ session }`                                            | `{}` (respawns agent with resume)                                                         |
+| `agent.send`                    | `{ session; text; commentIds?: string[] }`               | `{ seq: number }`                                                                         |
+| `agent.answer`                  | `{ session; askId; answer }`                             | `{}`                                                                                      |
+| `agent.interrupt`               | `{ session }`                                            | `{}`                                                                                      |
+| `comments.add`                  | `{ session; ref: CodeRef; text }`                        | `{ commentId }`                                                                           |
+| `comments.remove`               | `{ session; commentId }`                                 | `{}`                                                                                      |
+| `git.status`                    | `{ session }`                                            | `{ files: FileStatus[] }`                                                                 |
+| `git.diff`                      | `{ session; path?: string; from?: string; to?: string }` | `{ diff: string }` (unified, `from` defaults to `base`, `to` defaults to `worktree`)      |
+| `git.show`                      | `{ session; path; rev }`                                 | `{ content: string; binary: boolean }`                                                    |
+| `git.log`                       | `{ session; limit? }`                                    | `{ commits: Commit[] }`                                                                   |
+| `git.commit`                    | `{ session; message; paths?: string[] }`                 | `{ sha }` (stages `paths`, or all changes incl. untracked; `bad_params` on empty message) |
+| `git.push`                      | `{ session; setUpstream?: boolean }`                     | `{ remote; branch }` (never forces; a branch's first push sets its upstream)              |
+| `git.pr`                        | `{ session; title; body?; base?; draft?: boolean }`      | `{ url }` (`gh pr create` in the worktree; an open PR for the branch is returned)         |
+| `fs.read`                       | `{ session; path }`                                      | `{ content: string; binary: boolean }`                                                    |
+| `fs.list`                       | `{ session; path }`                                      | `{ entries: { name; kind: 'file' \| 'dir' }[] }`                                          |
+| `repos.list`                    | `{}`                                                     | `{ repos: { path; name; branches: string[] }[] }`                                         |
+| `pair.request`                  | `{ devPub; proof }`                                      | `{ deviceId }`                                                                            |
+| `devices.list`                  | `{}`                                                     | `Device[]` (P2)                                                                           |
+| `devices.remove`                | `{ deviceId }`                                           | `{}` (P2)                                                                                 |
+| `push.subscribe`                | `{ subscription: PushSubscriptionJSON }`                 | `{}` (stored on the box, which sends pushes itself, `adr/0013`)                           |
+| `settings.get` / `settings.set` | P2                                                       | P2                                                                                        |
 
 ```ts
 interface SessionSummary {
@@ -291,7 +294,9 @@ interface SessionSummary {
 }
 ```
 
-Error codes: `bad_params`, `not_found`, `not_paired`, `agent_unavailable`, `git_error`, `internal`.
+Error codes: `bad_params`, `not_found`, `not_paired`, `agent_unavailable`, `git_error`, `gh_error`, `internal`.
+
+`git_error` and `gh_error` carry the tool's own stderr (or stdout when stderr is empty, as for "nothing to commit") as the message, so the device shows what git or gh said. `gh_error` also covers `gh` missing from the box's PATH, with the message `gh not found on PATH`. Git actions emit no events: the device refreshes `git.status` and `git.log` after each one (`adr/0014`).
 
 ## 8. Versioning
 

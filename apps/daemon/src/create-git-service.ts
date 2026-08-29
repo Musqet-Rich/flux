@@ -1,12 +1,15 @@
 import type { Commit, FileStatus, Repo } from '@flux/protocol';
-import { execFile } from 'node:child_process';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 
 import { DaemonError } from './daemon-error.ts';
+import type { GitActions, Runner } from './git-actions.ts';
+import { gitActions } from './git-actions.ts';
+import { runCommand } from './run-command.ts';
 
-// Git and file operations by spawning `git` (architecture.md § Daemon, Git and fs service). No
-// git library. Every method takes the directory to run in; the daemon passes the worktree.
+// Git and file operations by spawning `git` (architecture.md § Daemon, Git and fs service), and
+// `gh` for pull requests. No git library. Every method takes the directory to run in; the daemon
+// passes the worktree.
 
 export interface DiffOptions {
   path?: string;
@@ -19,7 +22,7 @@ export interface FileContent {
   binary: boolean;
 }
 
-export interface GitService {
+export interface GitService extends GitActions {
   status: (worktree: string) => Promise<FileStatus[]>;
   diff: (worktree: string, base: string, options: DiffOptions) => Promise<string>;
   show: (worktree: string, path: string, rev: string) => Promise<FileContent>;
@@ -32,24 +35,18 @@ export interface GitService {
   listRepos: (root: string) => Promise<Repo[]>;
 }
 
-const maxBuffer = 64 * 1024 * 1024;
+export interface GitServiceOptions {
+  // The environment the commands run under; tests point HOME and PATH at temp directories.
+  env?: NodeJS.ProcessEnv;
+}
 
 // A git hook (or anything launched from one) exports GIT_DIR and friends, which would point
 // every command here at the wrong repository. The cwd is the only repository selector.
-const cleanEnv = (): NodeJS.ProcessEnv => {
-  const env = { ...process.env };
+const cleanEnv = (source: NodeJS.ProcessEnv): NodeJS.ProcessEnv => {
+  const env = { ...source };
   for (const key of Object.keys(env)) if (key.startsWith('GIT_')) delete env[key];
   return env;
 };
-
-const git = (cwd: string, args: string[]): Promise<string> =>
-  new Promise((resolve, reject) => {
-    const options = { cwd, maxBuffer, encoding: 'utf8', env: cleanEnv() } as const;
-    execFile('git', args, options, (error, stdout, stderr) => {
-      if (error) reject(new DaemonError('git_error', stderr.trim() || error.message));
-      else resolve(stdout);
-    });
-  });
 
 const statusOf = (xy: string): FileStatus['status'] => {
   if (xy === '??') return '?';
@@ -93,51 +90,62 @@ const parseLog = (raw: string): Commit[] =>
       return { sha, subject, author, ts };
     });
 
-export const createGitService = (): GitService => ({
-  status: async (worktree) => parseStatus(await git(worktree, ['status', '--porcelain', '-z'])),
-  diff: (worktree, base, options) => {
-    const from = options.from ?? base;
-    const revs =
-      options.to === undefined || options.to === 'worktree' ? [from] : [from, options.to];
-    const path = options.path === undefined ? [] : ['--', options.path];
-    return git(worktree, ['diff', '--no-color', ...revs, ...path]);
-  },
-  show: async (worktree, path, rev) => {
-    if (rev === 'worktree') {
-      try {
-        return toContent(await readFile(join(worktree, path)));
-      } catch (error) {
-        throw new DaemonError('not_found', error instanceof Error ? error.message : String(error));
-      }
+const show = async (git: Runner, worktree: string, path: string, rev: string) => {
+  if (rev === 'worktree') {
+    try {
+      return toContent(await readFile(join(worktree, path)));
+    } catch (error) {
+      throw new DaemonError('not_found', error instanceof Error ? error.message : String(error));
     }
-    return toContent(Buffer.from(await git(worktree, ['show', `${rev}:${path}`]), 'utf8'));
-  },
-  log: async (worktree, limit) =>
-    parseLog(await git(worktree, ['log', '--format=%H%x1f%s%x1f%an%x1f%aI', '-n', String(limit)])),
-  branches: async (repo) =>
-    (await git(repo, ['for-each-ref', '--format=%(refname:short)', 'refs/heads']))
-      .split('\n')
-      .filter((line) => line !== ''),
-  revParse: async (repo, rev) => (await git(repo, ['rev-parse', '--verify', rev])).trim(),
-  addWorktree: async (repo, path, branch, base) => {
-    const args = base === null ? [path, branch] : ['-b', branch, path, base];
-    await git(repo, ['worktree', 'add', ...args]);
-  },
-  removeWorktree: async (repo, path) => {
-    await git(repo, ['worktree', 'remove', '--force', path]);
-  },
-  listRepos: async (root) => {
-    const entries = await readdir(root, { withFileTypes: true });
-    const candidates = entries.filter((e) => e.isDirectory()).map((e) => join(root, e.name));
-    const repos = await Promise.all(
-      candidates.map(async (path): Promise<Repo | null> => {
-        const gitDir = await stat(join(path, '.git')).catch(() => null);
-        if (gitDir === null) return null;
-        const names = await git(path, ['for-each-ref', '--format=%(refname:short)', 'refs/heads']);
-        const branches = names.split('\n').filter((line) => line !== '');
-        return { path, name: basename(path), branches };
-      }),
-    );
-    return repos.filter((repo): repo is Repo => repo !== null);
-  },
-});
+  }
+  return toContent(Buffer.from(await git(worktree, ['show', `${rev}:${path}`]), 'utf8'));
+};
+
+const localBranches = async (git: Runner, repo: string): Promise<string[]> =>
+  (await git(repo, ['for-each-ref', '--format=%(refname:short)', 'refs/heads']))
+    .split('\n')
+    .filter((line) => line !== '');
+
+const listRepos = async (git: Runner, root: string): Promise<Repo[]> => {
+  const entries = await readdir(root, { withFileTypes: true });
+  const candidates = entries.filter((e) => e.isDirectory()).map((e) => join(root, e.name));
+  const repos = await Promise.all(
+    candidates.map(async (path): Promise<Repo | null> => {
+      const gitDir = await stat(join(path, '.git')).catch(() => null);
+      if (gitDir === null) return null;
+      return { path, name: basename(path), branches: await localBranches(git, path) };
+    }),
+  );
+  return repos.filter((repo): repo is Repo => repo !== null);
+};
+
+export const createGitService = (options: GitServiceOptions = {}): GitService => {
+  const env = cleanEnv(options.env ?? process.env);
+  const git: Runner = (cwd, args) => runCommand('git', args, { cwd, env, code: 'git_error' });
+  const gh: Runner = (cwd, args) => runCommand('gh', args, { cwd, env, code: 'gh_error' });
+  return {
+    ...gitActions(git, gh),
+    status: async (worktree) => parseStatus(await git(worktree, ['status', '--porcelain', '-z'])),
+    diff: (worktree, base, opts) => {
+      const from = opts.from ?? base;
+      const revs = opts.to === undefined || opts.to === 'worktree' ? [from] : [from, opts.to];
+      const path = opts.path === undefined ? [] : ['--', opts.path];
+      return git(worktree, ['diff', '--no-color', ...revs, ...path]);
+    },
+    show: (worktree, path, rev) => show(git, worktree, path, rev),
+    log: async (worktree, limit) =>
+      parseLog(
+        await git(worktree, ['log', '--format=%H%x1f%s%x1f%an%x1f%aI', '-n', String(limit)]),
+      ),
+    branches: (repo) => localBranches(git, repo),
+    revParse: async (repo, rev) => (await git(repo, ['rev-parse', '--verify', rev])).trim(),
+    addWorktree: async (repo, path, branch, base) => {
+      const args = base === null ? [path, branch] : ['-b', branch, path, base];
+      await git(repo, ['worktree', 'add', ...args]);
+    },
+    removeWorktree: async (repo, path) => {
+      await git(repo, ['worktree', 'remove', '--force', path]);
+    },
+    listRepos: (root) => listRepos(git, root),
+  };
+};

@@ -93,6 +93,21 @@ export interface RpcMethods {
     result: { content: string; binary: boolean };
   };
   'git.log': { params: { session: string; limit?: number }; result: { commits: Commit[] } };
+  // Stages `paths` (or every change, untracked included, when omitted) and commits.
+  'git.commit': {
+    params: { session: string; message: string; paths?: string[] };
+    result: { sha: string };
+  };
+  // Never forces. The first push of a branch sets its upstream; `setUpstream` forces that.
+  'git.push': {
+    params: { session: string; setUpstream?: boolean };
+    result: { remote: string; branch: string };
+  };
+  // `gh pr create` in the worktree; an existing PR for the branch is returned instead.
+  'git.pr': {
+    params: { session: string; title: string; body?: string; base?: string; draft?: boolean };
+    result: { url: string };
+  };
   'fs.read': {
     params: { session: string; path: string };
     result: { content: string; binary: boolean };
@@ -111,11 +126,12 @@ export type RpcErrorCode =
   | 'not_paired'
   | 'agent_unavailable'
   | 'git_error'
+  | 'gh_error'
   | 'internal';
 
 type ParamGuards = { [M in RpcMethod]: (value: unknown) => value is RpcMethods[M]['params'] };
 
-const { isString, isInteger, isRecord, isArrayOf, isOneOf, isOptional } = guards;
+const { isString, isBoolean, isInteger, isRecord, isArrayOf, isOneOf, isOptional } = guards;
 
 const isEmpty = (v: unknown): v is Record<string, never> =>
   isRecord(v) && Object.keys(v).length === 0;
@@ -159,6 +175,18 @@ export const rpcMethods: ParamGuards = {
     withSession(v) && isString(v['path']) && isString(v['rev']),
   'git.log': (v): v is RpcMethods['git.log']['params'] =>
     withSession(v) && isOptional(v['limit'], (n): n is number => isInteger(n, 1)),
+  'git.commit': (v): v is RpcMethods['git.commit']['params'] =>
+    withSession(v) &&
+    isString(v['message']) &&
+    isOptional(v['paths'], (p): p is string[] => isArrayOf(p, isString)),
+  'git.push': (v): v is RpcMethods['git.push']['params'] =>
+    withSession(v) && isOptional(v['setUpstream'], isBoolean),
+  'git.pr': (v): v is RpcMethods['git.pr']['params'] =>
+    withSession(v) &&
+    isString(v['title']) &&
+    isOptional(v['body'], isString) &&
+    isOptional(v['base'], isString) &&
+    isOptional(v['draft'], isBoolean),
   'fs.read': (v): v is RpcMethods['fs.read']['params'] => withSession(v) && isString(v['path']),
   'fs.list': (v): v is RpcMethods['fs.list']['params'] => withSession(v) && isString(v['path']),
   'repos.list': isEmpty,
