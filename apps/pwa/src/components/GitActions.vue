@@ -81,7 +81,7 @@ const run = async (action: Action, act: () => Promise<boolean>): Promise<void> =
   busy.value = action;
   failure.value = null;
   const ok = await act();
-  if (!ok) failure.value = props.store.state.error ?? `${action} failed`;
+  if (!ok) failure.value = props.store.state.error?.message ?? `${action} failed`;
   busy.value = null;
 };
 

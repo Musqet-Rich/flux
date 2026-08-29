@@ -24,6 +24,7 @@ const internals = (): StoreInternals => ({
   vapidPublicKey: null,
   refreshing: null,
   deviceId: null,
+  errorTimer: null,
 });
 
 test('appends to the view and writes only the chunks the new tail touches', async () => {

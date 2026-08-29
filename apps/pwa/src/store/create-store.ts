@@ -18,7 +18,8 @@ import { storeState } from './store-state.ts';
 // against the fake relay; the browser wires IndexedDB and WebSocket in app-store.ts.
 //
 // Actions a view fires resolve to whether they succeeded; the failure itself is in
-// `state.error` for the status bar, so views never handle rejections.
+// `state.error` for the status bar, so views never handle rejections. Errors are transient
+// (store-errors.ts): an action's clears itself, a connection's clears when the box is back.
 
 export type PrParams = Omit<RpcMethods['git.pr']['params'], 'session'>;
 
@@ -57,6 +58,8 @@ export interface Store extends SettingsActions {
   push: (session: string) => Promise<{ remote: string; branch: string } | null>;
   openPr: (session: string, pr: PrParams) => Promise<string | null>;
   call: Connection['call'];
+  // The status bar's × on the shown error.
+  dismissError: () => void;
   stop: () => void;
 }
 
@@ -81,7 +84,7 @@ const boot = async (i: StoreInternals): Promise<void> => {
 
 const pair = async (i: StoreInternals, relayUrl: string, fragment: string): Promise<void> => {
   i.state.phase = 'pairing';
-  i.state.error = null;
+  boxLink.clearError(i);
   try {
     const { box, connection } = await pairDevice({ ...boxLink.options(i), relayUrl, fragment });
     await i.options.storage.set(pairedBox.storageKey, box.record);
@@ -90,7 +93,7 @@ const pair = async (i: StoreInternals, relayUrl: string, fragment: string): Prom
     i.state.phase = 'paired';
     await boxLink.afterConnect(i);
   } catch (error) {
-    boxLink.reportError(i, error);
+    boxLink.reportError(i, error, 'connection');
     i.state.phase = 'unpaired';
   }
 };
@@ -113,6 +116,7 @@ const saveFile = async (
     ifMatch === null ? { session, path, content } : { session, path, content, ifMatch };
   try {
     const { hash } = await boxLink.call(i, 'fs.write', params);
+    boxLink.clearActionError(i);
     return { ok: true, hash };
   } catch (error) {
     if (error instanceof ClientError && error.code === 'conflict') {
@@ -137,7 +141,9 @@ const createSession = async (
 // Like boxLink.attempt, for actions whose result the view needs (a sha, a URL).
 const outcome = async <T>(i: StoreInternals, action: () => Promise<T>): Promise<T | null> => {
   try {
-    return await action();
+    const result = await action();
+    boxLink.clearActionError(i);
+    return result;
   } catch (error) {
     boxLink.reportError(i, error);
     return null;
@@ -155,6 +161,16 @@ const gitActions = (i: StoreInternals): Pick<Store, 'commit' | 'push' | 'openPr'
     outcome(i, async () => (await boxLink.call(i, 'git.pr', { session, ...pr })).url),
 });
 
+const controls = (i: StoreInternals): Pick<Store, 'dismissError' | 'stop'> => ({
+  dismissError: () => {
+    boxLink.clearError(i);
+  },
+  stop: () => {
+    boxLink.clearError(i);
+    i.connection?.stop();
+  },
+});
+
 export const createStore = (options: StoreOptions): Store => {
   const i: StoreInternals = {
     options,
@@ -165,6 +181,7 @@ export const createStore = (options: StoreOptions): Store => {
     vapidPublicKey: null,
     refreshing: null,
     deviceId: null,
+    errorTimer: null,
   };
   return {
     ...settingsActions(i),
@@ -197,8 +214,6 @@ export const createStore = (options: StoreOptions): Store => {
     refreshSessions: () => boxLink.refreshSessions(i),
     ...gitActions(i),
     call: (method, params) => boxLink.call(i, method, params),
-    stop: () => {
-      i.connection?.stop();
-    },
+    ...controls(i),
   };
 };

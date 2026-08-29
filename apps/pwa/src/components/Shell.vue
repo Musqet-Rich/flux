@@ -16,6 +16,7 @@ const props = defineProps<{ store: Store; router: Router }>();
 const state = props.store.state;
 const route = computed(() => props.router.current.route);
 const active = computed(() => ('session' in route.value ? route.value.session : null));
+const error = computed(() => state.error?.message ?? null);
 // The status bar's context-window reading is per-session, kept with the open session's log view
 // (like `thinking`); off a session there is nothing to show.
 const context = computed(() =>
@@ -69,11 +70,12 @@ const enablePush = (): void => {
   <StatusBar
     :status="state.status"
     :daemon="state.daemon"
-    :error="state.error"
+    :error="error"
     :push="state.push"
     :rate-windows="state.rateWindows"
     :context="context"
     @enable-push="enablePush"
+    @dismiss="store.dismissError"
   />
 </template>
 

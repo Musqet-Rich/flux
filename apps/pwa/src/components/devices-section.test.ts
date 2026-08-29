@@ -59,5 +59,5 @@ test('revoking this device lands on the pair screen', async () => {
   await wrapper.find('.confirm .danger').trigger('click');
   await until(() => box.store.state.phase === 'unpaired');
   expect(box.calls('devices.remove')).toEqual([{ deviceId: 'dev-1' }]);
-  expect(box.store.state.error).toContain('removed');
+  expect(box.store.state.error?.message).toContain('removed');
 });

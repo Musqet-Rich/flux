@@ -117,10 +117,10 @@ test('a failed action keeps the draft and surfaces the box error', async () => {
   await flushPromises();
   await wrapper.find('.ask input').setValue('later');
   await wrapper.find('.ask form').trigger('submit');
-  await until(() => store.state.error === 'no agent.answer');
+  await until(() => store.state.error?.message === 'no agent.answer');
   await wrapper.find('textarea').setValue('keep me');
   await wrapper.find('form.row').trigger('submit');
-  await until(() => store.state.error === 'no agent.send');
+  await until(() => store.state.error?.message === 'no agent.send');
   await until(() => Reflect.get(wrapper.vm, 'sending') === false);
   expect(wrapper.find('textarea').element.value).toBe('keep me');
   store.stop();

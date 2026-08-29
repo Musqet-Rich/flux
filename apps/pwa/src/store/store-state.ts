@@ -54,11 +54,20 @@ export interface Draft {
   text: string;
 }
 
+// Where an error came from decides how long it stays (store-errors.ts): an `action` error goes
+// on its own, a `connection` error waits for the condition to clear or a dismissal.
+export type ErrorKind = 'action' | 'connection';
+
+export interface StoreError {
+  message: string;
+  kind: ErrorKind;
+}
+
 export interface StoreState {
   phase: StorePhase;
   status: ConnectionStatus;
   daemon: string | null;
-  error: string | null;
+  error: StoreError | null;
   push: PushState;
   sessions: SessionSummary[];
   // Agents the box can run, from `hello`; a daemon that predates the field has claude only.
@@ -79,6 +88,8 @@ export interface StoreOptions {
   subscribePush?: (vapidPublicKey: string, prompt: boolean) => Promise<unknown>;
   minBackoffMs?: number;
   maxBackoffMs?: number;
+  // Runs `fn` after `ms` and returns a cancel; defaults to setTimeout. Tests inject one they fire.
+  schedule?: (fn: () => void, ms: number) => () => void;
 }
 
 // Shared by the store's modules; never exposed to views.
@@ -92,6 +103,8 @@ export interface StoreInternals {
   refreshing: Promise<void> | null;
   // The id the box gave this device at pairing; a `device.revoked` notice naming it unpairs.
   deviceId: string | null;
+  // Cancels the auto-clear of the shown action error, if one is pending.
+  errorTimer: (() => void) | null;
 }
 
 // A fresh, empty state, before boot.

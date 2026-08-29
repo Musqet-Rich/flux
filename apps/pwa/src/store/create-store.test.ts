@@ -94,7 +94,7 @@ test('saves a file with the hash it was read with, and tells a conflict from a f
   expect(called('fs.write')[2]?.params).toEqual({ session: 's1', path: 'a.ts', content: 'force' });
   delete handlers['fs.write'];
   expect(await store.saveFile('s1', 'a.ts', 'new', 'h1')).toEqual({ ok: false, conflict: false });
-  expect(store.state.error).toBe('no fs.write');
+  expect(store.state.error).toEqual({ message: 'no fs.write', kind: 'action' });
 });
 
 test('git actions resolve to their result, or null with the failure reported', async () => {
@@ -108,7 +108,7 @@ test('git actions resolve to their result, or null with the failure reported', a
   ]);
   expect(await store.push('s1')).toEqual({ remote: 'origin', branch: 'main' });
   expect(await store.openPr('s1', { title: 'T', draft: true })).toBeNull();
-  expect(store.state.error).toBe('no git.pr');
+  expect(store.state.error?.message).toBe('no git.pr');
   expect(called('git.pr')[0]?.params).toEqual({ session: 's1', title: 'T', draft: true });
   store.stop();
 });
@@ -126,10 +126,21 @@ const setup = async ({ pairable = true, silentPush = false }: Options = {}) => {
   const relay = await createFakeRelay(handlers);
   const storage = createMemoryStorage();
   const pushes: string[] = [];
+  // The store's auto-clear timer, fired by the test instead of the clock.
+  const timers: (() => void)[] = [];
+  const fire = (): void => {
+    for (const fn of timers.splice(0)) fn();
+  };
   const another = () =>
     createStore({
       storage,
       socket: relay.socket,
+      schedule: (fn) => {
+        timers.push(fn);
+        return () => {
+          timers.splice(timers.indexOf(fn), 1);
+        };
+      },
       subscribePush: (key, prompt) => {
         pushes.push(`${key}:${prompt ? 'prompt' : 'silent'}`);
         const granted = prompt || !silentPush;
@@ -143,7 +154,7 @@ const setup = async ({ pairable = true, silentPush = false }: Options = {}) => {
     return new URL(pairing.url('https://relay.example', { boxPub: relay.boxPub, secret })).hash;
   };
   const called = (method: string) => relay.calls.filter((c) => c.method === method);
-  return { relay, handlers, store: another(), another, pushes, storage, link, called };
+  return { relay, handlers, store: another(), another, pushes, storage, link, called, fire };
 };
 
 test('boots to the pair screen without a stored box, and actions are refused', async () => {
@@ -152,7 +163,7 @@ test('boots to the pair screen without a stored box, and actions are refused', a
   expect(store.state.phase).toBe('unpaired');
   await expect(store.call('sessions.list', {})).rejects.toMatchObject({ code: 'offline' });
   expect(await store.send('s1', 'x')).toBe(false);
-  expect(store.state.error).toBe('not paired');
+  expect(store.state.error?.message).toBe('not paired');
 });
 
 test('pairs from a link, says hello, subscribes to push silently and remembers the box', async () => {
@@ -179,7 +190,7 @@ test('push stays off until a prompted subscribe reaches the box, and retries aft
   expect(store.state.push).toBe('off');
   expect(pushes).toEqual(['a2V5:silent']);
   expect(await store.enablePush()).toBe(false);
-  expect(store.state).toMatchObject({ push: 'off', error: 'no push.subscribe' });
+  expect(store.state).toMatchObject({ push: 'off', error: { message: 'no push.subscribe' } });
   handlers['push.subscribe'] = () => ({});
   expect(await store.enablePush()).toBe(true);
   expect(store.state.push).toBe('on');
@@ -191,9 +202,12 @@ test('push stays off until a prompted subscribe reaches the box, and retries aft
 test('a bad link or a refused pairing lands back on the pair screen with the reason', async () => {
   const { store, link, relay } = await setup({ pairable: false });
   await store.pair('https://relay.example', '#nope');
-  expect(store.state).toMatchObject({ phase: 'unpaired', error: 'not a pairing link' });
+  expect(store.state).toMatchObject({
+    phase: 'unpaired',
+    error: { message: 'not a pairing link', kind: 'connection' },
+  });
   await store.pair('https://relay.example', link());
-  expect(store.state).toMatchObject({ phase: 'unpaired', error: 'no pair.request' });
+  expect(store.state).toMatchObject({ phase: 'unpaired', error: { message: 'no pair.request' } });
   expect(store.state.status).toBe('stopped');
   expect(relay.guests()).toBe(0);
 });
@@ -369,7 +383,7 @@ test('sends messages with pending comments, answers asks, adds and removes comme
   expect(await store.removeComment('s1', 'c1')).toBe(true);
   expect(called('comments.remove')[0]?.params).toEqual({ session: 's1', commentId: 'c1' });
   expect(await store.interrupt('s1')).toBe(false);
-  expect(store.state.error).toBe('no agent.interrupt');
+  expect(store.state.error?.message).toBe('no agent.interrupt');
 });
 
 test('tracks sessions: state patches, unknown sessions refresh the list, creation adds', async () => {
@@ -433,7 +447,8 @@ test('lists devices, revokes another, and revoking itself forgets the box', asyn
     { deviceId: 'dev-1' },
   ]);
   expect(store.state).toMatchObject({ phase: 'unpaired', status: 'stopped', devices: [] });
-  expect(store.state.error).toContain('removed');
+  expect(store.state.error).toMatchObject({ kind: 'connection' });
+  expect(store.state.error?.message).toContain('removed');
   expect(await storage.get(pairedBox.storageKey)).toBeUndefined();
   expect(await store.refreshDevices()).toBe(false);
 });
@@ -446,7 +461,7 @@ test('a revoked notice for this device, or a not_paired answer, lands on the pai
   expect(first.store.state.phase).toBe('paired');
   await first.relay.ephemeral({ type: 'device.revoked', deviceId: 'dev-1' });
   await until(() => first.store.state.phase === 'unpaired');
-  expect(first.store.state.error).toContain('no longer paired');
+  expect(first.store.state.error?.message).toContain('no longer paired');
   expect(await first.store.boot().then(() => first.store.state.phase)).toBe('unpaired');
   const second = await setup();
   await second.store.pair('https://relay.example', second.link());
@@ -459,7 +474,7 @@ test('a revoked notice for this device, or a not_paired answer, lands on the pai
   second.relay.refuseCall('sessions.list', 'not_paired');
   await second.store.refreshSessions();
   expect(second.store.state).toMatchObject({ phase: 'unpaired', sessions: [] });
-  expect(second.store.state.error).toContain('no longer paired');
+  expect(second.store.state.error?.message).toContain('no longer paired');
 });
 
 test('reads and saves settings', async () => {
@@ -471,4 +486,31 @@ test('reads and saves settings', async () => {
   expect(await store.saveSettings({ agent: { claudeMd: '# x' } })).toBe(true);
   expect(called('settings.set')[0]?.params).toEqual({ agent: { claudeMd: '# x' } });
   expect(store.state.settings?.agent.claudeMd).toBe('# x');
+});
+
+// Dogfooding 2026-08-29: an error stayed at the bottom of the screen for good. An action's
+// failure now goes at the next success or a tap on ×; a connection's goes when the box is back.
+test('errors clear on success, on dismissal, and on reconnect', async () => {
+  const { store, link, relay, handlers, fire } = await setup();
+  await store.pair('https://relay.example', link());
+  delete handlers['agent.interrupt'];
+  await store.interrupt('s1');
+  expect(store.state.error).toEqual({ message: 'no agent.interrupt', kind: 'action' });
+  await store.send('s1', 'hi');
+  expect(store.state.error).toBeNull();
+  await store.interrupt('s1');
+  store.dismissError();
+  expect(store.state.error).toBeNull();
+  delete handlers['hello'];
+  relay.dropGuests();
+  await until(() => store.state.error !== null);
+  expect(store.state.error).toEqual({ message: 'no hello', kind: 'connection' });
+  fire();
+  await store.send('s1', 'hi');
+  expect(store.state.error?.kind).toBe('connection');
+  handlers['hello'] = () => ({ protocol: 1, daemon: 'box', sessions: [summary('s1')] });
+  relay.dropGuests();
+  await until(() => store.state.error === null);
+  expect(store.state.status).toBe('connected');
+  store.stop();
 });

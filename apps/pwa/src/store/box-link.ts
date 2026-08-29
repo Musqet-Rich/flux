@@ -7,7 +7,8 @@ import type { SessionLog } from '../client/create-session-log.ts';
 import { pairedBox } from '../client/paired-box.ts';
 import { syncSession } from '../client/sync-session.ts';
 import { logCache } from './log-cache.ts';
-import type { LogView, StoreInternals } from './store-state.ts';
+import { storeErrors } from './store-errors.ts';
+import type { ErrorKind, LogView, StoreInternals } from './store-state.ts';
 
 // The store's side of the connection (architecture.md § Sync model): what to do when the channel
 // comes up, when an event or delta arrives, and when a call fails. Everything here mutates
@@ -15,9 +16,11 @@ import type { LogView, StoreInternals } from './store-state.ts';
 
 type LinkOptions = Omit<ConnectionOptions, 'relayUrl' | 'keys' | 'boxPub'>;
 
-const reportError = (i: StoreInternals, error: unknown): void => {
-  i.state.error = error instanceof Error ? error.message : String(error);
+const reportError = (i: StoreInternals, error: unknown, kind: ErrorKind = 'action'): void => {
+  storeErrors.report(i, error, kind);
 };
+const clearError = storeErrors.clear;
+const clearActionError = storeErrors.clearAction;
 
 // Forgets the box: the stored keys go, the connection stops, and the app lands on the pair
 // screen with `reason` as the error. Used when the box says this device is no longer paired.
@@ -33,7 +36,7 @@ const unpair = async (i: StoreInternals, reason: string): Promise<void> => {
   i.state.settings = null;
   i.state.daemon = null;
   i.state.phase = 'unpaired';
-  i.state.error = reason;
+  reportError(i, reason, 'connection');
   // The keys, then the old box's cached logs: another box's session ids must not collide.
   await i.options.storage.remove(pairedBox.storageKey).catch(() => {
     // Nothing to do: the keys are already out of memory and the next boot re-reads storage.
@@ -63,10 +66,11 @@ const call = async <M extends keyof RpcMethods>(
 };
 
 // Runs an action for a view: a failure lands in `state.error` for the status bar and the view
-// gets false, never a rejection to handle.
+// gets false, never a rejection to handle. A success takes a previous action's failure with it.
 const attempt = async (i: StoreInternals, action: () => Promise<unknown>): Promise<boolean> => {
   try {
     await action();
+    storeErrors.clearAction(i);
     return true;
   } catch (error) {
     reportError(i, error);
@@ -116,7 +120,8 @@ const afterConnect = async (i: StoreInternals): Promise<void> => {
   i.state.daemon = hello.daemon;
   i.state.sessions = hello.sessions;
   i.state.agents = hello.agents ?? ['claude'];
-  i.state.error = null;
+  // Back in touch with the box: whatever the outage said is over.
+  storeErrors.clear(i);
   i.vapidPublicKey = hello.vapidPublicKey ?? null;
   if (i.state.push === 'unavailable' && i.vapidPublicKey !== null) i.state.push = 'off';
   await Promise.all([...i.logs.values()].map((log) => syncLog(i, log)));
@@ -199,7 +204,7 @@ const onStatus = (i: StoreInternals, status: StoreInternals['state']['status']):
   // before that would be refused as not_paired.
   if (status === 'connected' && i.state.phase === 'paired') {
     void afterConnect(i).catch((error: unknown) => {
-      reportError(i, error);
+      reportError(i, error, 'connection');
     });
   }
 };
@@ -235,6 +240,8 @@ export const boxLink: {
   refreshSessions: typeof refreshSessions;
   enablePush: typeof enablePush;
   reportError: typeof reportError;
+  clearError: typeof clearError;
+  clearActionError: typeof clearActionError;
   attempt: typeof attempt;
   call: typeof call;
   unpair: typeof unpair;
@@ -246,6 +253,8 @@ export const boxLink: {
   refreshSessions,
   enablePush,
   reportError,
+  clearError,
+  clearActionError,
   attempt,
   call,
   unpair,
