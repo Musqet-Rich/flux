@@ -5,6 +5,11 @@ import { createCodeEditor } from './create-code-editor.ts';
 const cmContent = (parent: HTMLElement): HTMLElement | null | undefined =>
   parent.shadowRoot?.querySelector('.cm-content');
 
+const adoptedCss = (parent: HTMLElement): string =>
+  (parent.shadowRoot?.adoptedStyleSheets ?? [])
+    .flatMap((sheet) => Array.from(sheet.cssRules, (rule) => rule.cssText))
+    .join('\n');
+
 test('mounts in a shadow root, edits the document, and reports changes', () => {
   const parent = document.createElement('div');
   document.body.append(parent);
@@ -38,6 +43,26 @@ test('mounts in a shadow root, edits the document, and reports changes', () => {
   expect(saves).toBe(1);
   editor.destroy();
   expect(parent.shadowRoot?.querySelector('.cm-editor')).toBeNull();
+});
+
+test('wraps long lines and wears the shared theme', () => {
+  const parent = document.createElement('div');
+  document.body.append(parent);
+  const editor = createCodeEditor({
+    parent,
+    doc: 'x'.repeat(400),
+    readOnly: false,
+    onChange: () => {},
+    onSave: () => {},
+  });
+  expect(cmContent(parent)?.classList.contains('cm-lineWrapping')).toBe(true);
+  const css = adoptedCss(parent);
+  expect(css).toContain('var(--bg)');
+  expect(css).toContain('var(--panel)');
+  // The cursor's line number is lit as well as its line; the theme colours both.
+  expect(parent.shadowRoot?.querySelector('.cm-activeLineGutter')).not.toBeNull();
+  expect(css).toContain('.cm-activeLineGutter');
+  editor.destroy();
 });
 
 test('read-only can be set at mount and toggled later', () => {

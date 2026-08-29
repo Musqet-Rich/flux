@@ -22,6 +22,18 @@ export default defineConfig({
       input: { main: 'index.html', sw: 'src/sw.ts' },
       output: {
         entryFileNames: (chunk) => (chunk.name === 'sw' ? 'sw.js' : 'assets/[name]-[hash].js'),
+        // CodeMirror is shared by the diff view (in main) and the lazily loaded file editor, so
+        // it lands in a chunk of its own; named here, or it takes the name of whichever small
+        // module of ours happens to sit between them (`editor-theme-*.js`, 250 kB). The
+        // commands package is only the file editor's and stays in its lazy chunk.
+        advancedChunks: {
+          groups: [
+            {
+              name: 'codemirror',
+              test: /node_modules[\\/]@(?:codemirror|lezer|marijn)[\\/](?!commands)/u,
+            },
+          ],
+        },
       },
     },
   },

@@ -4,6 +4,7 @@ import type { BlockInfo } from '@codemirror/view';
 import { EditorView, lineNumbers } from '@codemirror/view';
 import type { LineRange } from '@flux/protocol';
 
+import { editorTheme } from './editor-theme.ts';
 import { selectionRange } from './selection-range.ts';
 
 // A read-only unified diff (ADR 0005) whose selection is reported as a line range for a comment.
@@ -34,9 +35,7 @@ const gutterTap = (view: EditorView, line: BlockInfo): boolean => {
   return true;
 };
 
-const theme = EditorView.theme({
-  '&': { fontSize: '13px', height: '100%' },
-  '.cm-scroller': { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' },
+const gutterTheme = EditorView.theme({
   '.cm-gutters': { cursor: 'pointer', userSelect: 'none' },
 });
 
@@ -52,6 +51,9 @@ export const createDiffEditor = (options: DiffEditorOptions): DiffEditor => {
       doc: options.current,
       extensions: [
         lineNumbers({ domEventHandlers: { mousedown: gutterTap } }),
+        // Wrapping applies to the current lines and to the deleted-chunk widgets alike (both
+        // sit under .cm-content), so a long line never scrolls sideways on a phone.
+        EditorView.lineWrapping,
         EditorView.editable.of(false),
         EditorState.readOnly.of(true),
         unifiedMergeView({
@@ -62,7 +64,8 @@ export const createDiffEditor = (options: DiffEditorOptions): DiffEditor => {
         EditorView.updateListener.of((update) => {
           if (update.selectionSet) options.onSelection(selectionRange(update.state));
         }),
-        theme,
+        editorTheme,
+        gutterTheme,
       ],
     }),
   });

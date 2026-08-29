@@ -1,7 +1,15 @@
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { bracketMatching, indentOnInput } from '@codemirror/language';
 import { Compartment, EditorState } from '@codemirror/state';
-import { EditorView, highlightActiveLine, keymap, lineNumbers } from '@codemirror/view';
+import {
+  EditorView,
+  highlightActiveLine,
+  highlightActiveLineGutter,
+  keymap,
+  lineNumbers,
+} from '@codemirror/view';
+
+import { editorTheme } from './editor-theme.ts';
 
 // A plain text editor (ADR 0005) for one worktree file: the document, whether it may be
 // edited, and a change signal. No language packs yet; highlighting is one line each when added.
@@ -26,11 +34,6 @@ export interface CodeEditorOptions {
   onSave: () => void;
 }
 
-const theme = EditorView.theme({
-  '&': { fontSize: '13px', height: '100%' },
-  '.cm-scroller': { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' },
-});
-
 const readOnlyOf = (readOnly: boolean) => [
   EditorView.editable.of(!readOnly),
   EditorState.readOnly.of(readOnly),
@@ -47,8 +50,10 @@ export const createCodeEditor = (options: CodeEditorOptions): CodeEditor => {
   };
   const extensions = [
     lineNumbers(),
+    EditorView.lineWrapping,
     history(),
     highlightActiveLine(),
+    highlightActiveLineGutter(),
     bracketMatching(),
     indentOnInput(),
     keymap.of([{ key: 'Mod-s', run: save }, ...defaultKeymap, ...historyKeymap, indentWithTab]),
@@ -56,7 +61,7 @@ export const createCodeEditor = (options: CodeEditorOptions): CodeEditor => {
     EditorView.updateListener.of((update) => {
       if (update.docChanged) options.onChange();
     }),
-    theme,
+    editorTheme,
   ];
   const stateOf = (doc: string): EditorState => EditorState.create({ doc, extensions });
   const view = new EditorView({ root, parent: root, state: stateOf(options.doc) });
