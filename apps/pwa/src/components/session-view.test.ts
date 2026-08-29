@@ -41,6 +41,23 @@ test('renders the log, streams, answers asks, sends with pending comments', asyn
   store.stop();
 });
 
+// Hooks and streaming envelopes arrive as `raw`, half a dozen around every reply, and the
+// status bar is where rate limits live: neither belongs in the timeline, but both stay in the log.
+test('raw and rate_limit events are kept in the log but not shown', async () => {
+  const box = await pairedStore([]);
+  const { store, relay, event } = box;
+  const wrapper = mount(SessionView, { props: { store, session: 's1' } });
+  await until(() => store.state.logs['s1'] !== undefined);
+  await relay.emit(event(1, 'raw', { agent: 'claude', data: { type: 'system' } }));
+  await relay.emit(event(2, 'msg.assistant', { text: 'hi' }));
+  await relay.emit(event(3, 'rate_limit', { windows: [] }));
+  await until(() => store.state.logs['s1']?.lastSeq === 3);
+  await flushPromises();
+  expect(store.state.logs['s1']?.events.length).toBe(3);
+  expect(wrapper.findAll('.item').map((i) => i.text())).toEqual(['hi']);
+  store.stop();
+});
+
 test('a failed action keeps the draft and surfaces the box error', async () => {
   const box = await pairedStore([]);
   const { store, relay, event } = box;

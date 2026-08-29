@@ -15,12 +15,17 @@ import EventItem from './EventItem.vue';
 const props = defineProps<{ store: Store; session: string }>();
 defineEmits<{ changes: [] }>();
 
+const hiddenTypes = new Set(['raw', 'rate_limit']);
 const draft = ref('');
 const sending = ref(false);
 const scroller = ref<HTMLElement | null>(null);
 
 const log = computed(() => props.store.state.logs[props.session]);
 const events = computed(() => log.value?.events ?? []);
+// Agent lines Flux does not read (`raw`) and rate-limit changes stay in the log for the ask,
+// comment and sync logic, but they are noise on a phone: hooks and streaming envelopes would
+// put half a dozen bare rows around every reply, and the status bar already shows the windows.
+const timeline = computed(() => events.value.filter((e) => !hiddenTypes.has(e.type)));
 const streaming = computed(() => log.value?.streaming ?? '');
 const ask = computed(() => openAsk(events.value));
 const pending = computed(() => pendingComments(events.value));
@@ -76,7 +81,7 @@ watch([() => events.value.length, streaming], () => {
       <button type="button" class="secondary" @click="$emit('changes')">Changes</button>
     </div>
     <div ref="scroller" class="timeline">
-      <EventItem v-for="e in events" :key="e.seq" :event="e" />
+      <EventItem v-for="e in timeline" :key="e.seq" :event="e" />
       <article v-if="streaming !== ''" class="streaming">
         <pre>{{ streaming }}</pre>
       </article>
