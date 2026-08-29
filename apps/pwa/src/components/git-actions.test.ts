@@ -107,3 +107,47 @@ test('opens a PR with the session title prefilled and links to the result', asyn
   expect(link.text()).toBe('https://github.com/o/r/pull/true');
   box.store.stop();
 });
+
+const tidy = { sha: '2222222222', subject: 'feat(pwa): seed the title', author: 'me', ts: 't' };
+const wip = { sha: '3333333333', subject: 'wip', author: 'me', ts: 't' };
+
+test('the title defaults to the newest conventional commit and follows the log until edited', async () => {
+  const log = [wip, tidy, { ...wip, sha: '1111111111', subject: 'First' }];
+  const box = await pairedStore([], {
+    'git.log': () => ({ commits: log }),
+    'git.commit': () => ({ sha: '4444444444' }),
+  });
+  const wrapper = mount(GitActions, {
+    props: { store: box.store, session: 's1', selected: [] },
+  });
+  await until(() => Reflect.get(wrapper.vm, 'last') !== null);
+  await flushPromises();
+  const titleInput = wrapper.find<HTMLInputElement>('#pr-title');
+  expect(titleInput.element.value).toBe('feat(pwa): seed the title');
+  expect(wrapper.find('.hint').text()).toBe('');
+  // An unedited default follows a refreshed log.
+  log.unshift({ ...tidy, sha: '4444444444', subject: 'fix(pwa): newer' });
+  await wrapper.find('#commit-message').setValue('fix(pwa): newer');
+  await wrapper.find('.commit').trigger('click');
+  await until(() => box.calls('git.log').length === 2);
+  await until(() => Reflect.get(wrapper.vm, 'busy') === null);
+  await flushPromises();
+  expect(titleInput.element.value).toBe('fix(pwa): newer');
+  // The operator's text wins, and keeps winning across the next refresh.
+  await titleInput.setValue('Ship it');
+  expect(wrapper.find('.hint').text()).toBe(
+    "Not a Conventional Commit; the repo's CI may reject it",
+  );
+  expect(wrapper.find('.hint').attributes('aria-live')).toBe('polite');
+  expect(wrapper.find('.open-pr').attributes('disabled')).toBeUndefined();
+  log.unshift({ ...tidy, sha: '5555555555', subject: 'fix(pwa): newest' });
+  await wrapper.find('#commit-message').setValue('fix(pwa): newest');
+  await wrapper.find('.commit').trigger('click');
+  await until(() => box.calls('git.log').length === 3);
+  await until(() => Reflect.get(wrapper.vm, 'busy') === null);
+  await flushPromises();
+  expect(titleInput.element.value).toBe('Ship it');
+  await titleInput.setValue('chore(repo): tidy');
+  expect(wrapper.find('.hint').text()).toBe('');
+  box.store.stop();
+});

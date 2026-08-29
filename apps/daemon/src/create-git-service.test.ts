@@ -105,18 +105,22 @@ test('show reads a rev or the worktree, hashes the bytes, and flags binary conte
   await expect(git.show(repo, 'missing.txt', 'HEAD')).rejects.toMatchObject({ code: 'git_error' });
 });
 
-test('log lists commits newest first with author and time', async () => {
+test('log lists the commits beyond the base newest first with author and time', async () => {
+  const base = sh(repo, ['rev-parse', 'HEAD']).trim();
+  expect(await git.log(repo, base, 10)).toEqual([]);
   await writeFile(join(repo, 'a.txt'), 'two\n');
   sh(repo, ['commit', '-qam', 'second']);
-  const commits = await git.log(repo, 10);
-  expect(commits).toHaveLength(2);
+  await writeFile(join(repo, 'a.txt'), 'three\n');
+  sh(repo, ['commit', '-qam', 'third']);
+  const commits = await git.log(repo, base, 10);
+  expect(commits.map((c) => c.subject)).toEqual(['third', 'second']);
   expect(commits[0]).toMatchObject({
-    subject: 'second',
+    subject: 'third',
     author: 'Test',
     ts: '2026-08-29T10:00:00Z',
   });
   expect(commits[0]?.sha).toMatch(/^[0-9a-f]{40}$/u);
-  expect(await git.log(repo, 1)).toHaveLength(1);
+  expect(await git.log(repo, base, 1)).toHaveLength(1);
 });
 
 test('branches and worktrees', async () => {

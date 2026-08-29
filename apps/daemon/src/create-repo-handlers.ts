@@ -115,9 +115,10 @@ export const createRepoHandlers = (ctx: HandlerContext): RepoHandlers => {
       const record = worktreeOf(p.session);
       return { diff: await ctx.git.diff(record.worktree, record.base, diffOptions(p)) };
     },
-    'git.log': async (p) => ({
-      commits: await ctx.git.log(worktreeOf(p.session).worktree, p.limit ?? 50),
-    }),
+    'git.log': async (p) => {
+      const record = worktreeOf(p.session);
+      return { commits: await ctx.git.log(record.worktree, record.base, p.limit ?? 50) };
+    },
     'git.commit': async (p) => ({
       sha: await ctx.git.commit(worktreeOf(p.session).worktree, p.message, p.paths),
     }),

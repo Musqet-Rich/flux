@@ -90,7 +90,8 @@ test('commit stages the given paths only, or everything including untracked file
   const all = await git.commit(repo, 'the rest');
   expect(all).not.toBe(sha);
   expect(await git.status(repo)).toEqual([]);
-  expect((await git.log(repo, 3)).map((c) => c.subject)).toEqual(['the rest', 'add b', 'init']);
+  const init = sh(repo, ['rev-parse', 'HEAD~2']).trim();
+  expect((await git.log(repo, init, 3)).map((c) => c.subject)).toEqual(['the rest', 'add b']);
 });
 
 test('commit of chosen paths leaves what the agent had staged elsewhere staged', async () => {
