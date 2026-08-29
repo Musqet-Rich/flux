@@ -75,10 +75,14 @@ watch(
     void props.store.open(session);
   },
 );
+// Only rows newer than the last one shown count as new: Show earlier prepends rows and a chat
+// switch swaps them, and neither is activity to follow or to put on the pill.
 watch(
-  () => timeline.value.length,
-  (count, before) => {
-    void tail.follow(Math.max(0, count - before));
+  () => timeline.value,
+  (rows, before) => {
+    const last = before.at(-1)?.seq ?? 0;
+    const added = rows.filter((row) => row.seq > last).length;
+    if (added > 0) void tail.follow(added);
   },
 );
 // Only growth counts: the text emptying is the reply landing, and that event is counted above.

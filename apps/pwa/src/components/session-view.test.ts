@@ -343,9 +343,14 @@ test('a long subagent chat shows its last 200 rows until asked for earlier ones'
   expect(wrapper.findAll('.item').length).toBe(200);
   expect(wrapper.find('.item').text()).toBe('row 53');
   expect(wrapper.find('.earlier').text()).toBe('Show 51 earlier');
+  // The operator is at the top to press it; the rows it brings in are old, not new activity.
+  const el = withGeometry(wrapper.find<HTMLElement>('.timeline').element);
+  await scrollTo(el, 0);
   await wrapper.find('.earlier').trigger('click');
   await flushPromises();
   expect(wrapper.findAll('.item').length).toBe(251);
   expect(wrapper.find('.earlier').exists()).toBe(false);
+  expect(wrapper.find('.new-activity').exists()).toBe(false);
+  expect(el.scrollTop).toBe(0);
   store.stop();
 });
