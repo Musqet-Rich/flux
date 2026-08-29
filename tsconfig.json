@@ -1,9 +1,10 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
   // Root project: type-checks the tooling config files (vitest.config.ts, apps/*/vite.config.ts,
-  // future tsdown.config.ts). They run under Node and must not share a program with browser
-  // source (see apps/pwa/tsconfig.json). Globs, not a file list, so a new config file is
-  // checked the day it lands instead of drifting out of the check.
+  // future tsdown.config.ts) and the Playwright harness under e2e/, which imports nothing from
+  // the packages. They run under Node and must not share a program with browser source (see
+  // apps/pwa/tsconfig.json). Globs, not a file list, so a new config file is checked the day
+  // it lands instead of drifting out of the check.
   // Each package has its own tsconfig.json and is checked separately with
   // `tsc --noEmit -p <pkg>` (vue-tsc for apps/pwa); there is no `tsc -b` solution and no
   // project references, by design (docs/scaffold-notes.md § typescript).
@@ -11,5 +12,5 @@
   "compilerOptions": {
     "types": ["node"]
   },
-  "include": ["*.config.ts", "apps/*/*.config.ts", "packages/*/*.config.ts"]
+  "include": ["*.config.ts", "apps/*/*.config.ts", "packages/*/*.config.ts", "e2e/**/*.ts"]
 }

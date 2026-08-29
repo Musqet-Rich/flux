@@ -12,6 +12,7 @@ apps/
 packages/
   protocol/      Wire types, type guards, framing, crypto. Zero runtime deps.
 docs/            prd, architecture, protocol, engineering, adr/
+e2e/             The one Playwright flow and its stack harness. Root-level, not a package.
 AGENTS.md        Entry point for agents. Short. Points here.
 CLAUDE.md        Symlink to AGENTS.md.
 ```
@@ -99,7 +100,7 @@ Vitest everywhere. `pnpm test` runs all packages; `pnpm run check` runs them wit
 - Adapters are tested against **fixtures**: captured real output stored under `apps/daemon/test/fixtures/`. A fixture is added or refreshed whenever the upstream agent changes shape. Fixtures are the contract with the outside world.
 - Daemon and relay: unit tests for pure logic, integration tests that run the real thing in-process (real SQLite in a temp dir, real WebSocket on an ephemeral port). No mocking of our own modules. Mock only the process boundary (spawned agents) using fixtures.
 - PWA: component tests with `@vue/test-utils` for anything with logic; composables tested directly. No snapshot tests.
-- E2E: one Playwright flow (pair → create session → send → see reply → comment → send) run against a fixture-driven fake agent. Added once P1 is feature-complete, not before.
+- E2E: one Playwright flow (`e2e/flow.test.ts`: pair → create session → send → see reply → comment → send → reload) run against the real relay and daemon from `dist` and the built PWA (service worker included), with the daemon's fixture-replaying fake agent behind `FLUX_CLAUDE` (`e2e/fake-claude.sh`). `pnpm run e2e` builds and runs it; `pnpm exec playwright install chromium` once first. Chromium only. It is its own CI job (`e2e`, required by the ruleset like the other five), not part of `pnpm run check`: it needs a browser and the build, and takes seconds on top of the unit gate. The harness lives at the root (`e2e/`, `playwright.config.ts`), type-checked by the root tsconfig, and imports nothing from the packages. It stays one flow: a new screen gets a step here, not a new spec.
 - A bug fix includes a test that fails without the fix.
 - Tests are deterministic. No sleeps; await the thing.
 
@@ -155,7 +156,7 @@ Explicitly rejected, with the reason, so nobody re-proposes them:
 
 ## What the tooling enforces
 
-`pnpm run check` (fmt, lint, types, tests with coverage), `.githooks/pre-commit` (Node 24, exact pins, ledger line for every added dependency, secret shapes, TODO without issue, commented-out code, decorators, `function` keyword, files over 500 lines, lockfile drift, then `check`), `.githooks/commit-msg` (format above), and CI (`check`, `audit`, `hooks` self-tests, `diff` over the PR range, `commits`). `.github/rulesets/main.json` makes those required on `main`; a repo admin applies it with the command in its README. Every rule above not in this list is enforced by review:
+`pnpm run check` (fmt, lint, types, tests with coverage), `.githooks/pre-commit` (Node 24, exact pins, ledger line for every added dependency, secret shapes, TODO without issue, commented-out code, decorators, `function` keyword, files over 500 lines, lockfile drift, then `check`), `.githooks/commit-msg` (format above), and CI (`check`, `audit`, `hooks` self-tests, `diff` over the PR range, `commits`, and `e2e` for the Playwright flow). `.github/rulesets/main.json` makes those required on `main`; a repo admin applies it with the command in its README. Every rule above not in this list is enforced by review:
 
 - One primary export per file, named the same as the file (the diff check catches the obvious cases only).
 - Comments explain why; templates stay dumb; theme colours come from CSS custom properties.

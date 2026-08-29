@@ -11,9 +11,11 @@
     "typecheck": "tsc --noEmit -p . && pnpm -r --filter \"!@flux/pwa\" exec tsc --noEmit && pnpm --filter @flux/pwa exec vue-tsc --noEmit && pnpm --filter @flux/protocol exec tsc --noEmit false --emitDeclarationOnly --outDir node_modules/.tsc-dts",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "build": "pnpm -r run build"
+    "build": "pnpm -r run build",
+    "e2e": "pnpm run build && playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "1.62.1",
     "@types/node": "26.4.0",
     "@types/ws": "8.18.1",
     "@vitejs/plugin-vue": "6.0.8",

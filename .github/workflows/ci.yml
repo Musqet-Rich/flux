@@ -23,7 +23,13 @@ name: ci
 #                 only for pull requests from forks, which get no push run here.
 #                 GitHub treats a skipped required check as satisfied, and the
 #                 push run reports against the same head SHA, so the rulesets in
-#                 .github/rulesets/main.json still require all five contexts.
+#                 .github/rulesets/main.json still require all six contexts.
+#   e2e           the one Playwright flow (docs/engineering.md § Testing) against
+#                 the built relay, daemon and PWA with the fixture-driven fake
+#                 agent; same trigger rule as check, so it reports on the same
+#                 head SHA and is required by the ruleset. The Chromium build is cached
+#                 by Playwright version; its system libraries are installed on
+#                 every run (apt, seconds).
 #
 # Actions are pinned to a full commit SHA (engineering.md § Security: "dependency
 # updates are reviewed diffs, not blind bumps"); the trailing comment is the tag
@@ -143,6 +149,44 @@ jobs:
           sh .github/scripts/check-secrets.sh "$base" "$head" || status=1
           sh .github/scripts/check-added-lines.sh "$base" "$head" || status=1
           exit $status
+
+  e2e:
+    name: e2e (Playwright flow against the built relay, daemon and PWA)
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    # A hung browser or stack must not hold a runner for the default six hours.
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Enable corepack
+        run: corepack enable
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: corepack pnpm install --frozen-lockfile
+      - name: Playwright version (the browser cache key)
+        id: playwright
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: browsers
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - name: Install Chromium
+        if: steps.browsers.outputs.cache-hit != 'true'
+        run: corepack pnpm exec playwright install chromium
+      - name: Install Chromium's system libraries
+        run: corepack pnpm exec playwright install-deps chromium
+      - run: corepack pnpm run e2e
+      - name: Keep the trace of a failed run
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: e2e-test-results
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
 
   commits:
     name: commits (PR title and every commit are Conventional Commits)

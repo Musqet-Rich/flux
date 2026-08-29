@@ -90,16 +90,17 @@ export const createDaemon = async (config: DaemonConfig): Promise<Daemon> => {
     emit,
     emitEphemeral: (data) => void transport.broadcast({ kind: 'ephemeral', data }),
   });
-  const { daemonName, reposDir } = config;
-  const { get: supervisor, close: closeSupervisor } = supervisors;
-  const handlers = createRpcHandlers({
-    ...services,
-    daemonName,
-    vapidPublicKey: notifier.vapidPublicKey,
-    reposDir,
-    supervisor,
-    closeSupervisor,
-  });
+  const handlers = createRpcHandlers(
+    {
+      ...services,
+      daemonName: config.daemonName,
+      vapidPublicKey: notifier.vapidPublicKey,
+      reposDir: config.reposDir,
+      supervisor: supervisors.get,
+      closeSupervisor: supervisors.close,
+    },
+    emit,
+  );
   const transport = await connectRelay({
     relayUrl: config.relayUrl,
     identity,

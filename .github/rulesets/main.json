@@ -34,7 +34,8 @@
           {
             "context": "diff (dependency changes are ledgered, no secret shapes, code style on added lines)"
           },
-          { "context": "commits (PR title and every commit are Conventional Commits)" }
+          { "context": "commits (PR title and every commit are Conventional Commits)" },
+          { "context": "e2e (Playwright flow against the built relay, daemon and PWA)" }
         ]
       }
     }
