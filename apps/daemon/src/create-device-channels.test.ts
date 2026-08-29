@@ -388,6 +388,8 @@ test('revoking a device cuts every tab; one tab going quiet leaves the other wor
 
 // The relay's guest cap (protocol.md § 2) bounds the channels the box keeps per device.
 const guestCap = 8;
+// Pending channels younger than this are kept past the cap, up to `guestCap` of them.
+const confirmGraceMs = 2_000;
 
 // The relay never tells the host that a guest left, so a closed tab's channel lingers until
 // the device handshakes past the relay's guest cap; then the channel heard from least recently
@@ -397,6 +399,7 @@ test('past the per-device cap the quietest channel is dropped', async () => {
   const { channel: first } = await connectDevice(h);
   const { channel: second } = await connectDevice(h);
   await h.channels.handleFrame(await rpcFrame(first), h.send);
+  h.clock.ms += confirmGraceMs;
   const later = await Promise.all(Array.from({ length: guestCap - 1 }, () => connectDevice(h)));
   await h.channels.broadcast(assistant(1, 'x'), h.send);
   const frames = h.out.slice(-guestCap);
@@ -409,7 +412,9 @@ test('past the per-device cap the quietest channel is dropped', async () => {
 
 // A handshake past the cap has not been confirmed, so it never displaces a channel that has:
 // a co-guest replaying handshakes under the device's public key (or its own tab reconnecting
-// in a loop) costs the device nothing. The replays evict each other, oldest first.
+// in a loop) costs the device nothing. The replays evict each other, oldest first, once the
+// device holds `guestCap` of them; every one inside its grace survives up to that, so the
+// device holds at most twice the cap.
 test('a flood of handshakes past the cap leaves every confirmed channel working', async () => {
   const h = await setup(true);
   const tabs = await Promise.all(Array.from({ length: guestCap }, () => connectDevice(h)));
@@ -417,12 +422,35 @@ test('a flood of handshakes past the cap leaves every confirmed channel working'
   expect(h.seen).toHaveLength(guestCap);
   const flood = await Promise.all(Array.from({ length: 20 }, () => connectDevice(h)));
   await h.channels.broadcast(assistant(1, 'x'), h.send);
-  const frames = h.out.slice(-(guestCap + 1));
+  const frames = h.out.slice(-(guestCap * 2));
   const forTabs = await Promise.all(tabs.map((tab) => opensOn(tab.channel, frames)));
   expect(forTabs).toEqual(tabs.map(() => 1));
-  // The replays handshake concurrently, so which one survives is not fixed; exactly one does.
+  // The replays handshake concurrently, so which survive is not fixed; exactly `guestCap` do.
   const forFlood = await Promise.all(flood.map((tab) => opensOn(tab.channel, frames)));
-  expect(forFlood.reduce((sum, n) => sum + n, 0)).toBe(1);
+  expect(forFlood.reduce((sum, n) => sum + n, 0)).toBe(guestCap);
+  // Past its grace a pending channel goes for the next handshake even below `guestCap` pending.
+  h.clock.ms += confirmGraceMs;
+  const { channel: late } = await connectDevice(h);
+  const before = h.out.length;
+  await h.channels.broadcast(assistant(2, 'y'), h.send);
+  expect(h.out.length - before).toBe(guestCap * 2);
+  expect(await opensOn(late, h.out.slice(before))).toBe(1);
+});
+
+// Tabs restored together handshake before any of them sends its first frame. With the device
+// at the cap in confirmed channels, the second must not evict the first before it confirms.
+test('two tabs handshaking together past the cap both confirm', async () => {
+  const h = await setup(true);
+  const tabs = await Promise.all(Array.from({ length: guestCap }, () => connectDevice(h)));
+  await speak(h, tabs);
+  const pair = await Promise.all(Array.from({ length: 2 }, () => connectDevice(h)));
+  await speak(h, pair);
+  await h.channels.broadcast(assistant(1, 'x'), h.send);
+  const frames = h.out.slice(-guestCap);
+  const forPair = await Promise.all(pair.map((tab) => opensOn(tab.channel, frames)));
+  expect(forPair).toEqual([1, 1]);
+  const forTabs = await Promise.all(tabs.map((tab) => opensOn(tab.channel, frames)));
+  expect(forTabs.reduce((sum, n) => sum + n, 0)).toBe(guestCap - 2);
 });
 
 // A ninth working tab is the device really holding more than the relay admits, so the

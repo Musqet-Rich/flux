@@ -60,6 +60,11 @@ const maxChannelsPerDevice = 8;
 // the box admits or hears a frame for the device. No timer: the check is lazy.
 const confirmWithinMs = 30_000;
 
+// Tabs restored together all handshake before any of them sends its first frame, so a pending
+// channel this young is not evicted for another handshake, up to `maxChannelsPerDevice` pending
+// ones; beyond that the oldest goes regardless. A device therefore holds at most twice the cap.
+const confirmGraceMs = 2_000;
+
 interface Connected {
   peer: Peer;
   channel: Channel;
@@ -135,15 +140,28 @@ const withoutStale = (state: State, fingerprint: string): Connected[] => {
   return live;
 };
 
+// Among the channels still waiting for their first frame (handshake order, so the first is
+// the oldest), the one a new handshake past the cap may evict: null while the oldest is inside
+// its grace and the device holds no more pending channels than the cap.
+const evictable = (state: State, pending: Connected[]): Connected | null => {
+  const oldest = pending[0];
+  if (oldest === undefined) return null;
+  const settling = oldest.since > state.now().getTime() - confirmGraceMs;
+  return settling && pending.length <= maxChannelsPerDevice ? null : oldest;
+};
+
 // A new handshake past the cap evicts the oldest channel still waiting for its first frame,
 // never a confirmed one: the newcomer is itself unconfirmed, and only earns a confirmed
-// channel's place by confirming (`confirm`). Channels are kept in handshake order, so the
-// first unconfirmed one is the oldest.
+// channel's place by confirming (`confirm`). The newcomer is never the victim: it is the
+// youngest, so if it is the oldest pending it is alone and inside its grace.
 const admit = (state: State, entry: Connected): void => {
   const entries = [...withoutStale(state, entry.peer.fingerprint), entry];
   if (entries.length > maxChannelsPerDevice) {
-    const oldest = entries.findIndex((c) => !c.confirmed && c !== entry);
-    if (oldest !== -1) entries.splice(oldest, 1);
+    const victim = evictable(
+      state,
+      entries.filter((c) => !c.confirmed),
+    );
+    if (victim !== null) entries.splice(entries.indexOf(victim), 1);
   }
   state.connected.set(entry.peer.fingerprint, entries);
 };
