@@ -11,7 +11,7 @@ import { startFakeRelay } from '../test/fake-relay.ts';
 import type { FrameRouter } from '../test/frame-router.ts';
 import { frameRouter } from '../test/frame-router.ts';
 import { tempRepo } from '../test/temp-repo.ts';
-import type { Daemon } from './create-daemon.ts';
+import type { Daemon, DaemonConfig } from './create-daemon.ts';
 import { createDaemon } from './create-daemon.ts';
 
 // The whole daemon against a fake relay and the fake agent: pair, hello, create a session,
@@ -29,7 +29,7 @@ afterEach(async () => {
   await relay.close();
 });
 
-const setup = async () => {
+const setup = async (extra: Partial<DaemonConfig> = {}) => {
   process.env['FLUX_FAKE_FIXTURE'] = fixture;
   const { root, repos, repo } = await tempRepo();
   relay = await startFakeRelay();
@@ -42,7 +42,10 @@ const setup = async () => {
     daemonName: 'flux@test',
     pushSubject: 'mailto:ops@example.com',
     claudeCommand: fake,
+    // The dev box may have pi on PATH; a test says when it wants one (any executable will do).
+    piCommand: 'no-such-binary-anywhere',
     claudeDir,
+    ...extra,
   });
   await daemon.start();
   await relay.host();
@@ -154,6 +157,7 @@ test('pair, create a session, talk to the agent, sync the log', async () => {
     daemon: 'flux@test',
     sessions: [],
     vapidPublicKey: expect.stringMatching(/^B[\w-]{86}$/u),
+    agents: ['claude'],
   });
   expect(await call(d, 'repos.list', {})).toEqual({
     repos: [{ path: repo, name: 'app', branches: ['main'] }],
@@ -259,7 +263,7 @@ test('flux devices rm over the control socket cuts a connected device off', asyn
 });
 
 test('settings: runtime values persist, env is read-only, agent config files are edited', async () => {
-  const { repos, claudeDir } = await setup();
+  const { repos, claudeDir } = await setup({ piCommand: fake });
   const d = await device();
   await pair(d);
   const initial = (await call(d, 'settings.get', {})) as {
@@ -434,4 +438,19 @@ test('a comment added by one device is an event on both, before the result', asy
     event,
     { kind: 'rpc.result', id: 'c1', ok: true, result: { commentId: expect.any(String) } },
   ]);
+});
+
+test('refuses to create a session for an agent the box does not have', async () => {
+  const { repo } = await setup();
+  const d = await device();
+  await pair(d);
+  await expect(
+    call(d, 'sessions.create', { repo, branch: 'flux/pi', agent: 'pi' }),
+  ).rejects.toThrow('agent_unavailable');
+  await expect(call(d, 'settings.set', { flux: { defaultAgent: 'pi' } })).rejects.toThrow(
+    'agent_unavailable',
+  );
+  expect(await call(d, 'settings.set', { flux: { defaultAgent: 'claude' } })).toMatchObject({
+    flux: { defaultAgent: 'claude' },
+  });
 });

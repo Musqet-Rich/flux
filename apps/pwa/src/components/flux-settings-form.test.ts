@@ -10,6 +10,7 @@ import FluxSettingsForm from './FluxSettingsForm.vue';
 test('shows the settings, enables Save once edited, sends the form and shows env read-only', async () => {
   let current: Settings = settingsFixture();
   const box = await pairedStore([], {
+    hello: () => ({ protocol: 1, daemon: 'box', sessions: [], agents: ['claude', 'pi'] }),
     'settings.get': () => current,
     'settings.set': (p) => {
       current = { ...current, flux: { ...current.flux, ...p.flux } };

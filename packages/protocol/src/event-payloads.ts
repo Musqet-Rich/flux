@@ -68,7 +68,7 @@ export interface EventPayloads {
   };
   rate_limit: { windows: RateWindow[] };
   ask: { askId: string; question: string; options?: string[]; timeoutAt: string };
-  'ask.answered': { askId: string; answer: string; by: 'device' | 'timeout' };
+  'ask.answered': { askId: string; answer: string; by: 'device' | 'timeout' | 'aborted' };
   notify: { level: 'info' | 'done' | 'blocked'; summary: string };
   'files.changed': { files: ChangedFile[] };
   'comment.added': { commentId: string; ref: CodeRef; text: string };
@@ -151,7 +151,7 @@ export const eventPayloads: PayloadGuards = {
     isRecord(v) &&
     isString(v['askId']) &&
     isString(v['answer']) &&
-    isOneOf(v['by'], ['device', 'timeout']),
+    isOneOf(v['by'], ['device', 'timeout', 'aborted']),
   notify: (v): v is EventPayloads['notify'] =>
     isRecord(v) && isOneOf(v['level'], ['info', 'done', 'blocked']) && isString(v['summary']),
   'files.changed': (v): v is EventPayloads['files.changed'] =>

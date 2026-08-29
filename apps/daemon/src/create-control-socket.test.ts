@@ -11,14 +11,17 @@ import { createControlSocket } from './create-control-socket.ts';
 let path: string;
 let socket: ControlSocket;
 let seen: ControlRequest[];
+let signals: AbortSignal[];
 
 beforeEach(async () => {
   path = join(await mkdtemp(join(tmpdir(), 'flux-ctl-')), 'control.sock');
   seen = [];
+  signals = [];
   socket = createControlSocket({
     path,
-    handle: (request) => {
+    handle: (request, signal) => {
       seen.push(request);
+      signals.push(signal);
       if (request.type === 'ask') return Promise.resolve({ answer: `re: ${request.question}` });
       if (request.type === 'pair') return Promise.reject(new Error('no daemon'));
       return Promise.resolve({});
@@ -91,4 +94,37 @@ test('a stale socket file is replaced on listen', async () => {
   await again.close();
   socket = createControlSocket({ path, handle: () => Promise.resolve({}) });
   await socket.listen();
+});
+
+const untilSignal = (): Promise<AbortSignal> =>
+  new Promise((resolve) => {
+    const check = (): void => {
+      const first = signals[0];
+      if (first === undefined) setImmediate(check);
+      else resolve(first);
+    };
+    check();
+  });
+
+test('a client that hangs up mid-request aborts the handler signal', async () => {
+  const client = connect(path);
+  // The reply lands on a destroyed socket; that is the point, not a failure.
+  client.on('error', () => {});
+  await new Promise<void>((resolve) => {
+    client.on('connect', resolve);
+  });
+  client.write(`${JSON.stringify({ type: 'ask', session: 's', question: 'still there?' })}\n`);
+  const signal = await untilSignal();
+  const aborted = new Promise<void>((resolve) => {
+    signal.addEventListener(
+      'abort',
+      () => {
+        resolve();
+      },
+      { once: true },
+    );
+  });
+  client.destroy();
+  await aborted;
+  expect(signal.aborted).toBe(true);
 });

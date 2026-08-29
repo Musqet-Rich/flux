@@ -1,6 +1,7 @@
 import type { RateWindow } from '@flux/protocol';
 
 import type { EventInput } from '../create-event-log.ts';
+import type { Mapped } from '../create-session-supervisor.ts';
 import type { ClaudeLine } from './parse-stream-line.ts';
 import { toolSummary } from './tool-summary.ts';
 
@@ -13,21 +14,16 @@ export interface Pending {
   tools: Map<string, string>;
 }
 
-export interface Mapped {
-  events: EventInput[];
-  delta?: string;
-  agentSessionId?: string;
-  running?: boolean;
-  turnEnded?: boolean;
-  filesChanged?: boolean;
-}
-
 const maxOutputBytes = 64 * 1024;
 
+// The cap is 64 KiB of UTF-8 (protocol.md § 5), so it is measured in bytes, not characters.
 const capOutput = (content: unknown): unknown => {
   const text = typeof content === 'string' ? content : JSON.stringify(content);
-  if (text === undefined || text.length <= maxOutputBytes) return content;
-  return `${text.slice(0, maxOutputBytes)}\n[truncated ${text.length - maxOutputBytes} chars]`;
+  if (text === undefined) return content;
+  const bytes = Buffer.byteLength(text);
+  if (bytes <= maxOutputBytes) return content;
+  const head = Buffer.from(text).subarray(0, maxOutputBytes).toString();
+  return `${head}\n[truncated ${bytes - maxOutputBytes} bytes]`;
 };
 
 const rateWindows = (windows: Record<string, { utilization: number; resetsAt: number }>) =>

@@ -2,7 +2,7 @@
 
 Give coding agents their own computer. Steer and review them from your phone.
 
-Flux runs Claude Code (and later pi.dev) on a box you control with permissions bypassed, and gives you a small, fast remote GUI: agent chat, diffs with line comments, one tab per worktree, notifications when an agent needs you. Connection is end-to-end encrypted through a dumb relay you host; no accounts, no third parties.
+Flux runs Claude Code and pi.dev on a box you control with permissions bypassed, and gives you a small, fast remote GUI: agent chat, diffs with line comments, one tab per worktree, notifications when an agent needs you. Connection is end-to-end encrypted through a dumb relay you host; no accounts, no third parties.
 
 Three parts: the **relay** on a VPS behind Caddy (forwards encrypted frames, serves the web app), the **daemon** on the box (runs the agents), and the **PWA** on your phone or laptop. Design and rules: [`docs/prd.md`](docs/prd.md), [`docs/architecture.md`](docs/architecture.md), [`docs/protocol.md`](docs/protocol.md), [`docs/engineering.md`](docs/engineering.md), [`docs/adr/`](docs/adr/).
 
@@ -26,7 +26,7 @@ corepack pnpm install --frozen-lockfile
 corepack pnpm run build
 ```
 
-That produces `apps/relay/dist/index.mjs`, `apps/daemon/dist/index.mjs` (+ `flux-mcp.mjs`, the MCP server agents spawn) and `apps/pwa/dist/`.
+That produces `apps/relay/dist/index.mjs`, `apps/daemon/dist/index.mjs` (+ `flux-mcp.mjs`, the MCP server Claude spawns, and `flux-pi-extension.mjs`, the pi extension with the same tools) and `apps/pwa/dist/`.
 
 ### Relay (VPS)
 
@@ -47,11 +47,11 @@ The relay listens on `127.0.0.1:8787`; Caddy terminates TLS and proxies the WebS
 
 ### Box (daemon)
 
-The daemon runs as a `flux` user whose home holds the repositories and the Claude Code login. Checkout at `/home/flux/flux`. The box needs `git`, `claude` and `gh` on the daemon's PATH: `gh` (logged in as `flux`) is what "Open PR" in the PWA runs; without it commit and push still work and Open PR reports that `gh` is missing.
+The daemon runs as a `flux` user whose home holds the repositories and the agent logins (Claude Code, and pi authenticated for a provider: `pi auth check --provider anthropic` should say `ready`). Install either agent or both; the daemon offers what it finds on PATH. Checkout at `/home/flux/flux`. The box needs `git`, `claude` and/or `pi`, and `gh` on the daemon's PATH: `gh` (logged in as `flux`) is what "Open PR" in the PWA runs; without it commit and push still work and Open PR reports that `gh` is missing.
 
 ```sh
 sudo useradd --create-home --shell /bin/bash flux
-sudo -u flux -i                     # as flux: install claude and gh, log in to both, put repos in ~/repos
+sudo -u flux -i                     # as flux: install claude and/or pi, and gh; log in to each; put repos in ~/repos
 git clone https://github.com/Musqet-Rich/flux.git && cd flux
 corepack pnpm install --frozen-lockfile && corepack pnpm run build
 exit

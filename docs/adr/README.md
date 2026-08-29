@@ -21,3 +21,4 @@ Format: Context, Decision, Consequences. Keep each under a page.
 | 0013 | The daemon sends Web Push itself; the relay holds no subscriptions     | accepted |
 | 0014 | Git actions from the PWA spawn `git` and `gh`, emit no events          | accepted |
 | 0015 | Settings on the box, agent config as raw files, revocation as a notice | accepted |
+| 0016 | pi adapter: RPC mode, shared session id, Flux tools as a pi extension  | accepted |

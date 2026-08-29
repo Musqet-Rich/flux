@@ -76,7 +76,7 @@ Formatting is Oxfmt's job; nobody discusses it. Beyond formatting:
 - Files: `kebab-case.ts`. One primary export per file, named the same as the file. Vue components `PascalCase.vue`.
 - Functions over classes. Classes only for things with real lifecycle (a connection, a session supervisor).
 - Arrow functions everywhere: `const parse = (input: string): Result => { … }`. No `function` declarations or expressions, except where a real `this` or generator is required (rare; comment why). Oxlint `func-style` set to `expression` and `prefer-arrow-callback` on.
-- No default exports except Vue SFCs and config files.
+- No default exports except Vue SFCs, config files and `apps/daemon/src/pi/flux-pi-extension.ts` (pi's extension contract, ADR 0016; carries a `oxlint-disable-next-line` saying so).
 - Modules are ESM. No CommonJS anywhere.
 - Small files. Aim under 300 lines; over 500 is refused (oxlint `max-lines` and `check-added-lines.sh`).
 - Comments explain _why_, never _what_. No commented-out code. No TODO without an issue reference.

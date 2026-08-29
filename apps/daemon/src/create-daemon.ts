@@ -1,10 +1,10 @@
-import type { FluxEvent } from '@flux/protocol';
+import type { AgentKind, FluxEvent } from '@flux/protocol';
 
+import { createAgentCommands } from './create-agent-commands.ts';
 import type { AttachedControl } from './attach-control.ts';
 import { attachControl } from './attach-control.ts';
 import { connectRelay } from './connect-relay.ts';
 import type { HostTransport, TransportStatus } from './create-host-transport.ts';
-import { createMcpConfig } from './create-mcp-config.ts';
 import type { NotifierOptions } from './create-notifier.ts';
 import { createNotifier } from './create-notifier.ts';
 import type { PairingGate } from './create-pairing-gate.ts';
@@ -26,6 +26,10 @@ export interface DaemonConfig {
   // VAPID subject (RFC 8292), a mailto: or https: URL the push services may contact.
   pushSubject: string;
   claudeCommand?: string;
+  piCommand?: string;
+  // pi's `--provider` / `--model`; unset, pi uses its own settings.json defaults.
+  piProvider?: string;
+  piModel?: string;
   // The flux user's `~/.claude`; the PWA edits CLAUDE.md and settings.json there.
   claudeDir: string;
 }
@@ -39,6 +43,7 @@ export interface Daemon {
   removeDevice: (deviceId: string) => Promise<void>;
   status: () => TransportStatus;
   controlSocket: string;
+  agents: AgentKind[];
 }
 
 interface Parts {
@@ -47,6 +52,7 @@ interface Parts {
   transport: HostTransport;
   control: AttachedControl;
   gate: PairingGate;
+  agents: AgentKind[];
 }
 
 // Store first so a device that is already gone from trust cannot re-handshake while its channel
@@ -59,7 +65,7 @@ const revoker =
     await transport().revoke(deviceId);
   };
 
-const assemble = ({ services, supervisors, transport, control, gate }: Parts): Daemon => ({
+const assemble = ({ services, supervisors, transport, control, gate, agents }: Parts): Daemon => ({
   start: () => control.listen().then(transport.start),
   stop: async () => {
     transport.stop();
@@ -72,6 +78,7 @@ const assemble = ({ services, supervisors, transport, control, gate }: Parts): D
   removeDevice: revoker(services, () => transport),
   status: transport.status,
   controlSocket: control.path,
+  agents,
 });
 
 const servicesOptions = (config: DaemonConfig): ServicesOptions => ({
@@ -97,6 +104,14 @@ const env = (config: DaemonConfig) => ({
   claudeCommand: config.claudeCommand ?? 'claude',
 });
 
+// Events go to every device and to the notifier; transport exists by the time anything emits.
+const emitter =
+  (notifier: { notify: (event: FluxEvent) => Promise<void> }, transport: () => HostTransport) =>
+  (event: FluxEvent): void => {
+    void transport().broadcast({ kind: 'event', event });
+    void notifier.notify(event);
+  };
+
 export const createDaemon = async (config: DaemonConfig): Promise<Daemon> => {
   const { dataDir } = config;
   const services = openServices(servicesOptions(config));
@@ -106,10 +121,7 @@ export const createDaemon = async (config: DaemonConfig): Promise<Daemon> => {
   const { push } = services;
   const notifier = await createNotifier({ push, subject, enabled: notifyEnabled(services) });
   // Transport and supervisors are created below; nothing calls these before start.
-  const emit = (event: FluxEvent): void => {
-    void transport.broadcast({ kind: 'event', event });
-    void notifier.notify(event);
-  };
+  const emit = emitter(notifier, () => transport);
   const control = attachControl({
     ...services,
     dataDir,
@@ -118,10 +130,10 @@ export const createDaemon = async (config: DaemonConfig): Promise<Daemon> => {
     pairingUrl: gate.url,
     revokeDevice: revoker(services, () => transport),
   });
+  const { agents, pool, forget } = createAgentCommands({ ...config, controlSocket: control.path });
   const supervisors = createSupervisorPool({
     ...services,
-    mcpConfig: createMcpConfig({ dataDir, controlSocket: control.path }),
-    ...(config.claudeCommand === undefined ? {} : { claudeCommand: config.claudeCommand }),
+    ...pool,
     emit,
     emitEphemeral: (data) => void transport.broadcast({ kind: 'ephemeral', data }),
   });
@@ -131,8 +143,10 @@ export const createDaemon = async (config: DaemonConfig): Promise<Daemon> => {
       daemonName: config.daemonName,
       vapidPublicKey: notifier.vapidPublicKey,
       env: env(config),
+      agents,
       supervisor: supervisors.get,
       closeSupervisor: supervisors.close,
+      forgetAgentSession: forget,
       revokeDevice: revoker(services, () => transport),
     },
     emit,
@@ -144,5 +158,5 @@ export const createDaemon = async (config: DaemonConfig): Promise<Daemon> => {
     pairingOpen: gate.open,
     handlers,
   });
-  return assemble({ services, supervisors, transport, control, gate });
+  return assemble({ services, supervisors, transport, control, gate, agents });
 };

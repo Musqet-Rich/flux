@@ -24,7 +24,8 @@ export interface ControlSocket {
 
 export interface ControlSocketOptions {
   path: string;
-  handle: (request: ControlRequest) => Promise<unknown>;
+  // `signal` aborts when the client goes away before its reply (an interrupted agent).
+  handle: (request: ControlRequest, signal: AbortSignal) => Promise<unknown>;
 }
 
 const { isString, isRecord, isArrayOf, isInteger, isOneOf, isOptional } = guards;
@@ -68,13 +69,21 @@ const serve = (socket: Socket, handle: ControlSocketOptions['handle']): void => 
     socket.write(`${JSON.stringify(message)}\n`);
   };
   socket.on('error', () => {});
-  createInterface({ input: socket }).on('line', (line) => {
+  const gone = new AbortController();
+  socket.on('close', () => {
+    gone.abort();
+  });
+  // readline re-emits the socket's errors on the Interface; a client that hangs up mid-line
+  // (an interrupted agent) must not take the daemon down with an unhandled ECONNRESET.
+  const lines = createInterface({ input: socket });
+  lines.on('error', () => {});
+  lines.on('line', (line) => {
     const request = parse(line);
     if (request === null) {
       reply({ ok: false, error: 'bad request' });
       return;
     }
-    handle(request)
+    handle(request, gone.signal)
       .then((result) => {
         reply({ ok: true, result });
         return null;

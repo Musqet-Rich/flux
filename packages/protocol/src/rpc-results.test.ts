@@ -37,7 +37,16 @@ const settings = {
 
 // One accepted and one rejected value per method; the table is the spec of protocol.md § 7.
 const cases: { [M in RpcMethod]: [ok: unknown, bad: unknown] } = {
-  hello: [{ protocol: 1, daemon: 'd', sessions: [summary], vapidPublicKey: 'k' }, { protocol: 1 }],
+  hello: [
+    {
+      protocol: 1,
+      daemon: 'd',
+      sessions: [summary],
+      vapidPublicKey: 'k',
+      agents: ['claude', 'pi'],
+    },
+    { protocol: 1 },
+  ],
   'events.sync': [
     { events: [event], complete: true },
     { events: [{}], complete: true },
@@ -103,6 +112,8 @@ test('optional fields may be present or absent, never wrong', () => {
   expect(rpcResults.hello({ protocol: 1, daemon: 'd', sessions: [], vapidPublicKey: 1 })).toBe(
     false,
   );
+  expect(rpcResults.hello({ protocol: 1, daemon: 'd', sessions: [], agents: ['pi'] })).toBe(true);
+  expect(rpcResults.hello({ protocol: 1, daemon: 'd', sessions: [], agents: ['gpt'] })).toBe(false);
   expect(rpcResults['git.status']({ files: [{ path: 'b', status: 'R', from: 'a' }] })).toBe(true);
   expect(rpcResults['git.status']({ files: [{ path: 'b', status: 'R', from: 1 }] })).toBe(false);
   expect(rpcResults['devices.list']([{ ...device, name: 1 }])).toBe(false);

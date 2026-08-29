@@ -115,6 +115,7 @@ const afterConnect = async (i: StoreInternals): Promise<void> => {
   const hello = await call(i, 'hello', { protocol: protocolVersion });
   i.state.daemon = hello.daemon;
   i.state.sessions = hello.sessions;
+  i.state.agents = hello.agents ?? ['claude'];
   i.state.error = null;
   i.vapidPublicKey = hello.vapidPublicKey ?? null;
   if (i.state.push === 'unavailable' && i.vapidPublicKey !== null) i.state.push = 'off';

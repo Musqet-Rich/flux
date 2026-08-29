@@ -1,6 +1,7 @@
 import type { Ephemeral, FluxEvent } from '@flux/protocol';
 import { fileURLToPath } from 'node:url';
 
+import { claudeAdapter } from '../src/claude/claude-adapter.ts';
 import { spawnClaude } from '../src/claude/spawn-claude.ts';
 import { createEventLog } from '../src/create-event-log.ts';
 import { createGitService } from '../src/create-git-service.ts';
@@ -51,6 +52,7 @@ export const sessionHarness = async (extraEnv: NodeJS.ProcessEnv = {}): Promise<
     log,
     sessions,
     git: createGitService(),
+    adapter: claudeAdapter(worktree),
     spawn: (request) => {
       spawns.push(request);
       return spawnClaude({

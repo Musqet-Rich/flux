@@ -2,7 +2,8 @@ import { readFileSync } from 'node:fs';
 import { expect, test } from 'vitest';
 
 import type { EventInput } from '../create-event-log.ts';
-import type { Mapped, Pending } from './map-claude-line.ts';
+import type { Mapped } from '../create-session-supervisor.ts';
+import type { Pending } from './map-claude-line.ts';
 import { mapClaudeLine } from './map-claude-line.ts';
 import type { ClaudeLine } from './parse-stream-line.ts';
 import { parseStreamLine } from './parse-stream-line.ts';

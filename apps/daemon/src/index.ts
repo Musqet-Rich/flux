@@ -17,6 +17,9 @@ import { renderQr } from './qr/render-qr.ts';
 //   FLUX_REPOS_DIR   directory whose subdirectories are the repositories, default ~/repos
 //   FLUX_CLAUDE      the claude binary, default `claude` on PATH
 //   FLUX_CLAUDE_DIR  the agent's config directory (CLAUDE.md, settings.json), default ~/.claude
+//   FLUX_PI          the pi binary, default `pi` on PATH
+//   FLUX_PI_PROVIDER pi's --provider (e.g. anthropic); unset, pi's own settings decide
+//   FLUX_PI_MODEL    pi's --model; unset, pi's own settings decide
 //   FLUX_PUSH_SUBJECT VAPID contact (mailto: or https: URL) shown to push services
 //   FLUX_QR_INVERT   set to 1 on a light terminal; the pairing QR is drawn for a dark one
 // `flux pair` asks a running daemon for a fresh pairing URL over its control socket. `flux
@@ -133,11 +136,16 @@ const daemon = await createDaemon({
   pushSubject: env['FLUX_PUSH_SUBJECT'] ?? `https://${hostname()}`,
   ...(env['FLUX_CLAUDE'] === undefined ? {} : { claudeCommand: env['FLUX_CLAUDE'] }),
   claudeDir: env['FLUX_CLAUDE_DIR'] ?? join(home, '.claude'),
+  ...(env['FLUX_PI'] === undefined ? {} : { piCommand: env['FLUX_PI'] }),
+  ...(env['FLUX_PI_PROVIDER'] === undefined ? {} : { piProvider: env['FLUX_PI_PROVIDER'] }),
+  ...(env['FLUX_PI_MODEL'] === undefined ? {} : { piModel: env['FLUX_PI_MODEL'] }),
 });
 
 if (command === 'daemon') {
   await daemon.start();
   console.log(`flux daemon: relay ${relayUrl}`);
+  const agents = daemon.agents.length === 0 ? 'none found on PATH' : daemon.agents.join(', ');
+  console.log(`flux daemon: agents ${agents}`);
   // The pairing URL is a secret and minting one opens the pairing window, so it is shown only
   // to a person at a terminal; under systemd the operator runs `flux pair` when they mean it.
   if (process.stdout.isTTY) printPairing(daemon.pairingUrl());

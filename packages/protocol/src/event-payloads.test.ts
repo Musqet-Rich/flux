@@ -76,6 +76,7 @@ const cases: [EventType, unknown, boolean][] = [
   ['ask', { askId: 'a', question: 'q' }, false],
   ['ask.answered', { askId: 'a', answer: 'y', by: 'device' }, true],
   ['ask.answered', { askId: 'a', answer: 'y', by: 'timeout' }, true],
+  ['ask.answered', { askId: 'a', answer: '', by: 'aborted' }, true],
   ['ask.answered', { askId: 'a', answer: 'y', by: 'box' }, false],
   ['notify', { level: 'done', summary: 's' }, true],
   ['notify', { level: 'urgent', summary: 's' }, false],

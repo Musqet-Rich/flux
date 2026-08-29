@@ -25,11 +25,11 @@ const defaultAskTimeoutMs = 30 * 60 * 1000;
 
 export const createControlHandler = (
   options: ControlHandlerOptions,
-): ((request: ControlRequest) => Promise<unknown>) => {
+): ((request: ControlRequest, signal?: AbortSignal) => Promise<unknown>) => {
   const append = (session: string, input: EventInput): void => {
     options.emit(options.log.append(session, input));
   };
-  return async (request) => {
+  return async (request, signal) => {
     if (request.type === 'pair') return { url: options.pairingUrl() };
     if (request.type === 'devices.rm') {
       await options.revokeDevice(request.deviceId);
@@ -57,7 +57,7 @@ export const createControlHandler = (
       },
     });
     supervisor.waiting(true);
-    const answer = await options.asks.ask(askId, timeoutMs);
+    const answer = await options.asks.ask(askId, timeoutMs, signal);
     supervisor.waiting(false);
     append(record.session, {
       type: 'ask.answered',

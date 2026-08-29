@@ -1,4 +1,4 @@
-import type { SessionState, TokenUsage } from './event-payloads.ts';
+import type { AgentKind, SessionState, TokenUsage } from './event-payloads.ts';
 import { fluxEvent } from './flux-event.ts';
 import { guards } from './guards.ts';
 import type {
@@ -23,6 +23,9 @@ const { isString, isBoolean, isNumber, isInteger, isRecord, isArrayOf, isOneOf, 
   guards;
 
 const sessionStates: readonly SessionState[] = ['idle', 'running', 'waiting_user', 'ended'];
+const agentKinds: readonly AgentKind[] = ['claude', 'pi'];
+
+const isAgentKind = (v: unknown): v is AgentKind => isOneOf(v, agentKinds);
 
 const isEmpty = (v: unknown): v is Record<string, never> => isRecord(v);
 
@@ -32,7 +35,7 @@ const isSessionSummary = (v: unknown): v is SessionSummary =>
   isString(v['title']) &&
   isString(v['repo']) &&
   isString(v['branch']) &&
-  isOneOf(v['agent'], ['claude', 'pi']) &&
+  isAgentKind(v['agent']) &&
   isOneOf(v['state'], sessionStates) &&
   isInteger(v['lastSeq'], 0) &&
   isString(v['updatedAt']);
@@ -84,7 +87,8 @@ export const rpcResults: ResultGuards = {
     isInteger(v['protocol'], 1) &&
     isString(v['daemon']) &&
     isArrayOf(v['sessions'], isSessionSummary) &&
-    isOptional(v['vapidPublicKey'], isString),
+    isOptional(v['vapidPublicKey'], isString) &&
+    isOptional(v['agents'], (a): a is AgentKind[] => isArrayOf(a, isAgentKind)),
   'events.sync': (v): v is RpcMethods['events.sync']['result'] =>
     isRecord(v) && isArrayOf(v['events'], fluxEvent.is) && isBoolean(v['complete']),
   'sessions.list': (v): v is SessionSummary[] => isArrayOf(v, isSessionSummary),

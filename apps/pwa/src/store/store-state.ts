@@ -1,4 +1,11 @@
-import type { Device, FluxEvent, RateWindow, SessionSummary, Settings } from '@flux/protocol';
+import type {
+  AgentKind,
+  Device,
+  FluxEvent,
+  RateWindow,
+  SessionSummary,
+  Settings,
+} from '@flux/protocol';
 import { reactive } from 'vue';
 
 import type { Connection, ConnectionStatus } from '../client/create-connection.ts';
@@ -36,6 +43,8 @@ export interface StoreState {
   error: string | null;
   push: PushState;
   sessions: SessionSummary[];
+  // Agents the box can run, from `hello`; a daemon that predates the field has claude only.
+  agents: AgentKind[];
   rateWindows: RateWindow[];
   logs: Record<string, LogView>;
   drafts: Record<string, Draft>;
@@ -76,6 +85,7 @@ export const storeState = (): StoreState =>
     error: null,
     push: 'unavailable',
     sessions: [],
+    agents: ['claude'],
     rateWindows: [],
     logs: {},
     drafts: {},

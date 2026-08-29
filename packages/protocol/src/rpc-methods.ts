@@ -70,6 +70,8 @@ export interface RpcMethods {
       daemon: string;
       sessions: SessionSummary[];
       vapidPublicKey?: string;
+      // Agents whose binary the box found at start; absent from older daemons (claude only).
+      agents?: AgentKind[];
     };
   };
   'events.sync': {

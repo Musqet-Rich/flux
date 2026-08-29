@@ -10,7 +10,7 @@ import { build } from 'tsdown';
 import { afterAll, beforeAll, expect, test } from 'vitest';
 
 // Smoke test of the production build: tsdown.config.ts is built into a temp dir (never the real
-// dist), then the two files are run under Node exactly as `flux` and `flux-mcp` are after
+// dist), then the files are run under Node exactly as `flux` and `flux-mcp` are after
 // install. Nothing here needs a relay or an agent; the daemon commands exercised open the data
 // dir (SQLite, box keypair, VAPID key) and stop. A fake control socket stands in for the daemon
 // to show that a misbehaving daemon is reported, not crashed on.
@@ -119,7 +119,7 @@ afterAll(async () => {
   await rm(dataDir, { recursive: true, force: true });
 });
 
-test('the build is two executable files and flux resolves flux-mcp beside itself', async () => {
+test('the build is flux, flux-mcp and the pi extension, resolved beside each other', async () => {
   await access(join(outDir, 'index.mjs'), constants.X_OK);
   await access(join(outDir, 'flux-mcp.mjs'), constants.X_OK);
   const flux = await readFile(join(outDir, 'index.mjs'), 'utf8');
@@ -127,6 +127,22 @@ test('the build is two executable files and flux resolves flux-mcp beside itself
   expect(flux.startsWith('#!/usr/bin/env node\n')).toBe(true);
   expect(mcp.startsWith('#!/usr/bin/env node\n')).toBe(true);
   expect(flux).toContain('./flux-mcp.mjs');
+  expect(flux).toContain('./flux-pi-extension.mjs');
+  // The extension is loaded by pi (jiti) from wherever dist lives: no workspace or relative
+  // imports may survive bundling, and its default export must register the two Flux tools.
+  const extension = await readFile(join(outDir, 'flux-pi-extension.mjs'), 'utf8');
+  expect(extension).not.toContain('@flux/');
+  expect(extension).not.toMatch(/from\s+["']\.{1,2}\//u);
+  const loaded = (await import(join(outDir, 'flux-pi-extension.mjs'))) as {
+    default: (pi: { registerTool: (t: { name: string }) => void }) => void;
+  };
+  const names: string[] = [];
+  loaded.default({
+    registerTool: (tool) => {
+      names.push(tool.name);
+    },
+  });
+  expect(names).toEqual(['flux_ask', 'flux_notify']);
 });
 
 test('flux daemon refuses to start without FLUX_RELAY_URL', async () => {

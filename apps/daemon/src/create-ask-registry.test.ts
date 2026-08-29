@@ -31,3 +31,13 @@ test('close settles everything still pending', async () => {
     { answer: '', by: 'timeout' },
   ]);
 });
+
+test('an aborted signal settles the ask as aborted, and a late answer is refused', async () => {
+  const asks = createAskRegistry();
+  const controller = new AbortController();
+  const waiting = asks.ask('a3', 60_000, controller.signal);
+  controller.abort();
+  expect(await waiting).toEqual({ answer: '', by: 'aborted' });
+  expect(asks.pending()).toEqual([]);
+  expect(asks.answer('a3', 'late')).toBe(false);
+});
