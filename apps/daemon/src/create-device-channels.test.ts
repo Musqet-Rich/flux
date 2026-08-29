@@ -294,8 +294,9 @@ test('revoking a device cuts every tab; one tab going quiet leaves the other wor
   expect(await openWire(b, last(h.out))).toMatchObject({ kind: 'rpc.result', id: 'r2' });
   await h.channels.revoke('d1', h.send);
   expect(h.channels.peers()).toEqual([]);
-  expect(await openWire(a, nth(h.out, -2))).toEqual(revoked);
-  expect(await openWire(b, last(h.out))).toEqual(revoked);
+  // The notices are sealed in parallel, so each tab finds its own among the last two.
+  expect(await opensOn(a, h.out.slice(-2))).toBe(1);
+  expect(await opensOn(b, h.out.slice(-2))).toBe(1);
   const before = h.out.length;
   await h.channels.handleFrame(await rpcFrame(a), h.send);
   await h.channels.handleFrame(await rpcFrame(b), h.send);
