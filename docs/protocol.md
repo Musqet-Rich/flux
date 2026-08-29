@@ -265,11 +265,14 @@ type Ephemeral =
   | { type: 'typing'; session: string; deviceId: string } // optional, P2
   | { type: 'agent.status'; session: string; status: 'thinking' | 'tool' | 'idle' }
   | { type: 'agent.thinking'; session: string; active: boolean; estimatedTokens?: number } // a thinking block is open; the count is the agent's running estimate
+  | { type: 'agent.context'; session: string; tokens: number; model: string; window?: number } // context in use after a model call: the prompt size and, when the box knows it, the model's window
   | { type: 'vcs.changed'; session: string; kind: string } // the agent changed git state (kind: 'push', …); the device refetches its changes data
   | { type: 'device.revoked'; deviceId: string }; // box → the device being revoked, then the box forgets its channel
 ```
 
 `agent.thinking` is sent with `active: true` when a thinking block starts, again with `estimatedTokens` as the agent reports progress (the box sends at most one report per 500 ms or per 100-token change), and with `active: false` when the block ends. The device shows the indicator while active and drops it on `active: false`, on the first streamed text, and when the session leaves `running`, since a turn that ends mid-thought never sends the stop.
+
+`agent.context` is sent once per model call: `tokens` is the whole prompt size of that call, which is the context in use, and `model` is the model id. For Claude Code it comes from `message_start` (`input + cache_creation + cache_read`) as the response begins; for pi from the assistant `message_end` (`input + cacheRead + cacheWrite`) as it ends, since pi's per-message usage is that one call's. `window` is the model's context window when the box can name it (a hand-maintained table keyed by model-id prefix, overridable by `FLUX_CONTEXT_WINDOW`), and is omitted for an unknown model, in which case the device shows the raw token count with no percentage. `turn.ended.usage` is a per-turn sum and is not this.
 
 `device.revoked` is the one ephemeral without a session. The box sends it on the channel of a device that has just been removed (`devices.remove`, or `flux devices rm` on the box) and then drops that channel: later frames from it are ignored, and a fresh handshake is treated as a stranger's (§ 3). A device that removed itself gets its `rpc.result` first, then the notice. On receipt the device forgets its keys and returns to pairing.
 

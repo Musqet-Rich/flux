@@ -165,3 +165,86 @@ pre {
 .markdown a {
   color: var(--accent);
 }
+
+/* The one spinner (the operator chose it), shown before "Thinking…" in the streaming bubble
+   (SessionView). Two orbiting dots (a box-shadow around a rotated ring); `--size` is 1/48 em so
+   the ~48-unit ring is ~1em tall and the em-based shadow scales with it. Colours are the app's
+   foreground and accent tokens, no new colours. Global because it is a shared visual, not a
+   component's own style. */
+.loader {
+  --color-1: var(--fg);
+  --color-2: var(--accent);
+  --size: calc(1em / 48);
+  position: relative;
+  display: inline-block;
+  vertical-align: middle;
+  transform: rotateZ(45deg);
+  perspective: calc(1000 * var(--size));
+  border-radius: 50%;
+  width: calc(48 * var(--size));
+  height: calc(48 * var(--size));
+  color: var(--color-1);
+}
+
+.loader::before,
+.loader::after {
+  content: '';
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: inherit;
+  height: inherit;
+  border-radius: 50%;
+  transform: rotateX(70deg);
+  animation: 1s spin linear infinite;
+}
+
+.loader::after {
+  color: var(--color-2);
+  transform: rotateY(70deg);
+  animation-delay: 0.4s;
+}
+
+@keyframes spin {
+  0%,
+  100% {
+    box-shadow: 0.2em 0 0 0 currentcolor;
+  }
+  12% {
+    box-shadow: 0.2em 0.2em 0 0 currentcolor;
+  }
+  25% {
+    box-shadow: 0 0.2em 0 0 currentcolor;
+  }
+  37% {
+    box-shadow: -0.2em 0.2em 0 0 currentcolor;
+  }
+  50% {
+    box-shadow: -0.2em 0 0 0 currentcolor;
+  }
+  62% {
+    box-shadow: -0.2em -0.2em 0 0 currentcolor;
+  }
+  75% {
+    box-shadow: 0 -0.2em 0 0 currentcolor;
+  }
+  87% {
+    box-shadow: 0.2em -0.2em 0 0 currentcolor;
+  }
+}
+
+/* No motion for those who ask for none: a single static dot in place of the ring. */
+@media (prefers-reduced-motion: reduce) {
+  .loader {
+    width: 0.4em;
+    height: 0.4em;
+    transform: none;
+    background: currentcolor;
+  }
+
+  .loader::before,
+  .loader::after {
+    display: none;
+  }
+}

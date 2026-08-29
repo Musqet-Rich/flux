@@ -42,6 +42,7 @@ test('a text reply: start, delta, assistant text with usage, settled', () => {
     message: {
       blocks: [{ type: 'text', text: 'pong' }],
       stopReason: 'stop',
+      model: 'claude-haiku-4-5-20251001',
       usage: {
         input: 3415,
         output: 5,
@@ -143,6 +144,7 @@ test('a bad model is an assistant message with stopReason error and no text', ()
     message: {
       blocks: [],
       stopReason: 'error',
+      model: 'no-such-model',
       errorMessage:
         '404 {"type":"error","error":{"type":"not_found_error","message":"model: no-such-model"},"request_id":"req_011CeX78mrAj15GPMpDyywUw"}',
       usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, costUsd: 0 },
@@ -189,7 +191,7 @@ test('shapes outside the fixtures: odd message and tool payloads', () => {
     parsePiLine('{"type":"message_end","message":{"role":"assistant","content":"x"}}'),
   ).toEqual({
     kind: 'assistant',
-    message: { blocks: [], stopReason: 'stop' },
+    message: { blocks: [], stopReason: 'stop', model: '' },
   });
   expect(
     parsePiLine(

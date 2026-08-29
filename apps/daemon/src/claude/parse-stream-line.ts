@@ -52,6 +52,8 @@ export type ClaudeLine =
       usage?: Usage;
     }
   | { kind: 'rate_limit'; windows: Record<string, RateWindowInfo> }
+  // The prompt size of one model call: `message_start.usage` summed (architecture.md § Adapter).
+  | { kind: 'context'; tokens: number; model: string }
   // A thinking block opening, and any block closing (the mapper knows which index is thinking).
   | { kind: 'thinking_start'; index: number }
   | { kind: 'block_stop'; index: number; data: unknown }
@@ -195,9 +197,29 @@ const system = (line: Record<string, unknown>): ClaudeLine => {
   return systemSignal(line) ?? hookResponse(line) ?? { kind: 'other', data: line };
 };
 
+// The context in use is the whole prompt of this request: the three input token counts on the
+// `message_start` usage. `turn.ended.usage` is a per-turn sum and cannot stand in for it.
+const messageStart = (event: Record<string, unknown>): ClaudeLine | null => {
+  const message = event['message'];
+  if (!isRecord(message)) return null;
+  const usage = message['usage'];
+  if (!isRecord(usage)) return null;
+  const input = usage['input_tokens'];
+  const cacheCreate = usage['cache_creation_input_tokens'];
+  const cacheRead = usage['cache_read_input_tokens'];
+  if (!isInteger(input) || !isInteger(cacheCreate) || !isInteger(cacheRead)) return null;
+  return {
+    kind: 'context',
+    tokens: input + cacheCreate + cacheRead,
+    model: isString(message['model']) ? message['model'] : '',
+  };
+};
+
 const streamEvent = (line: Record<string, unknown>): ClaudeLine => {
   const event = line['event'];
   if (!isRecord(event)) return { kind: 'other', data: line };
+  if (event['type'] === 'message_start')
+    return messageStart(event) ?? { kind: 'other', data: line };
   if (event['type'] === 'content_block_delta') {
     const delta = event['delta'];
     if (isRecord(delta) && delta['type'] === 'text_delta' && isString(delta['text'])) {

@@ -34,6 +34,7 @@ const publish = (i: StoreInternals, log: SessionLog): void => {
       streaming: log.streaming(),
       lastSeq: log.lastSeq(),
       thinking: null,
+      context: null,
       changes: 0,
     };
     if (events.length > 0) writeChunks(i, log, 0);

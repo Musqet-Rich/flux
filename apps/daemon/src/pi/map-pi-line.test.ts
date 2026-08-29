@@ -24,13 +24,21 @@ const pending = (): PiPending => ({
 interface Outcome {
   events: EventInput[];
   deltas: string[];
+  contexts: { tokens: number; model: string }[];
   running: number;
   turnsEnded: number;
   filesChanged: number;
 }
 
 const run = (name: string, state = pending()): Outcome => {
-  const outcome: Outcome = { events: [], deltas: [], running: 0, turnsEnded: 0, filesChanged: 0 };
+  const outcome: Outcome = {
+    events: [],
+    deltas: [],
+    contexts: [],
+    running: 0,
+    turnsEnded: 0,
+    filesChanged: 0,
+  };
   const text = readFileSync(
     fileURLToPath(new URL(`../../test/fixtures/pi/${name}.jsonl`, import.meta.url)),
     'utf8',
@@ -41,6 +49,7 @@ const run = (name: string, state = pending()): Outcome => {
     const mapped = mapPiLine(parsed, state, cwd);
     outcome.events.push(...mapped.events);
     if (mapped.delta !== undefined) outcome.deltas.push(mapped.delta);
+    if (mapped.context !== undefined) outcome.contexts.push(mapped.context);
     if (mapped.running === true) outcome.running += 1;
     if (mapped.turnEnded === true) outcome.turnsEnded += 1;
     if (mapped.filesChanged === true) outcome.filesChanged += 1;
@@ -49,10 +58,13 @@ const run = (name: string, state = pending()): Outcome => {
 };
 
 test('a text reply becomes one msg.assistant and one turn.ended with usage and cost', () => {
-  const { events, deltas, running, turnsEnded } = run('text-reply');
+  const { events, deltas, contexts, running, turnsEnded } = run('text-reply');
   expect(running).toBe(1);
   expect(deltas.join('')).toBe('pong');
   expect(turnsEnded).toBe(1);
+  // The message's input side is that call's prompt: the context in use, keyed by the model
+  // pi resolved the alias to.
+  expect(contexts).toEqual([{ tokens: 3415, model: 'claude-haiku-4-5-20251001' }]);
   expect(events).toEqual([
     { type: 'msg.assistant', payload: { text: 'pong' } },
     {
@@ -102,6 +114,14 @@ test('tools become tool.start / tool.end pairs with summaries, and bash flags a 
   expect(events[5]?.payload).toMatchObject({ numTurns: 2, stopReason: 'stop' });
 });
 
+test('every model call in a run reports its own context, the later one larger', () => {
+  const { contexts } = run('tools');
+  expect(contexts).toEqual([
+    { tokens: 3435, model: 'claude-haiku-4-5-20251001' },
+    { tokens: 3595, model: 'claude-haiku-4-5-20251001' },
+  ]);
+});
+
 test('the Flux tools render as ask / notify', () => {
   const { events } = run('flux-tools');
   const summaries = events.filter((e) => e.type === 'tool.start').map((e) => e.payload);
@@ -123,7 +143,9 @@ test('an interrupted run still ends the turn, with stopReason aborted, and write
 });
 
 test('a failed call is logged raw with the error and ends the turn with stopReason error', () => {
-  const { events } = run('bad-model');
+  const { events, contexts } = run('bad-model');
+  // A call that never reached a model has no prompt size to report.
+  expect(contexts).toEqual([]);
   expect(events).toEqual([
     {
       type: 'raw',

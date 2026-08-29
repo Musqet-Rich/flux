@@ -171,6 +171,8 @@ const onNotice = (view: LogView, data: Ephemeral): void => {
     view.thinking = data.active
       ? { estimatedTokens: data.estimatedTokens ?? view.thinking?.estimatedTokens ?? null }
       : null;
+  } else if (data.type === 'agent.context') {
+    view.context = { tokens: data.tokens, window: data.window ?? null };
   } else if (data.type === 'vcs.changed') {
     view.changes += 1;
   } else if (data.type === 'delta' && data.text !== '') {

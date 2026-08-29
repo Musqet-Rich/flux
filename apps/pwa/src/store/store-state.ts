@@ -28,11 +28,21 @@ export interface Thinking {
   estimatedTokens: number | null;
 }
 
+// The context window in use, from `agent.context` (the prompt size of the last model call).
+// `window` is null when the box could not name the model's window (context-window.ts).
+export interface SessionContext {
+  tokens: number;
+  window: number | null;
+}
+
 export interface LogView {
   events: FluxEvent[];
   streaming: string;
   lastSeq: number;
   thinking: Thinking | null;
+  // The context window in use, shown in the status bar for the open session; null until the
+  // agent reports its first model call.
+  context: SessionContext | null;
   // Bumps on every `vcs.changed` notice, so the changes screen knows to refetch.
   changes: number;
 }
