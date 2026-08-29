@@ -92,3 +92,13 @@ corepack pnpm --filter @flux/pwa dev
 ```
 
 Run the daemon from source with `FLUX_RELAY_URL=http://127.0.0.1:8787 node apps/daemon/src/index.ts` (Node strips the types) against `node apps/relay/src/index.ts`. `apps/daemon/test/built-daemon.test.ts` builds the daemon into a temp dir and runs the result, so a broken production build fails `pnpm run check`.
+
+To work on the PWA with hot reload, run the three parts in three terminals:
+
+```sh
+corepack pnpm run build && node apps/relay/dist/index.mjs                      # relay on :8787
+FLUX_RELAY_URL=http://127.0.0.1:8787 FLUX_DATA_DIR=/tmp/flux-dev node apps/daemon/dist/index.mjs  # or apps/daemon/src/index.ts
+corepack pnpm --filter @flux/pwa dev                                            # Vite on :5173
+```
+
+The dev server proxies `/ws` and `/healthz` to the relay (`FLUX_DEV_RELAY` overrides `http://127.0.0.1:8787`), so the app reaches the box through its own origin just like the built one. To pair, take the link the daemon prints at start-up on a terminal (or `FLUX_DATA_DIR=/tmp/flux-dev node apps/daemon/dist/index.mjs pair`; `pair` finds the running daemon through the control socket in that directory), which has origin `http://127.0.0.1:8787`, and open `http://localhost:5173/#<fragment>` with the same fragment; the app pairs from the fragment on load. Edits to components then hot-reload without dropping the paired connection. The service worker is not registered under the dev server, so there are no push notifications there.
