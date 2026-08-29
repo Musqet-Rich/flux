@@ -13,6 +13,8 @@ export interface AskRegistry {
   // the ask settles as aborted so the operator's card closes.
   ask: (askId: string, timeoutMs: number, signal?: AbortSignal) => Promise<Answer>;
   answer: (askId: string, answer: string) => boolean;
+  // Settles one ask as aborted (the agent is being closed on purpose); false if none was pending.
+  abort: (askId: string) => boolean;
   pending: () => string[];
   close: () => void;
 }
@@ -50,6 +52,7 @@ export const createAskRegistry = (): AskRegistry => {
         );
       }),
     answer: (askId, answer) => settle(askId, { answer, by: 'device' }),
+    abort: (askId) => settle(askId, { answer: '', by: 'aborted' }),
     pending: () => [...pending.keys()],
     close: () => {
       // Deleting during iteration is safe for a Map: removed keys are simply not visited.

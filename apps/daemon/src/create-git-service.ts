@@ -31,6 +31,9 @@ export interface GitService extends GitActions {
   addWorktree: (repo: string, path: string, branch: string, base: string | null) => Promise<void>;
   // `force` throws away uncommitted work; without it git refuses a dirty worktree.
   removeWorktree: (repo: string, path: string, force: boolean) => Promise<void>;
+  // Forgets worktrees whose directory is gone (`git worktree prune`): until then git still
+  // counts their branch as checked out and refuses to delete it.
+  pruneWorktrees: (repo: string) => Promise<void>;
   // `git branch -D`: git itself refuses the branch checked out anywhere, the daemon refuses
   // nothing more, so the operator can delete an unmerged branch on purpose.
   deleteBranch: (repo: string, branch: string) => Promise<void>;
@@ -170,6 +173,9 @@ export const createGitService = (options: GitServiceOptions = {}): GitService =>
     },
     removeWorktree: async (repo, path, force) => {
       await git(repo, ['worktree', 'remove', ...(force ? ['--force'] : []), path]);
+    },
+    pruneWorktrees: async (repo) => {
+      await git(repo, ['worktree', 'prune']);
     },
     deleteBranch: async (repo, branch) => {
       await git(repo, ['branch', '-D', branch]);

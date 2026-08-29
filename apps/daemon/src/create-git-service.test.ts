@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, expect, test } from 'vitest';
@@ -142,6 +142,17 @@ test('branches and worktrees', async () => {
   });
   await git.addWorktree(repo, path, 'feature', null);
   expect(await git.show(path, 'a.txt', 'worktree')).toMatchObject({ content: 'one\n' });
+});
+
+// A worktree removed by hand leaves git thinking its branch is still checked out.
+test('a branch of a worktree that is gone can be deleted once pruned', async () => {
+  const path = join(root, 'wt');
+  await git.addWorktree(repo, path, 'flux/gone', 'main');
+  await rm(path, { recursive: true, force: true });
+  await expect(git.deleteBranch(repo, 'flux/gone')).rejects.toMatchObject({ code: 'git_error' });
+  await git.pruneWorktrees(repo);
+  await git.deleteBranch(repo, 'flux/gone');
+  expect(await git.branches(repo)).toEqual(['main']);
 });
 
 test('unpushed counts commits beyond the upstream, or beyond the base without one', async () => {

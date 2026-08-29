@@ -195,7 +195,10 @@ export const createSessionSupervisor = (options: SupervisorOptions): SessionSupe
   };
   return {
     send: (text, refs = [], commentIds = []) => send(ctx, text, refs, commentIds),
+    // An answer that lands after close (the ask's connection dropping with the agent) must not
+    // put a closed session back to running.
     waiting: (on) => {
+      if (ctx.closing) return;
       setState(ctx, on ? 'waiting_user' : 'running');
     },
     interrupt: () => {

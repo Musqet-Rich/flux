@@ -21,6 +21,15 @@ test('a timeout resolves the ask with an empty answer', async () => {
   vi.useRealTimers();
 });
 
+test('abort settles one ask as aborted and says whether it was pending', async () => {
+  const asks = createAskRegistry();
+  const waiting = asks.ask('a4', 60_000);
+  expect(asks.abort('a4')).toBe(true);
+  expect(await waiting).toEqual({ answer: '', by: 'aborted' });
+  expect(asks.abort('a4')).toBe(false);
+  expect(asks.pending()).toEqual([]);
+});
+
 test('close settles everything still pending as aborted', async () => {
   const asks = createAskRegistry();
   const a = asks.ask('x', 60_000);
