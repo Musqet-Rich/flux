@@ -44,6 +44,8 @@ const cases: [EventType, unknown, boolean][] = [
   ['session.state', { state: 'idle', reason: null }, false],
   ['session.renamed', { title: 'x' }, true],
   ['session.renamed', {}, false],
+  ['session.cleared', {}, true],
+  ['session.cleared', null, false],
   ['msg.user', { text: 'hi' }, true],
   ['msg.user', { text: 'hi', refs: [ref], commentIds: ['c1'] }, true],
   ['msg.user', { text: 'hi', refs: [{ path: 'a' }] }, false],

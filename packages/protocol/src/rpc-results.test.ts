@@ -59,6 +59,8 @@ const cases: { [M in RpcMethod]: [ok: unknown, bad: unknown] } = {
   ],
   'sessions.create': [summary, { ...summary, lastSeq: -1 }],
   'sessions.archive': [{}, null],
+  'sessions.unarchive': [{}, null],
+  'sessions.clear': [{}, 'done'],
   'sessions.restart': [{}, 'ok'],
   'agent.send': [{ seq: 3 }, { seq: 0 }],
   'agent.answer': [{}, []],
@@ -124,4 +126,9 @@ test('optional fields may be present or absent, never wrong', () => {
   expect(createdAt).toBeTypeOf('string');
   expect(rpcResults['sessions.list']([older])).toBe(true);
   expect(rpcResults['sessions.list']([{ ...summary, createdAt: 1 }])).toBe(false);
+  expect(rpcResults['sessions.list']([{ ...summary, archived: true, worktreeExists: false }])).toBe(
+    true,
+  );
+  expect(rpcResults['sessions.list']([{ ...summary, archived: 'yes' }])).toBe(false);
+  expect(rpcResults['sessions.list']([{ ...summary, worktreeExists: 0 }])).toBe(false);
 });

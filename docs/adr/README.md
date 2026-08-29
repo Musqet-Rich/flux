@@ -23,3 +23,4 @@ Format: Context, Decision, Consequences. Keep each under a page.
 | 0015 | Settings on the box, agent config as raw files, revocation as a notice | accepted |
 | 0016 | pi adapter: RPC mode, shared session id, Flux tools as a pi extension  | accepted |
 | 0017 | Daemon lifecycle: bounded shutdown, one daemon per data dir, orphans   | accepted |
+| 0018 | Session lifecycle: clear, archive with worktree removal, unarchive     | accepted |

@@ -29,7 +29,13 @@ export interface GitService extends GitActions {
   revParse: (repo: string, rev: string) => Promise<string>;
   // `base` null checks out an existing branch instead of creating one.
   addWorktree: (repo: string, path: string, branch: string, base: string | null) => Promise<void>;
-  removeWorktree: (repo: string, path: string) => Promise<void>;
+  // `force` throws away uncommitted work; without it git refuses a dirty worktree.
+  removeWorktree: (repo: string, path: string, force: boolean) => Promise<void>;
+  // `git branch -D`: git itself refuses the branch checked out anywhere, the daemon refuses
+  // nothing more, so the operator can delete an unmerged branch on purpose.
+  deleteBranch: (repo: string, branch: string) => Promise<void>;
+  // Commits not on the branch's upstream; without an upstream, everything since `base`.
+  unpushed: (worktree: string, base: string) => Promise<number>;
   listRepos: (root: string) => Promise<Repo[]>;
 }
 
@@ -124,6 +130,14 @@ const listRepos = async (git: Runner, root: string): Promise<Repo[]> => {
   return repos.filter((repo): repo is Repo => repo !== null);
 };
 
+const unpushed = async (git: Runner, worktree: string, base: string): Promise<number> => {
+  const upstream = await git(worktree, ['rev-parse', '--verify', '--quiet', '@{upstream}']).then(
+    (out) => out.trim(),
+    () => base,
+  );
+  return Number((await git(worktree, ['rev-list', '--count', `${upstream}..HEAD`])).trim());
+};
+
 export const createGitService = (options: GitServiceOptions = {}): GitService => {
   const env = cleanEnv(options.env ?? process.env);
   const git: Runner = (cwd, args) => runCommand('git', args, { cwd, env, code: 'git_error' });
@@ -154,9 +168,13 @@ export const createGitService = (options: GitServiceOptions = {}): GitService =>
       const args = base === null ? [path, branch] : ['-b', branch, path, base];
       await git(repo, ['worktree', 'add', ...args]);
     },
-    removeWorktree: async (repo, path) => {
-      await git(repo, ['worktree', 'remove', '--force', path]);
+    removeWorktree: async (repo, path, force) => {
+      await git(repo, ['worktree', 'remove', ...(force ? ['--force'] : []), path]);
     },
+    deleteBranch: async (repo, branch) => {
+      await git(repo, ['branch', '-D', branch]);
+    },
+    unpushed: (worktree, base) => unpushed(git, worktree, base),
     listRepos: (root) => listRepos(git, root),
   };
 };

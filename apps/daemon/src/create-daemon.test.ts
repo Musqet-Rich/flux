@@ -100,7 +100,66 @@ test('pair, create a session, talk to the agent, sync the log', async () => {
   await expect(call(d, 'fs.read', { session, path: '../x' })).rejects.toThrow('bad_params');
   expect(await call(d, 'sessions.cost', { session })).toMatchObject({ turns: 1 });
   await call(d, 'sessions.archive', { session });
-  expect(await call(d, 'sessions.list', {})).toEqual([]);
+  expect(await call(d, 'sessions.list', {})).toEqual([
+    expect.objectContaining({ session, archived: true, worktreeExists: true }),
+  ]);
+});
+
+const lastTypes = async (d: Awaited<ReturnType<typeof device>>, session: string, n: number) => {
+  const synced = (await call(d, 'events.sync', { session, since: 0 })) as {
+    events: { type: string }[];
+  };
+  return synced.events.slice(-n).map((e) => e.type);
+};
+
+// Clearing keeps the worktree and the log and marks where the fresh context starts; archiving
+// hides the session and can take the worktree and the branch with it, but never work that is
+// nowhere else unless told to discard it; a session whose worktree is gone cannot come back.
+test('clear, archive, reopen and delete a session', async () => {
+  const { repo, root } = await setup();
+  const d = await device();
+  await pair(d);
+  await call(d, 'hello', { protocol: 1 });
+  const created = (await call(d, 'sessions.create', {
+    repo,
+    branch: 'flux/gone',
+    agent: 'claude',
+  })) as { session: string };
+  const { session } = created;
+  const worktree = join(root, 'data', 'worktrees', session);
+  await call(d, 'agent.send', { session, text: 'go' });
+  await untilEvent(d, 'turn.ended');
+  await call(d, 'sessions.clear', { session });
+  expect(await lastTypes(d, session, 1)).toEqual(['session.cleared']);
+  expect(await call(d, 'sessions.list', {})).toEqual([
+    expect.objectContaining({ session, archived: false, worktreeExists: true }),
+  ]);
+  await call(d, 'sessions.archive', { session });
+  expect(await call(d, 'sessions.list', {})).toEqual([expect.objectContaining({ archived: true })]);
+  await call(d, 'sessions.unarchive', { session });
+  expect(await call(d, 'sessions.list', {})).toEqual([
+    expect.objectContaining({ archived: false }),
+  ]);
+  await writeFile(join(worktree, 'wip.txt'), 'not committed\n');
+  await expect(call(d, 'sessions.archive', { session, removeWorktree: true })).rejects.toThrow(
+    'dirty: worktree has 1 uncommitted file',
+  );
+  expect(await call(d, 'sessions.list', {})).toEqual([
+    expect.objectContaining({ archived: false }),
+  ]);
+  await call(d, 'sessions.archive', {
+    session,
+    removeWorktree: true,
+    deleteBranch: true,
+    discard: true,
+  });
+  expect(await call(d, 'sessions.list', {})).toEqual([
+    expect.objectContaining({ session, archived: true, worktreeExists: false }),
+  ]);
+  expect(await call(d, 'repos.list', {})).toEqual({
+    repos: [{ path: repo, name: 'app', branches: ['main'] }],
+  });
+  await expect(call(d, 'sessions.unarchive', { session })).rejects.toThrow('not_found');
 });
 
 // Two devices paired in turn, the second while the first is connected, both past hello.

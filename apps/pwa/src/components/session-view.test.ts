@@ -130,7 +130,7 @@ test('offers to stop a running agent and asks the box to interrupt', async () =>
   const box = await pairedStore([], { 'agent.interrupt': () => ({}) });
   const { store, relay, event } = box;
   const wrapper = mount(SessionView, { props: { store, session: 's1' } });
-  expect(wrapper.findAll('.toolbar button').map((b) => b.text())).toEqual(['Changes']);
+  expect(wrapper.findAll('.toolbar button').map((b) => b.text())).toEqual(['Changes', '⋯']);
   await relay.emit(event(1, 'session.state', { state: 'running' }));
   await until(() => store.state.sessions[0]?.state === 'running');
   await flushPromises();

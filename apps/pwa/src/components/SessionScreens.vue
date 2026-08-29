@@ -38,6 +38,7 @@ const openEdit = (path: string): void => {
     :store="store"
     :session="route.session"
     @changes="openChanges"
+    @closed="go({ name: 'sessions' })"
   />
   <ChangesView
     v-else-if="route.name === 'changes'"

@@ -1,0 +1,21 @@
+# 0018: Session lifecycle: clear, archive with worktree removal, unarchive
+
+Status: accepted, 2026-08-29.
+
+## Context
+
+Dogfooding on 2026-08-29: there was no operator-facing way to end a session. `sessions.archive` existed on the wire but nothing in the PWA called it; worktrees under `<dataDir>/worktrees/<uuid>` accumulated for ever; an archived session was invisible with no way back. There was also no equivalent of Claude Code's `/clear`: dropping the agent's context while keeping the worktree and the log.
+
+## Decision
+
+1. **`sessions.clear`** is the `/clear`. The daemon closes the agent (the bounded close of ADR 0017), answers every ask still open in the log `aborted` (the same settle as for orphans on start, so the card closes deterministically rather than whenever the MCP connection drop lands), forgets the agent-native session id and pi's session file, and logs `session.cleared {}`. The next `agent.send` spawns without `--resume` (Claude) or under a `--session-id` pi no longer has a file for, so the agent starts fresh in the same worktree with the log intact. Pending comments survive the marker: they are about the code, not the conversation, and go with the next message. The timeline shows the marker as a rule reading "Context cleared".
+2. **`sessions.archive`** grows three optional flags. Always: close the agent, mark archived, forget pi's session file (the agent-native id stays, so a reopened session resumes). `removeWorktree` runs `git worktree remove`, refused with the new error code `dirty` while the worktree has uncommitted files or unpushed commits (no upstream: every commit since the session's base), unless `discard`, which passes `--force`. `deleteBranch`, only with `removeWorktree`, runs `git branch -D` afterwards; the daemon adds no rule of its own on top of git's (the checked-out default branch is refused by git, an unmerged branch is deleted on purpose), and surfaces git's refusal as `git_error`. A worktree already gone from disk is skipped, not an error, so a session cleaned up by hand can still be archived and its branch deleted.
+3. **`sessions.unarchive`** marks the session live again and is `not_found` when the worktree is gone: there is nothing to come back to. `sessions.list` and `hello` now carry archived sessions too, each with `archived` and `worktreeExists` (a `stat` at list time), so the PWA renders an Archived section with Reopen enabled only where it can work. Both fields are optional on the wire for a daemon built before them.
+4. **PWA**: a session menu (a plain `aria-haspopup="menu"` button, no dependency) with Clear context, Archive and Delete…; Delete confirms inline with two checkboxes (remove worktree ticked, delete branch unticked) and, on `dirty`, shows the box's counts and asks once more before sending `discard`. The list screen folds archived sessions away at the bottom with Reopen and Delete per row.
+
+## Consequences
+
+- Protocol additions only (§ 8): two methods, three optional params, one event type, two optional summary fields, one error code. No version bump.
+- Deleting a worktree is the one destructive action the PWA offers, and it is gated by an explicit `discard` after the box has said what would be lost. The branch survives unless asked otherwise, so a merged PR's branch can be cleaned up from the phone while an unmerged one is kept by default.
+- A cleared session's earlier asks are answered `aborted` daemon-side before the marker, so a stale `ask` can never be the open one; the PWA's `openAsk` also treats the marker as a boundary, for logs written by a daemon that raced the control-connection drop.
+- `sessions.list` grows with archived sessions. Fine at P1 scale; a `since`/paging parameter is the fix if it ever matters.

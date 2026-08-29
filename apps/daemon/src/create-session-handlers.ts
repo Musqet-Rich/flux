@@ -6,6 +6,7 @@ import type { Peer } from './create-device-channels.ts';
 import { DaemonError } from './daemon-error.ts';
 import type { HandlerContext } from './handler-context.ts';
 import { inside } from './inside.ts';
+import { sessionLifecycle } from './session-lifecycle.ts';
 
 // Session, agent, comment and event methods of protocol.md § 7.
 
@@ -22,6 +23,8 @@ export type SessionHandlers = Pick<
   | 'sessions.cost'
   | 'sessions.create'
   | 'sessions.archive'
+  | 'sessions.unarchive'
+  | 'sessions.clear'
   | 'sessions.restart'
   | 'agent.send'
   | 'agent.answer'
@@ -114,13 +117,9 @@ export const createSessionHandlers = (ctx: HandlerContext): SessionHandlers => (
   'sessions.list': () => Promise.resolve(ctx.sessions.list()),
   'sessions.cost': (p) => Promise.resolve(cost(ctx, ctx.sessions.get(p.session).session)),
   'sessions.create': (p) => createSession(ctx, p),
-  'sessions.archive': async (p) => {
-    ctx.sessions.get(p.session);
-    await ctx.closeSupervisor(p.session);
-    ctx.sessions.setArchived(p.session, true);
-    ctx.forgetAgentSession(p.session);
-    return {};
-  },
+  'sessions.archive': (p) => sessionLifecycle.archive(ctx, p),
+  'sessions.unarchive': (p) => sessionLifecycle.unarchive(ctx, p.session),
+  'sessions.clear': (p) => sessionLifecycle.clear(ctx, p.session),
   'sessions.restart': async (p) => {
     ctx.sessions.get(p.session);
     await ctx.closeSupervisor(p.session);

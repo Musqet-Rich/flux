@@ -6,7 +6,8 @@ import { createConnection } from '../client/create-connection.ts';
 import { pairDevice } from '../client/pair-device.ts';
 import { pairedBox } from '../client/paired-box.ts';
 import { boxLink } from './box-link.ts';
-import { pendingComments } from './pending-comments.ts';
+import type { SessionActions } from './session-actions.ts';
+import { sessionActions } from './session-actions.ts';
 import { sessionLogs } from './session-logs.ts';
 import type { SettingsActions } from './settings-actions.ts';
 import { settingsActions } from './settings-actions.ts';
@@ -27,7 +28,7 @@ export type PrParams = Omit<RpcMethods['git.pr']['params'], 'session'>;
 // not put in `state.error` like other failures.
 export type SaveOutcome = { ok: true; hash: string } | { ok: false; conflict: boolean };
 
-export interface Store extends SettingsActions {
+export interface Store extends SettingsActions, SessionActions {
   state: StoreState;
   // Loads the paired box from storage and connects, or lands on the pair screen.
   boot: () => Promise<void>;
@@ -35,8 +36,6 @@ export interface Store extends SettingsActions {
   pair: (relayUrl: string, fragment: string) => Promise<void>;
   // Makes a session's log available in `state.logs`: cache first, then a sync.
   open: (session: string) => Promise<void>;
-  // Sends a message carrying every pending comment.
-  send: (session: string, text: string) => Promise<boolean>;
   answer: (session: string, askId: string, answer: string) => Promise<boolean>;
   interrupt: (session: string) => Promise<boolean>;
   addComment: (session: string, ref: CodeRef, text: string) => Promise<boolean>;
@@ -96,13 +95,6 @@ const pair = async (i: StoreInternals, relayUrl: string, fragment: string): Prom
     boxLink.reportError(i, error, 'connection');
     i.state.phase = 'unpaired';
   }
-};
-
-const send = (i: StoreInternals, session: string, text: string): Promise<boolean> => {
-  const events = i.logs.get(session)?.events() ?? [];
-  const commentIds = pendingComments(events).map((c) => c.commentId);
-  const params = commentIds.length > 0 ? { session, text, commentIds } : { session, text };
-  return boxLink.attempt(i, () => boxLink.call(i, 'agent.send', params));
 };
 
 const saveFile = async (
@@ -200,6 +192,7 @@ export const createStore = (options: StoreOptions): Store => {
   };
   return {
     ...settingsActions(i),
+    ...sessionActions(i),
     state: i.state,
     boot: () => boot(i),
     pair: (relayUrl, fragment) => pair(i, relayUrl, fragment),
@@ -207,7 +200,6 @@ export const createStore = (options: StoreOptions): Store => {
     open: async (session) => {
       await boxLink.attempt(i, () => sessionLogs.open(i, session));
     },
-    send: (session, text) => send(i, session, text),
     answer: (session, askId, answer) =>
       boxLink.attempt(i, () => boxLink.call(i, 'agent.answer', { session, askId, answer })),
     interrupt: (session) =>
