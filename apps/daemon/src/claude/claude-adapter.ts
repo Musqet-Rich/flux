@@ -39,7 +39,7 @@ const throttle = (mapped: Mapped, last: Last, now: number): Mapped => {
 
 export const claudeAdapter = (cwd: string, options: ClaudeAdapterOptions = {}): AgentAdapter => {
   const now = options.now ?? (() => Date.now());
-  const pending: Pending = { tools: new Map(), thinking: null };
+  const pending: Pending = { tools: new Map(), thinking: null, agents: new Map() };
   const last: Last = { at: Number.NEGATIVE_INFINITY, tokens: 0 };
   return {
     mapLine: (line) => {
@@ -48,6 +48,7 @@ export const claudeAdapter = (cwd: string, options: ClaudeAdapterOptions = {}): 
     },
     reset: () => {
       pending.tools.clear();
+      pending.agents.clear();
       pending.thinking = null;
     },
   };

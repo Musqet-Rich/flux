@@ -65,3 +65,20 @@ test('uses the wall clock by default', () => {
   const event = log.append('s', { type: 'msg.user', payload: { text: 'x' } });
   expect(Number.isNaN(Date.parse(event.ts))).toBe(false);
 });
+
+// A subagent's events carry the Agent call they belong to (protocol.md § 5); the column is
+// null for everything else and the field stays absent when read back.
+test('keeps the parent of a subagent event and none for a top-level one', () => {
+  const log = setup();
+  const child = log.append('s', {
+    type: 'msg.assistant',
+    payload: { text: 'a' },
+    parent: 'toolu_1',
+  });
+  const top = log.append('s', { type: 'msg.assistant', payload: { text: 'b' } });
+  expect(child.parent).toBe('toolu_1');
+  expect(top).not.toHaveProperty('parent');
+  const [readChild, readTop] = log.read('s', 0).events;
+  expect(readChild?.parent).toBe('toolu_1');
+  expect(readTop).not.toHaveProperty('parent');
+});

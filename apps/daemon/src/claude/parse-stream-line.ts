@@ -3,7 +3,9 @@ import { guards } from '@flux/protocol';
 // One line of `claude -p --output-format stream-json --verbose --include-partial-messages`
 // narrowed to the parts Flux reads (architecture.md § Adapter, verified against 2.1.251 with
 // the fixtures under test/fixtures/claude). Anything unrecognised becomes `other` and is
-// logged as a `raw` event, never dropped.
+// logged as a `raw` event, never dropped. A line a subagent produced carries the Agent call's
+// `parent_tool_use_id`; it is kept as `parent` on whatever the line parses to (fixture
+// session-subagents), and is absent on every top-level line.
 
 export interface TextBlock {
   type: 'text';
@@ -36,12 +38,14 @@ export interface RateWindowInfo {
   resetsAt: number;
 }
 
-export type ClaudeLine =
+type ClaudeLineBody =
   | { kind: 'init'; sessionId: string; model: string }
   | { kind: 'status'; status: string }
   | { kind: 'delta'; text: string }
   | { kind: 'assistant'; blocks: (TextBlock | ToolUseBlock)[] }
   | { kind: 'tool_result'; blocks: ToolResultBlock[]; toolUseResult: unknown }
+  // A subagent's prompt: the `user` line with text content that opens its transcript.
+  | { kind: 'user_text'; text: string }
   | {
       kind: 'result';
       isError: boolean;
@@ -64,8 +68,9 @@ export type ClaudeLine =
       toolUseId: string;
       description: string;
       background: boolean;
+      agentType?: string;
     }
-  | { kind: 'task_ended'; taskId: string; status: string; summary: string }
+  | { kind: 'task_ended'; taskId: string; status: string; summary: string; tokens?: number }
   | {
       kind: 'pr_published';
       provider: string;
@@ -77,6 +82,8 @@ export type ClaudeLine =
   | { kind: 'vcs_changed'; vcsKind: string }
   | { kind: 'hook_failed'; hookName: string; hookEvent: string; exitCode?: number; stderr: string }
   | { kind: 'other'; data: unknown };
+
+export type ClaudeLine = ClaudeLineBody & { parent?: string };
 
 const { isString, isNumber, isInteger, isRecord, isArrayOf, isBoolean, isOptional } = guards;
 
@@ -146,14 +153,18 @@ const systemSignal = (line: Record<string, unknown>): ClaudeLine | null => {
       toolUseId: line['tool_use_id'],
       description: str('description'),
       background: line['is_backgrounded'] === true,
+      ...(isString(line['subagent_type']) ? { agentType: line['subagent_type'] } : {}),
     };
   }
   if (s === 'task_notification' && isString(line['task_id']) && isString(line['status'])) {
+    const usage = line['usage'];
+    const tokens = isRecord(usage) ? usage['total_tokens'] : undefined;
     return {
       kind: 'task_ended',
       taskId: line['task_id'],
       status: line['status'],
       summary: str('summary'),
+      ...(isInteger(tokens) ? { tokens } : {}),
     };
   }
   if (s === 'code_change_published' && isString(line['url'])) {
@@ -266,6 +277,42 @@ const rateLimit = (line: Record<string, unknown>): ClaudeLine => {
   return { kind: 'rate_limit', windows };
 };
 
+// A top-level `user` line with text is nothing Flux sent (the operator's own messages are not
+// echoed), so it stays `other`; under a parent it is the subagent's prompt.
+const user = (line: Record<string, unknown>, parent: string | undefined): ClaudeLineBody => {
+  const blocks = contentOf(line);
+  if (blocks.length > 0 && isArrayOf(blocks, isToolResultBlock)) {
+    return {
+      kind: 'tool_result',
+      blocks: blocks.map((b) => toolResultBlock(b)),
+      toolUseResult: line['tool_use_result'],
+    };
+  }
+  if (parent !== undefined && blocks.length > 0 && isArrayOf(blocks, isTextBlock)) {
+    return { kind: 'user_text', text: blocks.map((b) => b.text).join('\n') };
+  }
+  return { kind: 'other', data: line };
+};
+
+const body = (line: Record<string, unknown>, parent: string | undefined): ClaudeLineBody => {
+  switch (line['type']) {
+    case 'system':
+      return system(line);
+    case 'stream_event':
+      return streamEvent(line);
+    case 'assistant':
+      return { kind: 'assistant', blocks: assistantBlocks(contentOf(line)) };
+    case 'user':
+      return user(line, parent);
+    case 'result':
+      return result(line);
+    case 'rate_limit_event':
+      return rateLimit(line);
+    default:
+      return { kind: 'other', data: line };
+  }
+};
+
 export const parseStreamLine = (text: string): ClaudeLine | null => {
   let line: unknown;
   try {
@@ -274,29 +321,7 @@ export const parseStreamLine = (text: string): ClaudeLine | null => {
     return null;
   }
   if (!isRecord(line)) return null;
-  switch (line['type']) {
-    case 'system':
-      return system(line);
-    case 'stream_event':
-      return streamEvent(line);
-    case 'assistant':
-      return { kind: 'assistant', blocks: assistantBlocks(contentOf(line)) };
-    case 'user': {
-      const blocks = contentOf(line);
-      if (blocks.length === 0 || !isArrayOf(blocks, isToolResultBlock)) {
-        return { kind: 'other', data: line };
-      }
-      return {
-        kind: 'tool_result',
-        blocks: blocks.map((b) => toolResultBlock(b)),
-        toolUseResult: line['tool_use_result'],
-      };
-    }
-    case 'result':
-      return result(line);
-    case 'rate_limit_event':
-      return rateLimit(line);
-    default:
-      return { kind: 'other', data: line };
-  }
+  const parent = line['parent_tool_use_id'];
+  const parsed = body(line, isString(parent) ? parent : undefined);
+  return isString(parent) ? { ...parsed, parent } : parsed;
 };

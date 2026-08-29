@@ -75,17 +75,7 @@ const pr = {
   action: 'created',
 };
 
-test('tasks are notes, a published PR is a link, a failed hook keeps stderr behind a summary', () => {
-  const task = { taskId: 't', toolUseId: 'u', description: 'Run tests', background: true };
-  expect(
-    mount(EventItem, { props: { event: ev('task.started', task) } })
-      .find('.note')
-      .text(),
-  ).toBe('Background task: Run tests');
-  const ended = ev('task.ended', { taskId: 't', status: 'failed', summary: 'Run tests' });
-  const failed = mount(EventItem, { props: { event: ended } });
-  expect(failed.find('.note').text()).toBe('Task failed: Run tests');
-  expect(failed.find('.item').classes()).toContain('warn');
+test('a published PR is a link, a failed hook keeps stderr behind a summary', () => {
   const link = mount(EventItem, { props: { event: ev('pr.published', pr) } }).find('a.link');
   expect(link.text()).toBe('Pull request #19 created · o/r');
   expect(link.attributes()).toMatchObject({
@@ -136,4 +126,37 @@ test('a cleared context is a rule across the timeline', () => {
   expect(wrapper.find('.item').classes()).toContain('divider');
   expect(wrapper.find('.rule').attributes('role')).toBe('separator');
   expect(wrapper.text()).toBe('Context cleared');
+});
+
+// A task row opens that subagent's chat; the report behind a task's end is what the parent
+// read, so it is kept whole, as Markdown, behind a disclosure rather than cut to one line.
+test('a started task is a tappable note, an ended task keeps its report behind a summary', async () => {
+  const task = { taskId: 't', toolUseId: 'u', description: 'Run tests', background: true };
+  const bare = mount(EventItem, { props: { event: ev('task.started', task) } });
+  expect(bare.find('button.task').text()).toBe('Background task: Run tests ›');
+  await bare.find('button.task').trigger('click');
+  expect(bare.emitted('task')).toEqual([['u']]);
+  const typed = ev('task.started', { ...task, background: false, agentType: 'Explore' });
+  expect(
+    mount(EventItem, { props: { event: typed } })
+      .find('button.task')
+      .text(),
+  ).toBe('Task: Explore · Run tests ›');
+  const report = {
+    taskId: 't',
+    status: 'completed',
+    summary: '## Found\n\n- `a.ts`',
+    tokens: 12070,
+  };
+  const done = mount(EventItem, { props: { event: ev('task.ended', report) } });
+  expect(done.find('details summary').text()).toBe('Task completed · 12.1k tokens');
+  expect(done.find('.report .markdown p.heading strong').text()).toBe('Found');
+  expect(done.find('.report li code').text()).toBe('a.ts');
+  expect(done.find('.item').classes()).not.toContain('warn');
+  const failed = mount(EventItem, {
+    props: { event: ev('task.ended', { taskId: 't', status: 'failed', summary: '' }) },
+  });
+  expect(failed.find('details').exists()).toBe(false);
+  expect(failed.find('.note').text()).toBe('Task failed');
+  expect(failed.find('.item').classes()).toContain('warn');
 });

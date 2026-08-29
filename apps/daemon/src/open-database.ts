@@ -13,6 +13,7 @@ const schema = `
     ts TEXT NOT NULL,
     type TEXT NOT NULL,
     payload TEXT NOT NULL,
+    parent TEXT,
     PRIMARY KEY (session, seq)
   ) WITHOUT ROWID;
   CREATE TABLE IF NOT EXISTS sessions (
@@ -62,7 +63,10 @@ const schema = `
 `;
 
 // Columns a pre-release database lacks, added in place so a box paired before them keeps working.
-const addedColumns = [{ table: 'devices', column: 'last_seen_at', type: 'TEXT' }];
+const addedColumns = [
+  { table: 'devices', column: 'last_seen_at', type: 'TEXT' },
+  { table: 'events', column: 'parent', type: 'TEXT' },
+];
 
 const addMissingColumns = (db: DatabaseSync): void => {
   for (const { table, column, type } of addedColumns) {

@@ -2,7 +2,9 @@ import type { EventPayloads, EventType } from './event-payloads.ts';
 import { eventPayloads } from './event-payloads.ts';
 import { guards } from './guards.ts';
 
-// The event log record (protocol.md § 5). `seq` is per session, gapless, from 1.
+// The event log record (protocol.md § 5). `seq` is per session, gapless, from 1. `parent` is
+// the `tool_use_id` of the Agent call (a subagent's task) the event belongs to; absent on every
+// top-level event, so a log without subagents is byte-for-byte what it was before the field.
 
 export interface Envelope<T extends EventType> {
   seq: number;
@@ -10,6 +12,7 @@ export interface Envelope<T extends EventType> {
   session: string;
   type: T;
   payload: EventPayloads[T];
+  parent?: string;
 }
 
 export type KnownEvent = { [T in EventType]: Envelope<T> }[EventType];
@@ -26,6 +29,7 @@ export interface UnknownEvent {
   session: string;
   type: string;
   payload: unknown;
+  parent?: string;
 }
 
 export type FluxEvent = KnownEvent | UnknownEvent;
@@ -38,7 +42,8 @@ const hasEnvelope = (v: unknown): v is UnknownEvent =>
   guards.isString(v['ts']) &&
   guards.isString(v['session']) &&
   guards.isString(v['type']) &&
-  'payload' in v;
+  'payload' in v &&
+  guards.isOptional(v['parent'], guards.isString);
 
 const isKnownType = (type: string): type is EventType => eventTypes.includes(type);
 

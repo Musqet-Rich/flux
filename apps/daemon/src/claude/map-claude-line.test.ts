@@ -14,7 +14,7 @@ const cwd =
   '/private/tmp/claude-501/-Users-richhenderson-code-flux/73ccd0c9-0938-49eb-9548-e002f2d31a8d/scratchpad/fixture-repo';
 
 const replay = (source = fixture): { mapped: Mapped[]; events: EventInput[] } => {
-  const pending: Pending = { tools: new Map(), thinking: null };
+  const pending: Pending = { tools: new Map(), thinking: null, agents: new Map() };
   const lines = readFileSync(source, 'utf8')
     .split('\n')
     .filter((l) => l.trim() !== '');
@@ -131,7 +131,7 @@ test('thinking, tasks, a push and a published PR are surfaced from the raw log',
 // No hook has failed in a real session yet, so the shape is the documented one with a
 // non-success outcome; a stray token count outside a thinking block must not stick the indicator.
 test('a failed hook is logged with its stderr capped, a stray token count stays raw', () => {
-  const pending: Pending = { tools: new Map(), thinking: null };
+  const pending: Pending = { tools: new Map(), thinking: null, agents: new Map() };
   const failed = mapClaudeLine(
     {
       kind: 'hook_failed',
@@ -199,7 +199,7 @@ test('rate_limit windows are normalised to 0..1 and ISO times', () => {
 });
 
 test('a failed tool result is not ok, does not flag files, and output is capped', () => {
-  const pending: Pending = { tools: new Map([['t1', 'Write']]), thinking: null };
+  const pending: Pending = { tools: new Map([['t1', 'Write']]), thinking: null, agents: new Map() };
   const line: ClaudeLine = {
     kind: 'tool_result',
     blocks: [
@@ -221,7 +221,7 @@ test('a failed tool result is not ok, does not flag files, and output is capped'
 });
 
 test('object tool output is kept as is when small, empty text is not a message', () => {
-  const pending: Pending = { tools: new Map(), thinking: null };
+  const pending: Pending = { tools: new Map(), thinking: null, agents: new Map() };
   const tool = mapClaudeLine(
     {
       kind: 'tool_result',
@@ -253,5 +253,131 @@ test('object tool output is kept as is when small, empty text is not a message',
   );
   expect(clamped.events[0]?.payload).toEqual({
     windows: [{ name: 'w', utilisation: 1, resetsAt: '1970-01-01T00:00:00.000Z' }],
+  });
+});
+
+const subagents = new URL('../../test/fixtures/claude/session-subagents.jsonl', import.meta.url);
+
+// Like `describe`, with the first words of a user message, and only the rows under `parent`.
+const chatOf = (events: EventInput[], parent: string | null): string[] =>
+  events
+    .filter((e) => (e.parent ?? null) === parent && e.type !== 'raw')
+    .map((e) => (e.type === 'msg.user' ? `${e.type} ${e.payload.text.slice(0, 8)}` : describe(e)));
+
+// The subagent capture: each subagent's prompt, tool call and result land with the Agent call's
+// id as `parent`; the task rows, the parent's own tool calls and its replies have none.
+test('subagent events carry their parent, top-level events do not', () => {
+  const { events } = replay(subagents);
+  const first = 'toolu_01LMaEftTtJHUknWuZNF9cD5';
+  const second = 'toolu_01VrVjEzF12x5RHjY37MeYyg';
+  expect(chatOf(events, null)).toEqual([
+    'msg.assistant',
+    'tool.start Agent: List directory files',
+    'task.started',
+    'tool.start Agent: Read a.txt contents',
+    'rate_limit',
+    'task.started',
+    'task.ended',
+    'tool.end Agent ok',
+    'task.ended',
+    'tool.end Agent ok',
+    'msg.assistant',
+    'turn.ended',
+  ]);
+  expect(chatOf(events, first).map((s) => s.slice(0, 20))).toEqual([
+    'msg.user List the',
+    'tool.start Bash: ls ',
+    'tool.end Bash ok, 0 ',
+  ]);
+  expect(chatOf(events, second).map((s) => s.slice(0, 20))).toEqual([
+    'msg.user Read the',
+    'tool.start Read /pri',
+    'tool.end Read ok',
+  ]);
+  // Raw lines under a parent keep it too, so nothing of a subagent's leaks into the main chat.
+  expect(events.filter((e) => e.parent !== undefined).every((e) => e.type !== 'raw')).toBe(true);
+  expect(events.find((e) => e.type === 'task.started')?.payload).toEqual({
+    taskId: 'a524a12742a29a90a',
+    toolUseId: first,
+    description: 'List directory files',
+    background: false,
+    agentType: 'Explore',
+  });
+  expect(events.find((e) => e.type === 'task.ended')?.payload).toMatchObject({
+    taskId: 'a11e094b2df159456',
+    status: 'completed',
+    tokens: 12070,
+  });
+});
+
+const fresh = (): Pending => ({ tools: new Map(), thinking: null, agents: new Map() });
+const parent = 'toolu_p';
+
+// A subagent's ephemerals describe the wrong agent for the main view's delta buffer, thinking
+// indicator and context reading, so they are dropped; its events keep the parent and the
+// files flag.
+test('a subagent line keeps events and the files flag but no ephemerals', () => {
+  const pending = fresh();
+  expect(mapClaudeLine({ kind: 'delta', text: 'x', parent }, pending, cwd)).toEqual({ events: [] });
+  expect(mapClaudeLine({ kind: 'thinking_start', index: 0, parent }, pending, cwd)).toEqual({
+    events: [],
+  });
+  expect(mapClaudeLine({ kind: 'context', tokens: 1, model: 'm', parent }, pending, cwd)).toEqual({
+    events: [],
+  });
+  const write: ClaudeLine = {
+    kind: 'assistant',
+    blocks: [{ type: 'tool_use', id: 'w', name: 'Write', input: { file_path: 'a' } }],
+    parent,
+  };
+  expect(mapClaudeLine(write, pending, cwd).events[0]).toMatchObject({
+    type: 'tool.start',
+    parent,
+  });
+  const result = mapClaudeLine(
+    {
+      kind: 'tool_result',
+      blocks: [{ type: 'tool_result', tool_use_id: 'w', content: 'ok' }],
+      toolUseResult: undefined,
+      parent,
+    },
+    pending,
+    cwd,
+  );
+  expect(result.filesChanged).toBe(true);
+  expect(result.events[0]).toMatchObject({ type: 'tool.end', parent });
+});
+
+// The agent type falls back to the Agent call's input when the task line does not name it.
+test('task.started takes its agent type from the Agent call when the line lacks it', () => {
+  const pending = fresh();
+  const agent: ClaudeLine = {
+    kind: 'assistant',
+    blocks: [{ type: 'tool_use', id: 'a1', name: 'Agent', input: { subagent_type: 'Plan' } }],
+  };
+  mapClaudeLine(agent, pending, cwd);
+  const started = mapClaudeLine(
+    { kind: 'task_started', taskId: 't', toolUseId: 'a1', description: 'd', background: true },
+    pending,
+    cwd,
+  );
+  expect(started.events[0]?.payload).toEqual({
+    taskId: 't',
+    toolUseId: 'a1',
+    description: 'd',
+    background: true,
+    agentType: 'Plan',
+  });
+  expect(pending.agents.size).toBe(0);
+  const unknown = mapClaudeLine(
+    { kind: 'task_started', taskId: 't2', toolUseId: 'zz', description: 'd', background: false },
+    pending,
+    cwd,
+  );
+  expect(unknown.events[0]?.payload).toEqual({
+    taskId: 't2',
+    toolUseId: 'zz',
+    description: 'd',
+    background: false,
   });
 });

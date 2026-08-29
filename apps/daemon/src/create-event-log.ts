@@ -9,8 +9,9 @@ import { DaemonError } from './daemon-error.ts';
 // seq being dense, so append is the only writer and it runs inside one transaction.
 
 // A discriminated union over every event type, so narrowing on `type` narrows `payload`.
+// `parent` is the Agent call a subagent's event belongs to (protocol.md § 5), absent otherwise.
 export type EventInput = {
-  [T in EventType]: { type: T; payload: EventPayloads[T] };
+  [T in EventType]: { type: T; payload: EventPayloads[T]; parent?: string };
 }[EventType];
 
 export interface EventPage {
@@ -33,12 +34,14 @@ const defaultPageSize = 500;
 
 const rowToEvent = (session: string, row: Record<string, unknown>): FluxEvent => {
   const payload: unknown = JSON.parse(String(row['payload']));
+  const parent = row['parent'];
   const candidate: unknown = {
     seq: row['seq'],
     ts: row['ts'],
     session,
     type: row['type'],
     payload,
+    ...(typeof parent === 'string' ? { parent } : {}),
   };
   if (!fluxEvent.is(candidate)) {
     throw new DaemonError('internal', `stored event ${String(row['seq'])} is invalid`);
@@ -51,10 +54,10 @@ export const createEventLog = (options: EventLogOptions): EventLog => {
   const now = options.now ?? ((): Date => new Date());
   const last = db.prepare('SELECT COALESCE(MAX(seq), 0) AS seq FROM events WHERE session = ?');
   const insert = db.prepare(
-    'INSERT INTO events (session, seq, ts, type, payload) VALUES (?, ?, ?, ?, ?)',
+    'INSERT INTO events (session, seq, ts, type, payload, parent) VALUES (?, ?, ?, ?, ?, ?)',
   );
   const page = db.prepare(
-    'SELECT seq, ts, type, payload FROM events WHERE session = ? AND seq > ? ORDER BY seq LIMIT ?',
+    'SELECT seq, ts, type, payload, parent FROM events WHERE session = ? AND seq > ? ORDER BY seq LIMIT ?',
   );
 
   const lastSeq = (session: string): number => {
@@ -67,11 +70,18 @@ export const createEventLog = (options: EventLogOptions): EventLog => {
     try {
       const seq = lastSeq(session) + 1;
       const ts = now().toISOString();
-      const event: unknown = { seq, ts, session, type: input.type, payload: input.payload };
+      const event: unknown = {
+        seq,
+        ts,
+        session,
+        type: input.type,
+        payload: input.payload,
+        ...(input.parent === undefined ? {} : { parent: input.parent }),
+      };
       if (!fluxEvent.is(event)) {
         throw new DaemonError('internal', `payload for ${input.type} is invalid`);
       }
-      insert.run(session, seq, ts, input.type, JSON.stringify(input.payload));
+      insert.run(session, seq, ts, input.type, JSON.stringify(input.payload), input.parent ?? null);
       db.exec('COMMIT');
       return event;
     } catch (error) {

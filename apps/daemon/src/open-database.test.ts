@@ -52,3 +52,18 @@ test('works in memory for tests', () => {
   expect(db.prepare('SELECT COUNT(*) AS n FROM events').get()?.['n']).toBe(0);
   db.close();
 });
+
+// A box built before subagent chats has an events table without `parent`; it is added on open.
+test('adds the events.parent column to an events table created before it', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'flux-db-'));
+  const path = join(dir, 'flux.sqlite');
+  const old = new DatabaseSync(path);
+  old.exec(
+    'CREATE TABLE events (session TEXT NOT NULL, seq INTEGER NOT NULL, ts TEXT NOT NULL, type TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY (session, seq)) WITHOUT ROWID',
+  );
+  old.exec("INSERT INTO events VALUES ('s', 1, 't', 'raw', '{}')");
+  old.close();
+  const db = openDatabase(path);
+  expect(db.prepare('SELECT parent FROM events').get()?.['parent']).toBeNull();
+  db.close();
+});

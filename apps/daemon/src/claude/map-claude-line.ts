@@ -1,4 +1,5 @@
 import type { RateWindow } from '@flux/protocol';
+import { guards } from '@flux/protocol';
 
 import type { EventInput } from '../create-event-log.ts';
 import type { Mapped } from '../create-session-supervisor.ts';
@@ -8,19 +9,25 @@ import { toolSummary } from './tool-summary.ts';
 // Pure mapping from a parsed Claude line to Flux events (the table in architecture.md § Adapter).
 // Session lifecycle (created, idle after result) is the supervisor's business; this only
 // translates what the agent said. The supervisor keeps `Pending` across lines so tool.end can
-// name the tool and know whether it wrote files.
+// name the tool and know whether it wrote files. A line with a `parent` (a subagent's) maps to
+// the same events with that `parent` on each; its ephemerals are dropped, since the delta
+// buffer, the thinking indicator and the context reading all describe the main agent.
 
 export interface Pending {
   tools: Map<string, string>;
   // Index of the thinking block being streamed, so its content_block_stop ends the indicator
   // while every other block's stop stays raw.
   thinking: number | null;
+  // `subagent_type` by Agent call id, for a task_started line that does not name it itself.
+  agents: Map<string, string>;
 }
 
 // Hook stderr is for the timeline, not an archive (protocol.md § 5).
 const maxStderrBytes = 2 * 1024;
 
 const maxOutputBytes = 64 * 1024;
+
+const { isRecord, isString } = guards;
 
 // The cap is 64 KiB of UTF-8 (protocol.md § 5), so it is measured in bytes, not characters.
 const capOutput = (content: unknown): unknown => {
@@ -50,6 +57,8 @@ const assistant = (
       if (block.text !== '') events.push({ type: 'msg.assistant', payload: { text: block.text } });
     } else {
       pending.tools.set(block.id, block.name);
+      const agentType = isRecord(block.input) ? block.input['subagent_type'] : undefined;
+      if (block.name === 'Agent' && isString(agentType)) pending.agents.set(block.id, agentType);
       events.push({
         type: 'tool.start',
         payload: {
@@ -120,15 +129,24 @@ const truncateStderr = (stderr: string): string => {
 };
 
 // The signals a session logs as events of their own (protocol.md § 5); null for the rest.
-const signal = (line: ClaudeLine): Mapped | null => {
+const signal = (line: ClaudeLine, pending: Pending): Mapped | null => {
   if (line.kind === 'task_started') {
     const { taskId, toolUseId, description, background } = line;
-    const payload = { taskId, toolUseId, description, background };
+    const agentType = line.agentType ?? pending.agents.get(toolUseId);
+    pending.agents.delete(toolUseId);
+    const payload = {
+      taskId,
+      toolUseId,
+      description,
+      background,
+      ...(agentType === undefined ? {} : { agentType }),
+    };
     return { events: [{ type: 'task.started', payload }] };
   }
   if (line.kind === 'task_ended') {
-    const { taskId, status, summary } = line;
-    return { events: [{ type: 'task.ended', payload: { taskId, status, summary } }] };
+    const { taskId, status, summary, tokens } = line;
+    const payload = { taskId, status, summary, ...(tokens === undefined ? {} : { tokens }) };
+    return { events: [{ type: 'task.ended', payload }] };
   }
   if (line.kind === 'pr_published') {
     const { provider, url, repo, identifier, action } = line;
@@ -170,8 +188,11 @@ const thinking = (line: ClaudeLine, pending: Pending): Mapped | null => {
 
 // An if-chain rather than a switch: the lint set wants a default branch and an exhaustive
 // switch at once, and a chain satisfies both with the `other` case as the final return.
-export const mapClaudeLine = (line: ClaudeLine, pending: Pending, cwd: string): Mapped => {
+const mapBody = (line: ClaudeLine, pending: Pending, cwd: string): Mapped => {
   if (line.kind === 'init') return { events: [], agentSessionId: line.sessionId };
+  if (line.kind === 'user_text') {
+    return { events: [{ type: 'msg.user', payload: { text: line.text } }] };
+  }
   if (line.kind === 'status') return { events: [], running: line.status === 'requesting' };
   if (line.kind === 'delta') return { events: [], delta: line.text };
   if (line.kind === 'assistant') return assistant(line, pending, cwd);
@@ -184,7 +205,18 @@ export const mapClaudeLine = (line: ClaudeLine, pending: Pending, cwd: string): 
   if (line.kind === 'context') {
     return { events: [], context: { tokens: line.tokens, model: line.model } };
   }
-  const mapped = thinking(line, pending) ?? signal(line);
+  const mapped = thinking(line, pending) ?? signal(line, pending);
   if (mapped !== null) return mapped;
   return raw(line.kind === 'other' ? line.data : line);
+};
+
+const underParent = (mapped: Mapped, parent: string): Mapped => {
+  const { events, filesChanged } = mapped;
+  for (const event of events) event.parent = parent;
+  return { events, ...(filesChanged === undefined ? {} : { filesChanged }) };
+};
+
+export const mapClaudeLine = (line: ClaudeLine, pending: Pending, cwd: string): Mapped => {
+  const mapped = mapBody(line, pending, cwd);
+  return line.parent === undefined ? mapped : underParent(mapped, line.parent);
 };
