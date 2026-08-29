@@ -6,10 +6,11 @@ import { eventRows } from './event-rows.ts';
 import { stackTest as test } from './stack-test.ts';
 import type { Stack } from './start-stack.ts';
 
-// The one end-to-end flow (engineering.md § Testing): pair, start a session, watch the fake
-// agent's turn land, comment on a line of its diff, send the comment with a message, check
-// the agent was sent that message with the reference, then reload and check the timeline
-// comes back whole. Every wait is Playwright's own; nothing sleeps.
+// The one end-to-end flow (engineering.md § Testing): pair, open a second tab of the same
+// profile, start a session, watch the fake agent's turn land in both tabs, close the second,
+// comment on a line of its diff, send the comment with a message, check the agent was sent
+// that message with the reference, then reload and check the timeline comes back whole.
+// Every wait is Playwright's own; nothing sleeps.
 
 const firstPrompt = 'Read notes.txt and write greeting.txt';
 const secondPrompt = 'Change the greeting';
@@ -38,6 +39,17 @@ const pair = async (page: Page, stack: Stack): Promise<void> => {
         .map((worker) => worker.url()),
     )
     .toEqual([`${stack.pwaUrl}/sw.js`]);
+};
+
+// A second tab of the same browser profile is the same device on its own connection
+// (protocol.md § 3, Handshake): it handshakes with the stored key, and neither tab is
+// disturbed by the other's frames.
+const openSecondTab = async (page: Page, stack: Stack): Promise<Page> => {
+  const other = await page.context().newPage();
+  await other.goto(stack.pwaUrl);
+  await expect(other.getByText(connected)).toBeVisible();
+  await expect(page.getByText(connected)).toBeVisible();
+  return other;
 };
 
 const createSession = async (page: Page): Promise<void> => {
@@ -71,6 +83,20 @@ const firstTurn = async (page: Page): Promise<void> => {
     'notes.txt contains "hello", and greeting.txt has been created with "hi there".',
   );
   await expect(timeline.getByText('Agent idle')).toBeVisible();
+};
+
+// The second tab, which never spoke after its hello, got the turn too; closing it leaves
+// the first tab to carry the rest of the flow on its own.
+const secondTabSawTurn = async (other: Page): Promise<void> => {
+  await other
+    .getByRole('navigation', { name: 'Sessions' })
+    .getByRole('button', { name: 'e2e/greeting' })
+    .click();
+  await expect(other.locator('.timeline .item.assistant').last()).toHaveText(
+    'notes.txt contains "hello", and greeting.txt has been created with "hi there".',
+  );
+  await expect(other.getByText(connected)).toBeVisible();
+  await other.close();
 };
 
 const commentOnDiff = async (page: Page): Promise<void> => {
@@ -141,8 +167,11 @@ const reloadCold = async (page: Page, stack: Stack): Promise<void> => {
 
 test('pair, run an agent, comment on its diff, send, reload', async ({ page, stack }) => {
   await test.step('pair by pasting the link flux pair printed', () => pair(page, stack));
+  const other = await test.step('a second tab connects as the same device', () =>
+    openSecondTab(page, stack));
   await test.step('create a session on a new branch of the demo repo', () => createSession(page));
   await test.step('the reply and its tool calls arrive in the timeline', () => firstTurn(page));
+  await test.step('the second tab saw the turn too, then closes', () => secondTabSawTurn(other));
   await test.step('comment on a line of the diff', () => commentOnDiff(page));
   await test.step('send it with a message; the agent gets the reference', () =>
     sendWithComment(page, stack));

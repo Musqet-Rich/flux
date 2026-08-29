@@ -73,9 +73,12 @@ const deliver = (guest: Guest, data: string | Bytes): void => {
   });
 };
 
-const reply = async (guest: Guest, message: Wire): Promise<void> => {
+// Sealed for one guest, delivered to all: the relay broadcasts whatever the box sends, so
+// every guest sees the frames meant for the others (and for other tabs of its own device).
+const reply = async (state: State, guest: Guest, message: Wire): Promise<void> => {
   if (guest.channel === null) return;
-  deliver(guest, await guest.channel.seal(bytes.fromUtf8(JSON.stringify(message))));
+  const sealed = await guest.channel.seal(bytes.fromUtf8(JSON.stringify(message)));
+  for (const other of state.guests) deliver(other, sealed);
 };
 
 const refuse = (id: string, code: string, message: string): Wire => ({
@@ -104,7 +107,7 @@ const resultOf = (state: State, id: string, method: string, params: unknown): Wi
 
 const answer = (state: State, guest: Guest, id: string, method: string, params: unknown): void => {
   state.calls.push({ method, params });
-  void reply(guest, resultOf(state, id, method, params));
+  void reply(state, guest, resultOf(state, id, method, params));
 };
 
 const boxHandshake = async (state: State, guest: Guest, payload: Bytes): Promise<void> => {
@@ -209,7 +212,7 @@ export const createFakeRelay = async (handlers: Handlers): Promise<FakeRelay> =>
     refusedCalls: new Map(),
   };
   const broadcast = async (message: Wire): Promise<void> => {
-    await Promise.all([...state.guests].map((guest) => reply(guest, message)));
+    await Promise.all([...state.guests].map((guest) => reply(state, guest, message)));
   };
   const control = (type: string): void => {
     for (const guest of state.guests) deliver(guest, JSON.stringify({ type }));

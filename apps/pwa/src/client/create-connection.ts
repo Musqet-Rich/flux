@@ -1,5 +1,5 @@
 import type { Bytes, Channel, Ephemeral, FluxEvent, KeyPair } from '@flux/protocol';
-import { bytes, protocolVersion, relayMessage, room, wire } from '@flux/protocol';
+import { ProtocolError, bytes, protocolVersion, relayMessage, room, wire } from '@flux/protocol';
 
 import { ClientError } from './client-error.ts';
 import type { RpcCall } from './create-rpc-client.ts';
@@ -33,6 +33,7 @@ export interface ConnectionOptions {
   onStatus?: (status: ConnectionStatus) => void;
   minBackoffMs?: number;
   maxBackoffMs?: number;
+  keepaliveMs?: number;
 }
 
 interface State {
@@ -45,9 +46,12 @@ interface State {
   channel: Channel | null;
   backoffMs: number;
   timer: ReturnType<typeof setTimeout> | null;
+  keepalive: ReturnType<typeof setInterval> | null;
   waiters: { resolve: () => void; reject: (e: ClientError) => void }[];
   rpc: ReturnType<typeof createRpcClient>;
 }
+
+const defaultKeepaliveMs = 60_000;
 
 const wsUrl = (relayUrl: string, roomId: string): string => {
   const url = new URL(relayUrl);
@@ -67,7 +71,21 @@ const setStatus = (state: State, status: ConnectionStatus): void => {
   }
 };
 
+// The box keeps a channel per handshake and, since the relay never tells it a guest left,
+// drops the one it heard from least recently once a device is past the relay's guest cap
+// (protocol.md § 3, Handshake). A tab that only watches would be that one, so every tab says
+// hello now and then; the reply is not needed, being heard is.
+const keepAlive = (state: State): void => {
+  if (state.keepalive !== null) clearInterval(state.keepalive);
+  state.keepalive = setInterval(() => {
+    if (state.channel === null) return;
+    void state.rpc.call('hello', { protocol: protocolVersion }).catch(() => null);
+  }, state.options.keepaliveMs ?? defaultKeepaliveMs);
+};
+
 const dropChannel = (state: State, reason: string): void => {
+  if (state.keepalive !== null) clearInterval(state.keepalive);
+  state.keepalive = null;
   state.channel = null;
   state.handshake = null;
   state.rpc.rejectAll(new ClientError('offline', reason));
@@ -109,9 +127,24 @@ const dispatch = (state: State, plaintext: Bytes): void => {
   else state.rpc.receive(message);
 };
 
+// The relay broadcasts every frame the box sends to every guest. Once this channel is up,
+// a frame that is not for it is not only one with another device's fingerprint (`null`): a
+// box hello for a guest handshaking after us, or a frame sealed for another tab of this same
+// device (same fingerprint, its own keys and counters), fails to open with a ProtocolError.
+// Those are dropped, as the box drops frames that open on none of a device's channels
+// (protocol.md § 3, Handshake); anything else is ours and is fatal.
+const openOnChannel = async (channel: Channel, data: Bytes): Promise<Bytes | null> => {
+  try {
+    return await channel.open(data);
+  } catch (error) {
+    if (error instanceof ProtocolError) return null;
+    throw error;
+  }
+};
+
 const onBinary = async (state: State, data: Bytes): Promise<void> => {
   if (state.channel !== null) {
-    const plaintext = await state.channel.open(data);
+    const plaintext = await openOnChannel(state.channel, data);
     if (plaintext !== null) dispatch(state, plaintext);
     return;
   }
@@ -120,6 +153,7 @@ const onBinary = async (state: State, data: Bytes): Promise<void> => {
   if (channel === null) return;
   state.channel = channel;
   state.backoffMs = state.options.minBackoffMs ?? 1000;
+  keepAlive(state);
   setStatus(state, 'connected');
 };
 
@@ -208,6 +242,7 @@ export const createConnection = async (options: ConnectionOptions): Promise<Conn
     channel: null,
     backoffMs: options.minBackoffMs ?? 1000,
     timer: null,
+    keepalive: null,
     waiters: [],
     rpc: createRpcClient({
       send: (message) => {

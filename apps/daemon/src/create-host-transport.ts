@@ -36,7 +36,7 @@ interface State {
   stopped: boolean;
   backoffMs: number;
   timer: ReturnType<typeof setTimeout> | null;
-  // Incoming frames are handled one at a time so the per-device nonce counters stay ordered.
+  // Incoming frames are handled one at a time so each channel's nonce counters stay ordered.
   queue: Promise<void>;
 }
 

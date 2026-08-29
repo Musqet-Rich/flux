@@ -37,12 +37,12 @@ export const deviceHandshake = async (
       payload: bytes.fromUtf8(JSON.stringify(hello)),
     }),
     fingerprint,
-    // `null` when the reply is a box hello for another guest in the room.
+    // `null` when the frame is not our reply: a box hello for another guest in the room, or
+    // a data frame the box sent another guest (another tab of this device included) while
+    // we wait; the relay broadcasts both to everyone.
     complete: async (data) => {
       const decoded = frame.decode(data);
-      if (decoded.kind !== frame.kind.handshake) {
-        throw new ClientError('bad_reply', 'expected a handshake frame');
-      }
+      if (decoded.kind !== frame.kind.handshake) return null;
       const reply: unknown = JSON.parse(bytes.toUtf8(new Uint8Array(decoded.payload)));
       if (!handshake.isBoxHello(reply)) throw new ClientError('bad_reply', 'expected a box hello');
       if (reply.to !== fingerprint) return null;
