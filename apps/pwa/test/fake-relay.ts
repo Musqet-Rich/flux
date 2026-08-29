@@ -45,6 +45,9 @@ export interface FakeRelay {
   refuseCall: (method: string, code: string) => void;
   // Makes the box claim this protocol version in its hello: it then derives no channel.
   boxVersion: (v: number) => void;
+  // Makes the box drop every data frame unanswered, as it does for a channel whose keys differ
+  // from the device's (protocol.md § 3, key confirmation); the handshake still completes.
+  mute: (on: boolean) => void;
   guests: () => number;
 }
 
@@ -65,6 +68,7 @@ interface State {
   refusal: 'room_full' | null;
   refusedCalls: Map<string, string>;
   version: number;
+  muted: boolean;
 }
 
 const later = (fn: () => void): void => {
@@ -149,7 +153,7 @@ const boxHandshake = async (state: State, guest: Guest, payload: Bytes): Promise
 const boxReceive = async (state: State, guest: Guest, data: Bytes): Promise<void> => {
   const decoded = frame.decode(data);
   if (decoded.kind === frame.kind.handshake) return boxHandshake(state, guest, decoded.payload);
-  if (guest.channel === null) return;
+  if (guest.channel === null || state.muted) return;
   const plaintext = await guest.channel.open(data);
   if (plaintext === null) return;
   const message: unknown = JSON.parse(bytes.toUtf8(plaintext));
@@ -202,20 +206,8 @@ const guestSocket = (state: State): Socket => {
   };
 };
 
-export const createFakeRelay = async (handlers: Handlers): Promise<FakeRelay> => {
-  const boxKeys = await handshake.generateKeyPair();
-  const state: State = {
-    boxKeys,
-    roomId: await room.id(boxKeys.publicKey),
-    guests: new Set(),
-    calls: [],
-    // Handlers are looked up by method name; the map type is what the wire gives us.
-    handlers: handlers as State['handlers'],
-    hostPresent: true,
-    refusal: null,
-    refusedCalls: new Map(),
-    version: protocolVersion,
-  };
+// Everything the box's side of the fake can be told to do from a test.
+const boxControls = (state: State): Omit<FakeRelay, 'socket' | 'boxPub' | 'calls' | 'guests'> => {
   const broadcast = async (message: Wire): Promise<void> => {
     await Promise.all([...state.guests].map((guest) => reply(state, guest, message)));
   };
@@ -223,9 +215,6 @@ export const createFakeRelay = async (handlers: Handlers): Promise<FakeRelay> =>
     for (const guest of state.guests) deliver(guest, JSON.stringify({ type }));
   };
   return {
-    socket: () => guestSocket(state),
-    boxPub: boxKeys.publicKey,
-    calls: state.calls,
     emit: (event) => broadcast({ kind: 'event', event }),
     ephemeral: (data) => broadcast({ kind: 'ephemeral', data }),
     hostLeave: () => {
@@ -249,6 +238,32 @@ export const createFakeRelay = async (handlers: Handlers): Promise<FakeRelay> =>
     boxVersion: (v) => {
       state.version = v;
     },
+    mute: (on) => {
+      state.muted = on;
+    },
+  };
+};
+
+export const createFakeRelay = async (handlers: Handlers): Promise<FakeRelay> => {
+  const boxKeys = await handshake.generateKeyPair();
+  const state: State = {
+    boxKeys,
+    roomId: await room.id(boxKeys.publicKey),
+    guests: new Set(),
+    calls: [],
+    // Handlers are looked up by method name; the map type is what the wire gives us.
+    handlers: handlers as State['handlers'],
+    hostPresent: true,
+    refusal: null,
+    refusedCalls: new Map(),
+    version: protocolVersion,
+    muted: false,
+  };
+  return {
+    socket: () => guestSocket(state),
+    boxPub: boxKeys.publicKey,
+    calls: state.calls,
     guests: () => state.guests.size,
+    ...boxControls(state),
   };
 };

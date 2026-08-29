@@ -45,6 +45,7 @@ export interface ConnectionOptions {
   minBackoffMs?: number;
   maxBackoffMs?: number;
   keepaliveMs?: number;
+  rpcTimeoutMs?: number;
 }
 
 interface State {
@@ -55,6 +56,8 @@ interface State {
   joined: boolean;
   handshake: DeviceHandshake | null;
   channel: Channel | null;
+  // Calls on the channel, bound to its socket; `null` while there is no channel.
+  call: RpcCall | null;
   backoffMs: number;
   timer: ReturnType<typeof setTimeout> | null;
   keepalive: ReturnType<typeof setInterval> | null;
@@ -73,6 +76,25 @@ const setStatus = (state: State, status: ConnectionStatus): void => {
   }
 };
 
+// The device's first data frame is its `hello`, and the box's key confirmation (protocol.md
+// § 3): a box that derived other keys drops the channel and answers nothing. So a `hello` that
+// times out, the first one or a keepalive, means this channel is dead, not slow: the socket is
+// closed for a fresh handshake rather than kept up with a channel that never decrypts. Any
+// answer, an error included, confirms the keys; other methods may take as long as they take.
+const callOn = (state: State, socket: Socket): RpcCall => {
+  const dead = (error: unknown): boolean =>
+    error instanceof ClientError && error.code === 'timeout' && state.socket === socket;
+  return (method, params) => {
+    const result = state.rpc.call(method, params);
+    if (method === 'hello') {
+      void result.catch((error: unknown) => {
+        if (dead(error)) socket.close();
+      });
+    }
+    return result;
+  };
+};
+
 // The box keeps a channel per handshake and, since the relay never tells it a guest left,
 // drops the one it heard from least recently once a device is past the relay's guest cap
 // (protocol.md § 3, Handshake). A tab that only watches would be that one, so every tab says
@@ -80,8 +102,7 @@ const setStatus = (state: State, status: ConnectionStatus): void => {
 const keepAlive = (state: State): void => {
   if (state.keepalive !== null) clearInterval(state.keepalive);
   state.keepalive = setInterval(() => {
-    if (state.channel === null) return;
-    void state.rpc.call('hello', { protocol: protocolVersion }).catch(() => null);
+    void state.call?.('hello', { protocol: protocolVersion }).catch(() => null);
   }, state.options.keepaliveMs ?? defaultKeepaliveMs);
 };
 
@@ -89,6 +110,7 @@ const dropChannel = (state: State, reason: string): void => {
   if (state.keepalive !== null) clearInterval(state.keepalive);
   state.keepalive = null;
   state.channel = null;
+  state.call = null;
   state.handshake = null;
   state.rpc.rejectAll(new ClientError('offline', reason));
 };
@@ -144,7 +166,7 @@ const openOnChannel = async (channel: Channel, data: Bytes): Promise<Bytes | nul
   }
 };
 
-const onBinary = async (state: State, data: Bytes): Promise<void> => {
+const onBinary = async (state: State, socket: Socket, data: Bytes): Promise<void> => {
   if (state.channel !== null) {
     const plaintext = await openOnChannel(state.channel, data);
     if (plaintext !== null) dispatch(state, plaintext);
@@ -154,6 +176,7 @@ const onBinary = async (state: State, data: Bytes): Promise<void> => {
   const channel = await state.handshake.complete(data);
   if (channel === null) return;
   state.channel = channel;
+  state.call = callOn(state, socket);
   state.backoffMs = state.options.minBackoffMs ?? 1000;
   keepAlive(state);
   setStatus(state, 'connected');
@@ -190,7 +213,7 @@ const open = (state: State): void => {
     message: (data) => {
       if (typeof data === 'string') onText(state, data);
       else
-        void onBinary(state, data).catch((error: unknown) => {
+        void onBinary(state, socket, data).catch((error: unknown) => {
           failHandshake(state, socket, error);
         });
     },
@@ -264,6 +287,7 @@ export const createConnection = async (options: ConnectionOptions): Promise<Conn
     joined: false,
     handshake: null,
     channel: null,
+    call: null,
     backoffMs: options.minBackoffMs ?? 1000,
     timer: null,
     keepalive: null,
@@ -272,6 +296,7 @@ export const createConnection = async (options: ConnectionOptions): Promise<Conn
       send: (message) => {
         send(state, message);
       },
+      ...(options.rpcTimeoutMs === undefined ? {} : { timeoutMs: options.rpcTimeoutMs }),
     }),
   };
   return {
@@ -282,10 +307,10 @@ export const createConnection = async (options: ConnectionOptions): Promise<Conn
       stop(state);
     },
     call: (method, params) => {
-      if (state.channel === null) {
+      if (state.call === null) {
         return Promise.reject(new ClientError('offline', 'not connected'));
       }
-      return state.rpc.call(method, params);
+      return state.call(method, params);
     },
     status: () => state.status,
     connected: () => connected(state),
