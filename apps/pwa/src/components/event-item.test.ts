@@ -200,3 +200,18 @@ test('the reply chip skips blank leading lines and names a source the log lacks'
   });
   expect(gone.find('.quote').text()).toBe('↩ earlier message');
 });
+
+test('a user message lists its attachments under the text, thumbnails where fetched', () => {
+  const attachments = [
+    { id: 'a1', name: 'shot.png', mime: 'image/png', size: 75, image: true },
+    { id: 'a2', name: 'notes.txt', mime: 'text/plain', size: 5, image: false },
+  ];
+  const user = mount(EventItem, {
+    props: { event: ev('msg.user', { text: 'look', attachments }), thumbs: { a1: 'blob:x' } },
+  });
+  expect(user.find('.markdown').text()).toBe('look');
+  expect(user.find('.files .image img').attributes('src')).toBe('blob:x');
+  expect(user.find('.files .plain .name').text()).toBe('notes.txt');
+  const bare = mount(EventItem, { props: { event: ev('msg.user', { text: 'plain' }) } });
+  expect(bare.find('.files').exists()).toBe(false);
+});

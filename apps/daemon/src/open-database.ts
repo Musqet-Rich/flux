@@ -60,6 +60,18 @@ const schema = `
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS attachments (
+    id TEXT PRIMARY KEY,
+    session TEXT NOT NULL,
+    name TEXT NOT NULL,
+    mime TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    hash TEXT NOT NULL,
+    complete INTEGER NOT NULL DEFAULT 0,
+    sent_seq INTEGER,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS attachments_session ON attachments (session);
 `;
 
 // Columns a pre-release database lacks, added in place so a box paired before them keeps working.

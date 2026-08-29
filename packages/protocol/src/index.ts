@@ -1,5 +1,7 @@
 // Public surface of @flux/protocol. Everything crossing the wire is defined in the modules
 // below and nowhere else (docs/protocol.md).
+export type { Attachment, AttachmentLimits } from './attachment.ts';
+export { attachment } from './attachment.ts';
 export { base64url } from './base64url.ts';
 export type { Bytes } from './bytes.ts';
 export { bytes } from './bytes.ts';

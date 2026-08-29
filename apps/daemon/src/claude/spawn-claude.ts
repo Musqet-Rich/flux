@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 
+import type { ImageBlock } from '../attachment-images.ts';
 import type { CloseChildOptions } from '../close-child.ts';
 import { closeChild } from '../close-child.ts';
 import { killChildGroup } from '../kill-child-group.ts';
@@ -10,7 +11,9 @@ import { killChildGroup } from '../kill-child-group.ts';
 // command is injectable so tests drive a fixture-replaying fake instead of the real binary.
 
 export interface AgentProcess {
-  send: (text: string) => void;
+  // `images` go with the text as content blocks (ADR 0020); without any, the message is the
+  // plain string it always was.
+  send: (text: string, images?: ImageBlock[]) => void;
   // Stops the current run. Claude has no in-band abort, so this ends the process; pi keeps it.
   interrupt: () => void;
   onLine: (listener: (line: string) => void) => void;
@@ -58,6 +61,19 @@ const claudeArgs = (options: SpawnClaudeOptions): string[] => [
     : ['--mcp-config', options.mcpConfig, '--append-system-prompt', fluxPrompt]),
 ];
 
+// The message content as the API takes it: a string, or blocks when images ride along
+// (verified against fixtures/claude/session-image-block: the model answered from the image).
+const content = (text: string, images: ImageBlock[]): unknown =>
+  images.length === 0
+    ? text
+    : [
+        { type: 'text', text },
+        ...images.map((image) => ({
+          type: 'image',
+          source: { type: 'base64', media_type: image.mediaType, data: image.data },
+        })),
+      ];
+
 export const spawnClaude = (options: SpawnClaudeOptions): AgentProcess => {
   const child = spawn(options.command ?? 'claude', claudeArgs(options), {
     cwd: options.cwd,
@@ -84,8 +100,8 @@ export const spawnClaude = (options: SpawnClaudeOptions): AgentProcess => {
   });
 
   return {
-    send: (text) => {
-      const message = { type: 'user', message: { role: 'user', content: text } };
+    send: (text, images = []) => {
+      const message = { type: 'user', message: { role: 'user', content: content(text, images) } };
       child.stdin.write(`${JSON.stringify(message)}\n`);
     },
     interrupt: () => {

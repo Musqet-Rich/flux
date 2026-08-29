@@ -66,6 +66,11 @@ const handlers: RpcHandlers = {
   'devices.remove': unimplemented,
   'settings.get': unimplemented,
   'settings.set': unimplemented,
+  'attach.begin': unimplemented,
+  'attach.chunk': unimplemented,
+  'attach.end': unimplemented,
+  'attach.read': unimplemented,
+  'attach.delete': unimplemented,
 };
 
 const router = createRpcRouter(handlers);

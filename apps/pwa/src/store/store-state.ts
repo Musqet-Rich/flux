@@ -54,6 +54,29 @@ export interface Draft {
   text: string;
 }
 
+// A file on the composer (ADR 0020): uploading from the moment it is added, `ready` once the
+// box has it whole, `failed` with the reason otherwise. `key` is the chip's own id; `id` the
+// box's, once `attach.begin` has answered. `preview` is an object URL of the local image.
+export interface PendingAttachment {
+  key: string;
+  id: string | null;
+  name: string;
+  mime: string;
+  size: number;
+  image: boolean;
+  preview: string | null;
+  status: 'uploading' | 'ready' | 'failed';
+  progress: number;
+  error: string | null;
+}
+
+// The composer's unsent state per session: the text and the attachments, kept across
+// navigation like an editor draft.
+export interface ComposerDraft {
+  text: string;
+  attachments: PendingAttachment[];
+}
+
 // Where an error came from decides how long it stays (store-errors.ts): an `action` error goes
 // on its own, a `connection` error waits for the condition to clear or a dismissal.
 export type ErrorKind = 'action' | 'connection';
@@ -75,6 +98,9 @@ export interface StoreState {
   rateWindows: RateWindow[];
   logs: Record<string, LogView>;
   drafts: Record<string, Draft>;
+  composers: Record<string, ComposerDraft>;
+  // Blob URLs of fetched image attachments by attachment id (attachment-actions.ts).
+  thumbs: Record<string, string>;
   // The settings screen's data, fetched when it opens; null until then.
   devices: Device[];
   settings: Settings | null;
@@ -111,6 +137,11 @@ export interface StoreInternals {
   errorTimer: (() => void) | null;
   // The standing connection error, kept while an action error covers it (store-errors.ts).
   connectionError: StoreError | null;
+  // The composer's files by chip key, off the reactive state (attachment-actions.ts).
+  files: Map<string, File>;
+  // Thumbnail fetches in flight or done, by attachment id, and which session each belongs to.
+  thumbLoads: Map<string, Promise<void>>;
+  thumbOwners: Map<string, Set<string>>;
 }
 
 // A fresh, empty state, before boot.
@@ -126,6 +157,8 @@ export const storeState = (): StoreState =>
     rateWindows: [],
     logs: {},
     drafts: {},
+    composers: {},
+    thumbs: {},
     devices: [],
     settings: null,
   });

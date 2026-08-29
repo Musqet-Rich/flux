@@ -213,3 +213,30 @@ test('kill ends a stubborn agent without waiting, deliberately', async () => {
     expect.objectContaining({ state: 'ended' }),
   );
 });
+
+const imageFixture = fileURLToPath(
+  new URL('../test/fixtures/claude/session-image-block.jsonl', import.meta.url),
+);
+const png = fileURLToPath(new URL('../test/red.png', import.meta.url));
+
+// The attached files are logged on the message and rendered into the prompt; an image within
+// the block limit is flagged so the device knows a thumbnail is worth fetching. The fixture is
+// the real binary's answer to that prompt with the image block.
+test('attachments are logged on the message, listed in the prompt and images flagged', async () => {
+  const { supervisor, log, emitted } = await setup({ FLUX_FAKE_FIXTURE: imageFixture });
+  const seq = await supervisor.send('What colour?', [], [], null, [
+    { id: 'a1', name: 'red.png', mime: 'image/png', size: 75, path: png },
+    { id: 'a2', name: 'notes.txt', mime: 'text/plain', size: 5, path: '/nowhere/notes.txt' },
+  ]);
+  const user = log.read('s1', seq - 1, 1).events[0];
+  expect(user?.payload).toEqual({
+    text: 'What colour?',
+    attachments: [
+      { id: 'a1', name: 'red.png', mime: 'image/png', size: 75, image: true },
+      { id: 'a2', name: 'notes.txt', mime: 'text/plain', size: 5, image: false },
+    ],
+  });
+  const reply = await untilEvent(emitted, 'msg.assistant');
+  expect(reply.payload).toEqual({ text: 'red' });
+  await supervisor.close();
+});

@@ -128,4 +128,15 @@ export const rpcResults: ResultGuards = {
   'devices.remove': isEmpty,
   'settings.get': settings.is,
   'settings.set': settings.is,
+  'attach.begin': (v): v is { attachmentId: string } => isRecord(v) && isString(v['attachmentId']),
+  'attach.chunk': isEmpty,
+  'attach.end': (v): v is { path: string; size: number } =>
+    isRecord(v) && isString(v['path']) && isInteger(v['size']),
+  'attach.read': (v): v is RpcMethods['attach.read']['result'] =>
+    isRecord(v) &&
+    isString(v['data']) &&
+    isInteger(v['size']) &&
+    isString(v['mime']) &&
+    isString(v['name']),
+  'attach.delete': isEmpty,
 };

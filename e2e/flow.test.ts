@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import { expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 
 import { eventRows } from './event-rows.ts';
 import { stackTest as test } from './stack-test.ts';
@@ -9,20 +10,35 @@ import type { Stack } from './start-stack.ts';
 // The one end-to-end flow (engineering.md § Testing): pair, open a second tab of the same
 // profile, start a session, watch the fake agent's turn land in both tabs, close the second,
 // comment on a line of its diff, send the comment with a message, check the agent was sent
-// that message with the reference, then reload and check the timeline comes back whole.
-// Every wait is Playwright's own; nothing sleeps.
+// that message with the reference, attach an image and check the agent was sent it as a
+// block, then reload and check the timeline comes back whole. Every wait is Playwright's own;
+// nothing sleeps.
 
 const firstPrompt = 'Read notes.txt and write greeting.txt';
 const secondPrompt = 'Change the greeting';
+const thirdPrompt = 'What colour is this?';
 const connected = /^Connected to flux@/u;
+const png = fileURLToPath(new URL('./red.png', import.meta.url));
+
+// A stream-json user message's content: a string, or blocks once an image rides along.
+type Block = { type: 'text'; text: string } | { type: 'image'; source: { data: string } };
+type Content = string | Block[];
 
 // The lines the daemon wrote to the agent's stdin, one JSON message each. The file exists
 // from the first prompt on, so a missing one is a failure, not something to wait out.
-const agentMessages = async (path: string): Promise<string[]> =>
+const agentContents = async (path: string): Promise<Content[]> =>
   (await readFile(path, 'utf8'))
     .split('\n')
     .filter((line) => line !== '')
-    .map((line) => (JSON.parse(line) as { message: { content: string } }).message.content);
+    .map((line) => (JSON.parse(line) as { message: { content: Content } }).message.content);
+
+const textOf = (content: Content): string =>
+  typeof content === 'string'
+    ? content
+    : content.map((block) => (block.type === 'text' ? block.text : '')).join('');
+
+const agentMessages = async (path: string): Promise<string[]> =>
+  (await agentContents(path)).map((content) => textOf(content));
 
 const pair = async (page: Page, stack: Stack): Promise<void> => {
   await page.goto(stack.pwaUrl);
@@ -128,6 +144,40 @@ const sendWithComment = async (page: Page, stack: Stack): Promise<void> => {
     .toEqual([firstPrompt, `${secondPrompt}\n\n\`\`\`greeting.txt:1-1\nhi there\n\`\`\``]);
 };
 
+// A PNG picked through the + button's file input shows as a chip with a thumbnail, uploads,
+// and goes with the message: the bubble shows the thumbnail (fetched back from the box), and
+// the agent's stdin carries the image as a base64 block beside the text (ADR 0020).
+const attachImage = async (page: Page, stack: Stack): Promise<void> => {
+  const timeline = page.locator('.timeline');
+  await page.locator('.composer input[type="file"]').setInputFiles(png);
+  await expect(page.locator('.chip .name')).toHaveText('red.png');
+  await expect(page.locator('.chip img')).toBeVisible();
+  await page.getByPlaceholder('Message the agent').fill(thirdPrompt);
+  await expect(page.getByRole('button', { name: 'Send' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Send' }).click();
+  await expect(page.locator('.chip')).toHaveCount(0);
+  const bubble = timeline.locator('.item.user').last();
+  await expect(bubble.locator('.markdown')).toHaveText(thirdPrompt);
+  await expect(bubble.locator('.files img')).toBeVisible();
+  await expect(bubble.locator('.files img')).toHaveAttribute('src', /^blob:/u);
+  // The fake cycles through the fixture's two turns, so the third message gets the first reply.
+  await expect(timeline.locator('.item.assistant').last()).toHaveText(
+    'notes.txt contains "hello", and greeting.txt has been created with "hi there".',
+  );
+  const data = (await readFile(png)).toString('base64');
+  await expect
+    .poll(async () => (await agentContents(stack.agentStdin)).at(-1))
+    .toEqual([
+      {
+        type: 'text',
+        text: expect.stringMatching(
+          /^What colour is this\?\n\nAttached: .*red\.png \(image\/png, 75 B\)$/u,
+        ),
+      },
+      { type: 'image', source: { type: 'base64', media_type: 'image/png', data } },
+    ]);
+};
+
 // Every IndexedDB database the page has, deleted; the page's own connection closes on the
 // reload that follows, which is when a blocked deletion goes through. A string, not a
 // function: the harness is a Node program and has no DOM types to write this against.
@@ -166,10 +216,13 @@ const reloadCold = async (page: Page, stack: Stack): Promise<void> => {
 };
 
 // Archiving takes the session off the strip and into the Archived section of the list screen;
-// reopening brings it back with its timeline whole.
+// reopening brings it back with its timeline whole. Archiving deleted the session's
+// attachments (ADR 0020), so the image row now shows the file's name and size in its place.
 const archiveAndReopen = async (page: Page): Promise<void> => {
   const items = page.locator('.timeline .item');
-  const before = await items.allInnerTexts();
+  const before = (await items.allInnerTexts()).map((text) =>
+    text === thirdPrompt ? `${thirdPrompt}📄red.png75 B` : text,
+  );
   await page.getByRole('button', { name: 'Session menu' }).click();
   await page.getByRole('menuitem', { name: 'Archive' }).click();
   await expect(page.getByText('No sessions yet.')).toBeVisible();
@@ -193,6 +246,7 @@ test('pair, run an agent, comment on its diff, send, reload', async ({ page, sta
   await test.step('comment on a line of the diff', () => commentOnDiff(page));
   await test.step('send it with a message; the agent gets the reference', () =>
     sendWithComment(page, stack));
+  await test.step('attach an image; the agent gets it as a block', () => attachImage(page, stack));
   await test.step('wiped and reloaded, the timeline is the event log, whole', () =>
     reloadCold(page, stack));
   await test.step('archived into the list, reopened with its timeline', () =>

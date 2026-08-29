@@ -339,7 +339,7 @@ const pairedSession = async () => {
   })) as { session: string };
   const { session } = created;
   const worktree = join(root, 'data', 'worktrees', session);
-  return { repo, d, session, worktree };
+  return { repo, root, d, session, worktree };
 };
 
 // Two devices edit one file: the second save carries a stale hash and is refused without

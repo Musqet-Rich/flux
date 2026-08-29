@@ -1,0 +1,43 @@
+{
+  "code": 0,
+  "signal": null,
+  "args": [
+    "-p",
+    "--input-format",
+    "stream-json",
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--include-partial-messages",
+    "--dangerously-skip-permissions",
+    "--model",
+    "claude-haiku-4-5",
+    "--setting-sources",
+    "project",
+    "--disable-slash-commands"
+  ],
+  "agent": "Claude Code",
+  "version": "2.1.251",
+  "capturedAt": "2026-08-29",
+  "input": {
+    "type": "user",
+    "message": {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "What single colour is the attached image? Answer with just the colour word, nothing else.\n\nAttached: /private/tmp/claude-501/-Users-richhenderson-code-flux/73ccd0c9-0938-49eb-9548-e002f2d31a8d/scratchpad/attachments-capture/work/red.png (image/png, 75 B)"
+        },
+        {
+          "type": "image",
+          "source": {
+            "type": "base64",
+            "media_type": "image/png",
+            "data": "<100 base64 chars of an 8x8 red PNG>"
+          }
+        }
+      ]
+    }
+  },
+  "source": "Raw stdout of one `claude -p` run given a single stream-json user message whose content is a text block followed by a base64 image block (an 8x8 solid red PNG, test/red.png), exactly as the daemon sends an image attachment (spawn-claude.ts). The reply names the colour, which shows the image block was accepted and seen. Captured by scratch capture.mjs; nothing edited."
+}

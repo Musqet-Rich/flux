@@ -6,6 +6,7 @@ import * as protocol from './index.ts';
 test('exports every runtime module', () => {
   expect(Object.keys(protocol).toSorted()).toEqual([
     'ProtocolError',
+    'attachment',
     'base64url',
     'bytes',
     'compress',

@@ -150,7 +150,7 @@ Explicitly rejected, with the reason, so nobody re-proposes them:
 - The relay logs no room ids, no IPs beyond rate-limit counters held in memory.
 - All randomness from `crypto.getRandomValues` / `crypto.randomBytes`.
 - Nonces are counters, never random, and never reused (see `protocol.md`).
-- The PWA sets a strict CSP served by the relay: `default-src 'self'; connect-src 'self' wss:; img-src 'self' data:`.
+- The PWA sets a strict CSP served by the relay: `default-src 'self'; connect-src 'self' wss:; img-src 'self' data: blob:` (`blob:` for attachment thumbnails shown from object URLs).
 - GitHub Actions are pinned to full commit SHAs with the tag in a trailing comment; Dependabot proposes bumps for actions only. npm stays on the manual ledger process.
 - Dependency updates are reviewed diffs, not blind bumps.
 

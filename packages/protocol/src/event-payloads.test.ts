@@ -56,6 +56,16 @@ const cases: [EventType, unknown, boolean][] = [
   ['msg.user', { text: 'hi', replyTo: 0 }, false],
   ['msg.user', { text: 'hi', replyTo: '3' }, false],
   ['msg.user', { text: 1 }, false],
+  [
+    'msg.user',
+    {
+      text: 'hi',
+      attachments: [{ id: 'a', name: 'n', mime: 'text/plain', size: 1, image: false }],
+    },
+    true,
+  ],
+  ['msg.user', { text: 'hi', attachments: [{ id: 'a', name: 'n' }] }, false],
+  ['msg.user', { text: 'hi', attachments: 'a' }, false],
   ['msg.assistant', { text: '' }, true],
   ['msg.assistant', { text: undefined }, false],
   ['tool.start', { toolId: 't', name: 'Bash', input: null, summary: 's' }, true],

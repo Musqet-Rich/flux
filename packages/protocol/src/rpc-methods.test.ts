@@ -43,6 +43,8 @@ const cases: [RpcMethod, unknown, boolean][] = [
   ['agent.send', { ...s, text: 'go', replyTo: 2 }, true],
   ['agent.send', { ...s, text: 'go', replyTo: 1.5 }, false],
   ['agent.send', { ...s }, false],
+  ['agent.send', { ...s, text: 'go', attachments: ['a', 'b'] }, true],
+  ['agent.send', { ...s, text: 'go', attachments: 'a' }, false],
   ['agent.answer', { ...s, askId: 'a', answer: 'y' }, true],
   ['agent.answer', { ...s, askId: 'a' }, false],
   ['agent.interrupt', s, true],
@@ -105,6 +107,27 @@ const cases: [RpcMethod, unknown, boolean][] = [
   ['settings.set', {}, true],
   ['settings.set', { flux: { reposDir: '/r' }, agent: { claudeMd: '' } }, true],
   ['settings.set', { flux: { reposDir: 1 } }, false],
+  ['attach.begin', { ...s, name: 'a.png', mime: 'image/png', size: 0 }, true],
+  ['attach.begin', { ...s, name: 'a.png', mime: 'image/png', size: -1 }, false],
+  ['attach.begin', { ...s, name: 'a.png', mime: 'image/png' }, false],
+  ['attach.begin', { ...s, name: 1, mime: 'image/png', size: 1 }, false],
+  ['attach.begin', { ...s, name: 'a', mime: 1, size: 1 }, false],
+  ['attach.begin', { name: 'a', mime: 'image/png', size: 1 }, false],
+  ['attach.chunk', { attachmentId: 'a', index: 0, data: 'AA==' }, true],
+  ['attach.chunk', { attachmentId: 'a', index: -1, data: 'AA==' }, false],
+  ['attach.chunk', { attachmentId: 'a', index: 0 }, false],
+  ['attach.chunk', { index: 0, data: '' }, false],
+  ['attach.end', { attachmentId: 'a', hash: 'ab' }, true],
+  ['attach.end', { attachmentId: 'a' }, false],
+  ['attach.end', { hash: 'ab' }, false],
+  ['attach.read', { attachmentId: 'a', offset: 0, length: 1 }, true],
+  ['attach.read', { attachmentId: 'a', offset: 0, length: 512 * 1024 }, true],
+  ['attach.read', { attachmentId: 'a', offset: 0, length: 512 * 1024 + 1 }, false],
+  ['attach.read', { attachmentId: 'a', offset: 0, length: 0 }, false],
+  ['attach.read', { attachmentId: 'a', offset: -1, length: 1 }, false],
+  ['attach.read', { attachmentId: 1, offset: 0, length: 1 }, false],
+  ['attach.delete', { attachmentId: 'a' }, true],
+  ['attach.delete', {}, false],
 ];
 
 test.each(cases)('%s params %j accepted=%s', (method, value, expected) => {
@@ -112,5 +135,5 @@ test.each(cases)('%s params %j accepted=%s', (method, value, expected) => {
 });
 
 test('covers every method in protocol.md § 7', () => {
-  expect(Object.keys(rpcMethods)).toHaveLength(32);
+  expect(Object.keys(rpcMethods)).toHaveLength(37);
 });

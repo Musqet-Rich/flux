@@ -20,7 +20,14 @@ export interface ArchiveParams {
 
 type Ctx = Pick<
   HandlerContext,
-  'sessions' | 'git' | 'log' | 'asks' | 'worktreesDir' | 'closeSupervisor' | 'forgetAgentSession'
+  | 'sessions'
+  | 'git'
+  | 'log'
+  | 'asks'
+  | 'attachments'
+  | 'worktreesDir'
+  | 'closeSupervisor'
+  | 'forgetAgentSession'
 >;
 
 const exists = (path: string): Promise<boolean> =>
@@ -79,6 +86,8 @@ const archive = async (ctx: Ctx, params: ArchiveParams): Promise<Record<string, 
   }
   ctx.sessions.setArchived(record.session, true);
   ctx.forgetAgentSession(record.session);
+  // The files the operator sent it go with the session (ADR 0020); the log keeps their names.
+  await ctx.attachments.removeSession(record.session);
   return {};
 };
 

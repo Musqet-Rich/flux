@@ -20,6 +20,7 @@ test('creates the schema and is idempotent on reopen', async () => {
     .all()
     .map((row) => row['name']);
   expect(tables).toEqual([
+    'attachments',
     'box_keys',
     'comments',
     'devices',

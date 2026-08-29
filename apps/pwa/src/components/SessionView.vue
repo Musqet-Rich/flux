@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
 import { useSessionTimeline } from '../composables/useSessionTimeline.ts';
 import { useTailScroll } from '../composables/useTailScroll.ts';
@@ -42,6 +42,9 @@ const thinkingText = computed(() => {
   return `Thinking… ~${label} tokens`;
 });
 const summary = computed(() => props.store.state.sessions.find((s) => s.session === props.session));
+// Image attachments on sent messages get their thumbnails fetched as their rows appear; the
+// blob URLs are the store's and go when this screen leaves the session (ADR 0020).
+const thumbs = computed(() => props.store.state.thumbs);
 const busy = computed(() => summary.value?.state === 'running');
 // The streaming bubble and the thinking indicator are the main agent's (architecture.md
 // § Adapter: a subagent's ephemerals are dropped), so they show on main only.
@@ -79,9 +82,13 @@ const interrupt = (): void => {
 onMounted(() => {
   void props.store.open(props.session);
 });
+onUnmounted(() => {
+  props.store.leave(props.session);
+});
 watch(
   () => props.session,
-  (session) => {
+  (session, before) => {
+    props.store.leave(before);
     select(null);
     cancelReply();
     void props.store.open(session);
@@ -95,6 +102,7 @@ watch(
     const last = before.at(-1)?.seq ?? 0;
     const added = rows.filter((row) => row.seq > last).length;
     if (added > 0) void tail.follow(added);
+    props.store.loadThumbnails(props.session, rows);
   },
 );
 // Only growth counts: the text emptying is the reply landing, and that event is counted above.
@@ -147,6 +155,7 @@ watch(
           :key="e.seq"
           :event="e"
           :quote="quoteOf(e) ?? null"
+          :thumbs="thumbs"
           @task="select"
           @reply="pick"
           @jump="jump"

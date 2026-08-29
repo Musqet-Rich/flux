@@ -1,13 +1,12 @@
-import { mkdir, rm } from 'node:fs/promises';
+import { mkdir, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { expect, test } from 'vitest';
 
 import { tempRepo } from '../test/temp-repo.ts';
 import { createAskRegistry } from './create-ask-registry.ts';
-import { createEventLog } from './create-event-log.ts';
 import { createGitService } from './create-git-service.ts';
-import { createSessionStore } from './create-session-store.ts';
 import { openDatabase } from './open-database.ts';
+import { openStores } from './open-stores.ts';
 import { sessionLifecycle } from './session-lifecycle.ts';
 
 // The lifecycle against a real repository and a stand-in for the supervisor pool: what
@@ -19,8 +18,7 @@ const setup = async () => {
   const worktreesDir = join(root, 'data', 'worktrees');
   await mkdir(worktreesDir, { recursive: true });
   const db = openDatabase(':memory:');
-  const log = createEventLog({ db });
-  const sessions = createSessionStore({ db, lastSeq: log.lastSeq });
+  const { log, sessions, attachments } = openStores(db, root, join(root, 'data', 'attachments'));
   const git = createGitService();
   const closed: string[] = [];
   const forgotten: string[] = [];
@@ -29,6 +27,7 @@ const setup = async () => {
     git,
     log,
     asks: createAskRegistry(),
+    attachments,
     worktreesDir,
     closeSupervisor: (session: string) => {
       closed.push(session);
@@ -51,8 +50,21 @@ const setup = async () => {
       agent: 'claude',
     });
   };
-  return { repo, worktreesDir, ctx, git, sessions, log, closed, forgotten, create };
+  return { root, repo, worktreesDir, ctx, git, sessions, log, closed, forgotten, create };
 };
+
+test("archiving removes the session's attachments directory", async () => {
+  const { ctx, create, root } = await setup();
+  await create('s1', join(root, 'data', 'worktrees', 's1'));
+  const id = await ctx.attachments.begin('s1', 'a.txt', 'text/plain', 0);
+  // The sha256 of an empty file (secrets-allow: a well-known digest, not a key).
+  await ctx.attachments.end(id, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'); // secrets-allow
+  const dir = join(root, 'data', 'attachments', 's1');
+  expect(await readdir(dir)).toHaveLength(1);
+  await sessionLifecycle.archive(ctx, { session: 's1' });
+  await expect(readdir(dir)).rejects.toMatchObject({ code: 'ENOENT' });
+  expect(() => ctx.attachments.get('s1', [id])).toThrow(/no attachment/u);
+});
 
 test('only a worktree under the data directory is ever removed', async () => {
   const { repo, ctx, sessions, git, closed } = await setup();
