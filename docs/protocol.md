@@ -237,7 +237,7 @@ type Ephemeral =
 
 ## 7. RPC methods
 
-Device → box. All params and results are validated by type guards on both ends.
+Device → box. Params are validated by type guards on the box (`rpcMethods`), results on the device (`rpcResults`); a result that fails its guard is a `bad_reply` on the device, never a trusted value.
 
 | method                          | params                                                   | result                                                                                 |
 | ------------------------------- | -------------------------------------------------------- | -------------------------------------------------------------------------------------- |

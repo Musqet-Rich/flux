@@ -126,10 +126,14 @@ test.each([
   expect(handshake.isDeviceHello(value)).toBe(expected);
 });
 
+const to = base64url.encode(new Uint8Array(8));
+
 test.each([
-  [{ v: 1, boxEph: key, nonceB: nonce16 }, true],
-  [{ v: 1, boxEph: key, nonceB: key }, false],
-  [{ v: 1, boxEph: base64url.encode(new Uint8Array(31)), nonceB: nonce16 }, false],
+  [{ v: 1, boxEph: key, nonceB: nonce16, to }, true],
+  [{ v: 1, boxEph: key, nonceB: nonce16 }, false],
+  [{ v: 1, boxEph: key, nonceB: nonce16, to: key }, false],
+  [{ v: 1, boxEph: key, nonceB: key, to }, false],
+  [{ v: 1, boxEph: base64url.encode(new Uint8Array(31)), nonceB: nonce16, to }, false],
   [null, false],
 ])('isBoxHello(%j) is %s', (value, expected) => {
   expect(handshake.isBoxHello(value)).toBe(expected);

@@ -47,5 +47,6 @@ export type {
   SessionSummary,
 } from './rpc-methods.ts';
 export { rpcMethods } from './rpc-methods.ts';
+export { rpcResults } from './rpc-results.ts';
 export type { RpcError, Wire } from './wire.ts';
 export { wire } from './wire.ts';

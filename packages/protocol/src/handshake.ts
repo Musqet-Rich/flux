@@ -23,6 +23,8 @@ export interface BoxHello {
   v: 1;
   boxEph: string;
   nonceB: string;
+  // The fingerprint of the device this hello answers; other guests in the room ignore it.
+  to: string;
 }
 
 export interface DeriveInput {
@@ -43,6 +45,7 @@ export interface DirectionKeys {
 
 const keyLength = 32;
 const helloNonceLength = 16;
+const fingerprintLength = 8;
 const x25519 = { name: 'X25519' } as const;
 
 // TypeScript's lib has no X25519 overload for generateKey, so the result is a union. Structural
@@ -137,7 +140,8 @@ const isBoxHello = (value: unknown): value is BoxHello =>
   guards.isRecord(value) &&
   value['v'] === 1 &&
   isEncoded(value['boxEph'], keyLength) &&
-  isEncoded(value['nonceB'], helloNonceLength);
+  isEncoded(value['nonceB'], helloNonceLength) &&
+  isEncoded(value['to'], fingerprintLength);
 
 const nonce = (): Bytes => bytes.random(helloNonceLength);
 

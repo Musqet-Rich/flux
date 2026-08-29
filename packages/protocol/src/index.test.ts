@@ -22,6 +22,7 @@ test('exports every runtime module', () => {
     'relayMessage',
     'room',
     'rpcMethods',
+    'rpcResults',
     'wire',
   ]);
 });
