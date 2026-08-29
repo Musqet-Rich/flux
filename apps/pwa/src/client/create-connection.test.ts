@@ -1,7 +1,8 @@
-import type { Ephemeral, FluxEvent } from '@flux/protocol';
+import type { Ephemeral, FluxEvent, KeyPair } from '@flux/protocol';
 import { handshake } from '@flux/protocol';
 import { expect, test } from 'vitest';
 
+import type { FakeRelay } from '../../test/fake-relay.ts';
 import { createFakeRelay } from '../../test/fake-relay.ts';
 import type { ConnectionStatus } from './create-connection.ts';
 import { createConnection } from './create-connection.ts';
@@ -54,15 +55,20 @@ const createSignals = () => {
   };
 };
 
-const setup = async () => {
-  const relay = await createFakeRelay({
+const createRelay = () =>
+  createFakeRelay({
     hello: () => ({ protocol: 1, daemon: 'box', sessions: [summary] }),
     'agent.send': () => ({ seq: 7 }),
   });
+
+// A connection to `relay` as the device holding `keys`; a second one with the same keys is
+// another tab of the same browser profile.
+const setup = async (relay?: FakeRelay, keys?: KeyPair) => {
+  relay ??= await createRelay();
   const signals = createSignals();
   const connection = await createConnection({
     relayUrl: 'https://relay.example',
-    keys: await handshake.generateKeyPair(),
+    keys: keys ?? (await handshake.generateKeyPair()),
     boxPub: relay.boxPub,
     socket: relay.socket,
     onEvent: signals.onEvent,
@@ -70,6 +76,7 @@ const setup = async () => {
     onStatus: signals.onStatus,
     minBackoffMs: 1,
     maxBackoffMs: 5,
+    keepaliveMs: 2,
   });
   return { relay, signals, connection };
 };
@@ -147,5 +154,59 @@ test('a refused join backs off and retries', async () => {
   relay.refuseJoins(null);
   await connection.connected();
   expect(signals.statuses.at(-1)).toBe('connected');
+  connection.stop();
+});
+
+const event = (seq: number): FluxEvent => ({
+  seq,
+  ts: '2026-01-01T00:00:00Z',
+  session: 's1',
+  type: 'msg.user',
+  payload: { text: `e${seq}` },
+});
+
+// Two tabs of one browser profile hold the same device key, so the box's frames for either
+// carry the same fingerprint; the relay broadcasts all of them, so each tab sees the other's
+// box hello and every frame sealed for the other. Neither may drop its socket over that:
+// both stay up through the other's handshake, both get every event, each gets its own
+// rpc results, and one stopping does not touch the other.
+test('two tabs of one device coexist, each on its own channel', async () => {
+  const relay = await createRelay();
+  const keys = await handshake.generateKeyPair();
+  const a = await setup(relay, keys);
+  const b = await setup(relay, keys);
+  a.connection.start();
+  await a.connection.connected();
+  b.connection.start();
+  await b.connection.connected();
+  const arrived = Promise.all([a.signals.nextEphemeral(), b.signals.nextEphemeral()]);
+  await relay.emit(event(1));
+  await relay.ephemeral({ type: 'delta', session: 's1', forSeq: 2, text: 'x' });
+  await arrived;
+  expect(a.signals.events).toEqual([event(1)]);
+  expect(b.signals.events).toEqual([event(1)]);
+  expect(await a.connection.call('agent.send', { session: 's1', text: 'from a' })).toEqual({
+    seq: 7,
+  });
+  expect(await b.connection.call('hello', { protocol: 1 })).toMatchObject({ daemon: 'box' });
+  expect(a.signals.statuses).toEqual(['connecting', 'connected']);
+  expect(b.signals.statuses).toEqual(['connecting', 'connected']);
+  expect(relay.guests()).toBe(2);
+  a.connection.stop();
+  const alone = b.signals.nextEphemeral();
+  await relay.ephemeral({ type: 'delta', session: 's1', forSeq: 2, text: 'y' });
+  await alone;
+  expect(b.signals.ephemerals).toHaveLength(2);
+  expect(b.connection.status()).toBe('connected');
+  expect(relay.guests()).toBe(1);
+  b.connection.stop();
+});
+
+test('a connected tab keeps saying hello so the box knows it is alive', async () => {
+  const { relay, connection } = await setup();
+  connection.start();
+  await connection.connected();
+  const hellos = (): number => relay.calls.filter((c) => c.method === 'hello').length;
+  await expect.poll(hellos).toBeGreaterThanOrEqual(3);
   connection.stop();
 });
