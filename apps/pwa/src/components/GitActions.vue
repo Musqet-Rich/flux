@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Commit } from '@flux/protocol';
+import type { Commit, FileStatus } from '@flux/protocol';
 import { computed, onMounted, ref } from 'vue';
 
 import type { Store } from '../store/create-store.ts';
@@ -7,7 +7,13 @@ import type { Store } from '../store/create-store.ts';
 // Commit, push and open a PR from the changes screen (prd.md § P2). One action at a time; a
 // failure shows here and in the status bar; `done` tells the parent to refresh the file list.
 
-const props = defineProps<{ store: Store; session: string; selected: string[] }>();
+// `selected` is the ticked files; a rename among them commits under both its paths, or the
+// deletion of the old one would be left behind.
+const props = defineProps<{
+  store: Store;
+  session: string;
+  selected: Pick<FileStatus, 'path' | 'from'>[];
+}>();
 const emit = defineEmits<{ done: [] }>();
 
 type Action = 'commit' | 'push' | 'pr';
@@ -59,7 +65,10 @@ const run = async (action: Action, act: () => Promise<boolean>): Promise<void> =
 
 const commit = (): Promise<void> =>
   run('commit', async () => {
-    const paths = props.selected.length === 0 ? undefined : [...props.selected];
+    const chosen = props.selected.flatMap((f) =>
+      f.from === undefined ? [f.path] : [f.path, f.from],
+    );
+    const paths = chosen.length === 0 ? undefined : chosen;
     const sha = await props.store.commit(props.session, message.value.trim(), paths);
     if (sha === null) return false;
     message.value = '';
@@ -103,6 +112,7 @@ onMounted(() => {
       v-model="message"
       rows="2"
       placeholder="Commit message"
+      aria-label="Commit message"
       :disabled="!idle"
     />
     <div class="row">
@@ -119,6 +129,7 @@ onMounted(() => {
         type="text"
         autocomplete="off"
         placeholder="Title"
+        aria-label="Pull request title"
         :disabled="!idle"
       />
       <textarea
@@ -126,6 +137,7 @@ onMounted(() => {
         v-model="body"
         rows="3"
         placeholder="Body (optional)"
+        aria-label="Pull request body"
         :disabled="!idle"
       />
       <div class="row">

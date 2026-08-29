@@ -29,7 +29,7 @@ test('commits all or the selected files, refreshes the log, and emits done', asy
   expect(box.calls('git.commit')).toEqual([{ session: 's1', message: 'first' }]);
   expect(wrapper.emitted('done')).toEqual([[]]);
   expect(Reflect.get(wrapper.vm, 'message')).toBe('');
-  await wrapper.setProps({ selected: ['a.ts', 'b.ts'] });
+  await wrapper.setProps({ selected: [{ path: 'a.ts' }, { path: 'b.ts', from: 'old.ts' }] });
   expect(wrapper.find('.commit').text()).toBe('Commit 2 selected');
   await wrapper.find('#commit-message').setValue('two');
   await wrapper.find('.commit').trigger('click');
@@ -37,7 +37,7 @@ test('commits all or the selected files, refreshes the log, and emits done', asy
   expect(box.calls('git.commit')[1]).toEqual({
     session: 's1',
     message: 'two',
-    paths: ['a.ts', 'b.ts'],
+    paths: ['a.ts', 'b.ts', 'old.ts'],
   });
   box.store.stop();
 });

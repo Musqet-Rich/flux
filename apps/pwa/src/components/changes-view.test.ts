@@ -39,7 +39,7 @@ test('lists the worktree status, disables deleted files, and emits open and back
 test('ticked files narrow the commit, and a commit refreshes the list and clears ticks', async () => {
   let files = [
     { path: 'a.ts', status: 'M' as const },
-    { path: 'b.ts', status: 'M' as const },
+    { path: 'b.ts', status: 'R' as const, from: 'old.ts' },
   ];
   const box = await pairedStore([], {
     'git.status': () => ({ files }),
@@ -56,7 +56,10 @@ test('ticked files narrow the commit, and a commit refreshes the list and clears
   await wrapper.find('.commit').trigger('click');
   await until(() => Reflect.get(wrapper.vm, 'files').length === 1);
   await flushPromises();
-  expect(box.calls('git.commit')).toEqual([{ session: 's1', message: 'only b', paths: ['b.ts'] }]);
+  // A rename is one tick, two paths: the old one is the staged deletion.
+  expect(box.calls('git.commit')).toEqual([
+    { session: 's1', message: 'only b', paths: ['b.ts', 'old.ts'] },
+  ]);
   expect(wrapper.findAll('.path').map((p) => p.text())).toEqual(['a.ts']);
   expect(Reflect.get(wrapper.vm, 'selected')).toEqual([]);
   expect(wrapper.find('.commit').text()).toBe('Commit all');

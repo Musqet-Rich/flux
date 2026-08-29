@@ -40,12 +40,27 @@ export interface GitServiceOptions {
   env?: NodeJS.ProcessEnv;
 }
 
-// A git hook (or anything launched from one) exports GIT_DIR and friends, which would point
-// every command here at the wrong repository. The cwd is the only repository selector.
+// A git hook (or anything launched from one) exports the variables that select a repository,
+// which would point every command here at the wrong one; the cwd is the only selector. The
+// rest of GIT_* stays: the operator's GIT_SSH_COMMAND is how a push reaches the remote. Neither
+// tool may stop for a terminal prompt (credentials, gh's update notice): there is none.
+const repoSelectors = [
+  'GIT_DIR',
+  'GIT_WORK_TREE',
+  'GIT_INDEX_FILE',
+  'GIT_INDEX_VERSION',
+  'GIT_PREFIX',
+  'GIT_COMMON_DIR',
+  'GIT_OBJECT_DIRECTORY',
+  'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+  'GIT_NAMESPACE',
+  'GIT_CEILING_DIRECTORIES',
+];
+
 const cleanEnv = (source: NodeJS.ProcessEnv): NodeJS.ProcessEnv => {
   const env = { ...source };
-  for (const key of Object.keys(env)) if (key.startsWith('GIT_')) delete env[key];
-  return env;
+  for (const key of repoSelectors) delete env[key];
+  return { ...env, GIT_TERMINAL_PROMPT: '0', GH_PROMPT_DISABLED: '1', GH_NO_UPDATE_NOTIFIER: '1' };
 };
 
 const statusOf = (xy: string): FileStatus['status'] => {

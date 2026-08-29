@@ -25,6 +25,7 @@ const fromLog = computed((): FileStatus[] => {
     : [];
 });
 const files = computed(() => fresh.value ?? fromLog.value);
+const selectedFiles = computed(() => files.value.filter((f) => selected.value.includes(f.path)));
 
 const refresh = async (): Promise<void> => {
   loading.value = true;
@@ -64,7 +65,13 @@ onMounted(() => {
     <p v-if="files.length === 0" class="empty">No changes in the worktree.</p>
     <ul v-else class="list">
       <li v-for="f in files" :key="f.path" class="row">
-        <input v-model="selected" type="checkbox" class="pick" :value="f.path" />
+        <input
+          v-model="selected"
+          type="checkbox"
+          class="pick"
+          :value="f.path"
+          :aria-label="`Tick ${f.path} for commit`"
+        />
         <button type="button" class="file" :disabled="f.status === 'D'" @click="open(f)">
           <span class="status" :class="f.status">{{ f.status }}</span>
           <span class="path">{{ f.path }}</span>
@@ -72,7 +79,7 @@ onMounted(() => {
         </button>
       </li>
     </ul>
-    <GitActions :store="store" :session="session" :selected="selected" @done="acted" />
+    <GitActions :store="store" :session="session" :selected="selectedFiles" @done="acted" />
   </section>
 </template>
 

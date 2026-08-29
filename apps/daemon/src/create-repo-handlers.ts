@@ -36,12 +36,27 @@ const diffOptions = (p: { path?: string; from?: string; to?: string }) => ({
   ...(p.to === undefined ? {} : { to: p.to }),
 });
 
-const prOptions = (p: { title: string; body?: string; base?: string; draft?: boolean }) => ({
+const prOptions = (
+  p: { title: string; body?: string; base?: string; draft?: boolean },
+  base: string | undefined,
+) => ({
   title: p.title,
   ...(p.body === undefined ? {} : { body: p.body }),
-  ...(p.base === undefined ? {} : { base: p.base }),
+  ...(base === undefined ? {} : { base }),
   ...(p.draft === undefined ? {} : { draft: p.draft }),
 });
+
+// The PR's base branch: the caller's, else the session's base when that is a branch of the
+// repository (it is usually a commit, in which case gh picks the repository's default branch).
+const prBase = async (
+  ctx: HandlerContext,
+  record: { repo: string; base: string },
+  base: string | undefined,
+): Promise<string | undefined> => {
+  if (base !== undefined) return base;
+  const branches = await ctx.git.branches(record.repo);
+  return branches.includes(record.base) ? record.base : undefined;
+};
 
 const listDir = async (worktree: string, path: string) => {
   const entries = await readdir(inside(worktree, path), { withFileTypes: true });
@@ -67,9 +82,11 @@ export const createRepoHandlers = (ctx: HandlerContext): RepoHandlers => {
       sha: await ctx.git.commit(worktreeOf(p.session).worktree, p.message, p.paths),
     }),
     'git.push': (p) => ctx.git.push(worktreeOf(p.session).worktree, p.setUpstream === true),
-    'git.pr': async (p) => ({
-      url: await ctx.git.pr(worktreeOf(p.session).worktree, prOptions(p)),
-    }),
+    'git.pr': async (p) => {
+      const record = ctx.sessions.get(p.session);
+      const base = await prBase(ctx, record, p.base);
+      return { url: await ctx.git.pr(record.worktree, prOptions(p, base)) };
+    },
     'fs.read': (p) => {
       const { worktree } = worktreeOf(p.session);
       const relative = inside(worktree, p.path).slice(worktree.length + 1);
