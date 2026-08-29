@@ -92,3 +92,59 @@ test('offers to stop a running agent and asks the box to interrupt', async () =>
   expect(wrapper.emitted('changes')).toEqual([[]]);
   store.stop();
 });
+
+// happy-dom has no layout, so the scroller's geometry is pinned by hand: a 1000 px log in a
+// 200 px viewport, `scrollTop` writable so the component's jumps show up.
+const withGeometry = (el: HTMLElement): HTMLElement => {
+  Object.defineProperty(el, 'scrollHeight', { value: 1000, configurable: true });
+  Object.defineProperty(el, 'clientHeight', { value: 200, configurable: true });
+  Object.defineProperty(el, 'scrollTop', { value: 800, writable: true, configurable: true });
+  return el;
+};
+
+const scrollTo = async (el: HTMLElement, top: number): Promise<void> => {
+  el.scrollTop = top;
+  el.dispatchEvent(new Event('scroll'));
+  await flushPromises();
+};
+
+test('follows the tail only while at it, with a pill to catch up', async () => {
+  const box = await pairedStore([], { 'agent.send': () => ({ seq: 9 }) });
+  const { store, relay, event } = box;
+  const wrapper = mount(SessionView, { props: { store, session: 's1' } });
+  await until(() => store.state.logs['s1'] !== undefined);
+  const el = withGeometry(wrapper.find<HTMLElement>('.timeline').element);
+  await scrollTo(el, 800);
+  await relay.emit(event(1, 'msg.assistant', { text: 'one' }));
+  await until(() => store.state.logs['s1']?.lastSeq === 1);
+  await flushPromises();
+  expect(el.scrollTop).toBe(1000);
+  expect(wrapper.find('.new-activity').exists()).toBe(false);
+  await scrollTo(el, 0);
+  await relay.emit(event(2, 'msg.assistant', { text: 'two' }));
+  await relay.emit(event(3, 'raw', { agent: 'claude', data: {} }));
+  await until(() => store.state.logs['s1']?.lastSeq === 3);
+  await relay.ephemeral({ type: 'delta', session: 's1', forSeq: 4, text: 'more' });
+  await until(() => store.state.logs['s1']?.streaming === 'more');
+  await flushPromises();
+  expect(el.scrollTop).toBe(0);
+  expect(wrapper.find('.new-activity').text()).toBe('↓ 1 new');
+  await wrapper.find('.new-activity').trigger('click');
+  await flushPromises();
+  expect(el.scrollTop).toBe(1000);
+  expect(wrapper.find('.new-activity').exists()).toBe(false);
+  await scrollTo(el, 0);
+  await relay.emit(event(4, 'msg.assistant', { text: 'three' }));
+  await until(() => store.state.logs['s1']?.lastSeq === 4);
+  await flushPromises();
+  expect(wrapper.find('.new-activity').text()).toBe('↓ 1 new');
+  await scrollTo(el, 790);
+  expect(wrapper.find('.new-activity').exists()).toBe(false);
+  await scrollTo(el, 0);
+  await wrapper.find('textarea').setValue('go');
+  await wrapper.find('form.row').trigger('submit');
+  await until(() => box.calls('agent.send').length === 1);
+  await flushPromises();
+  expect(el.scrollTop).toBe(1000);
+  store.stop();
+});

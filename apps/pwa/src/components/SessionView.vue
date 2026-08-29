@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 
+import { useTailScroll } from '../composables/useTailScroll.ts';
 import type { Store } from '../store/create-store.ts';
 import { openAsk } from '../store/open-ask.ts';
 import { pendingComments } from '../store/pending-comments.ts';
@@ -18,7 +19,10 @@ defineEmits<{ changes: [] }>();
 const hiddenTypes = new Set(['raw', 'rate_limit']);
 const draft = ref('');
 const sending = ref(false);
-const scroller = ref<HTMLElement | null>(null);
+// The timeline follows new content only while the operator is at the tail; scrolled up, a pill
+// counts what arrived and the view stays put (useTailScroll).
+const tail = useTailScroll();
+const { scroller, behind, unread } = tail;
 
 const log = computed(() => props.store.state.logs[props.session]);
 const events = computed(() => log.value?.events ?? []);
@@ -32,22 +36,20 @@ const pending = computed(() => pendingComments(events.value));
 const summary = computed(() => props.store.state.sessions.find((s) => s.session === props.session));
 const busy = computed(() => summary.value?.state === 'running');
 
-const scrollToEnd = async (): Promise<void> => {
-  await nextTick();
-  const el = scroller.value;
-  if (el !== null) el.scrollTop = el.scrollHeight;
-};
+const pill = computed(() => (unread.value > 0 ? `↓ ${unread.value} new` : '↓ New activity'));
 
 const send = async (): Promise<void> => {
   const text = draft.value.trim();
   if (text === '' || sending.value) return;
   sending.value = true;
+  void tail.jump();
   const ok = await props.store.send(props.session, text);
   sending.value = false;
   if (ok) draft.value = '';
 };
 
 const answer = (text: string): void => {
+  void tail.jump();
   void props.store.answer(props.session, ask.value?.askId ?? '', text);
 };
 
@@ -65,11 +67,19 @@ onMounted(() => {
 watch(
   () => props.session,
   (session) => {
+    tail.reset();
     void props.store.open(session);
   },
 );
-watch([() => events.value.length, streaming], () => {
-  void scrollToEnd();
+watch(
+  () => timeline.value.length,
+  (count, before) => {
+    void tail.follow(Math.max(0, count - before));
+  },
+);
+// Only growth counts: the text emptying is the reply landing, and that event is counted above.
+watch(streaming, (text) => {
+  if (text !== '') void tail.follow(0);
 });
 </script>
 
@@ -80,12 +90,17 @@ watch([() => events.value.length, streaming], () => {
       <button v-if="busy" type="button" class="secondary" @click="interrupt">Stop</button>
       <button type="button" class="secondary" @click="$emit('changes')">Changes</button>
     </div>
-    <div ref="scroller" class="timeline">
-      <EventItem v-for="e in timeline" :key="e.seq" :event="e" />
-      <article v-if="streaming !== ''" class="streaming">
-        <pre>{{ streaming }}</pre>
-      </article>
-      <AskCard v-if="ask !== null" :key="ask.askId" :ask="ask" @answer="answer" />
+    <div class="log">
+      <div ref="scroller" class="timeline" @scroll="tail.measure">
+        <EventItem v-for="e in timeline" :key="e.seq" :event="e" />
+        <article v-if="streaming !== ''" class="streaming">
+          <pre>{{ streaming }}</pre>
+        </article>
+        <AskCard v-if="ask !== null" :key="ask.askId" :ask="ask" @answer="answer" />
+      </div>
+      <button v-if="behind" type="button" class="new-activity" @click="tail.jump">
+        {{ pill }}
+      </button>
     </div>
     <div class="composer">
       <CommentTray :comments="pending" @remove="remove" />
@@ -130,14 +145,34 @@ watch([() => events.value.length, streaming], () => {
   white-space: nowrap;
 }
 
+.log {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .timeline {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overflow-anchor: auto;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
   padding: 0.75rem;
+}
+
+.new-activity {
+  position: absolute;
+  bottom: 0.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.35rem 0.9rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 30%);
 }
 
 .streaming {
