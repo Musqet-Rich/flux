@@ -235,6 +235,9 @@
       // because a cast can bypass a globals rule.
       "files": ["**/*.test.ts", "**/test/**"],
       "rules": {
+        // The secret scanner's `secrets-allow` marker must sit on the flagged line, and test
+        // vectors are where that happens; a trailing comment is the only way to carry it.
+        "eslint/no-inline-comments": "off",
         "typescript/consistent-type-assertions": "off",
         "typescript/no-unsafe-type-assertion": "off",
         "typescript/no-unsafe-assignment": "off",

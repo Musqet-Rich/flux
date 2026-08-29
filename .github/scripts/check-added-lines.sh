@@ -40,18 +40,9 @@
 #   9. Composables are `apps/pwa/src/composables/useThing.ts`: any other .ts
 #      name in that directory fails.
 #  10. Vue SFCs: every `<script>` block is `<script setup lang="ts">`, no
-#      `defineComponent(`, no `this` in the script, every `<style>` is scoped,
-#      and no hex/rgb()/hsl() colour literal in a style block (theme comes from
-#      CSS custom properties). The colour check also runs on touched .css files
-#      other than src/styles/base.css. "Templates stay dumb": inside the root
-#      `<template>`, a mustache or a bound directive value (v-if/v-show/v-for/
-#      v-bind/:prop/v-model/v-html/v-text) containing a call `(`, an arrow
-#      `=>`, a logical operator (`&&` `||` `??`) or an arithmetic operator
-#      between two operands (`+ - * / %`) fails (one ternary, a comparison and
-#      property access are fine); an event handler (`@x`/`v-on:x`) may be one
-#      direct call but no arrow or chained call. The root template is checked
-#      as one record, so an expression the formatter wrapped across lines is
-#      seen whole.
+#      `defineComponent(`, no `this` in the script, every `<style>` is scoped.
+#      "Templates stay dumb" and "colours come from custom properties" are
+#      judgement calls left to review (engineering.md § What the tooling enforces).
 #  11. packages/protocol: every `thing.ts` under src has `thing.test.ts` next
 #      to it and every test file sits next to its module (so `.spec.ts` and
 #      `__tests__/` are refused); a module a test never imports would otherwise
@@ -200,16 +191,6 @@ for f in $files; do
   case "$f" in
     *.vue)
       vue=$(show "$f" | awk '
-        function trim(s) { gsub(/[[:space:]]+/, " ", s); sub(/^ /, "", s); sub(/ $/, "", s); return substr(s, 1, 60) }
-        function logic(e,    o) {
-          if (e ~ /=>|[A-Za-z0-9_$\]\)][[:space:]]*\(/) return 1
-          o = e; gsub(/\047[^\047]*\047|"[^"]*"|`[^`]*`/, "S", o)
-          if (o ~ /&&|\|\||\?\?/) return 1
-          # An operand, then an operator, then an operand: `a + b`, `a*b`, `(a - b) % 2`, `s+ "x"`. A
-          # sign in front of a literal (`-1`) and `++`/`--` have no operand on both sides.
-          if (o ~ /[A-Za-z0-9_$\)\]][[:space:]]*[-+*\/%][[:space:]]*[A-Za-z0-9_$\(]/) return 1
-          return 0
-        }
         /rules-allow/ { next }
         /<script([[:space:]>]|$)/ {
           if ($0 !~ /<script setup lang="ts"([[:space:]>])/) print "script block is not <script setup lang=\"ts\"> (Composition API only, TypeScript only)";
@@ -221,52 +202,13 @@ for f in $files; do
           in_style = 1
         }
         /<\/style>/ { in_style = 0 }
-        /^<template([[:space:]>]|$)/ { in_template = 1 }
-        /^<\/template>/ {
-          in_template = 0
-          # A mustache or a bound directive value (v-if, v-show, v-for, v-bind/:prop, v-model,
-          # v-html, v-text) may not call anything, hold an arrow, or combine operands with an
-          # arithmetic or logical operator (+ - * / % && || ??); a single ternary, a comparison
-          # and property access are fine. Quoted strings are blanked first so their contents
-          # are not read as operators. An event handler (@x / v-on:x) may be one direct call
-          # (`@click="emit(\047save\047)"`) but no arrow and no chained call.
-          text = tpl
-          while (match(text, /\{\{[^}]*\}\}/)) {
-            expr = substr(text, RSTART + 2, RLENGTH - 4)
-            if (logic(expr)) print "logic in template mustache (" trim(expr) "): compute it in <script>"
-            text = substr(text, RSTART + RLENGTH)
-          }
-          text = tpl
-          while (match(text, /(v-(if|else-if|show|for|bind|model|html|text)|:[A-Za-z][-A-Za-z0-9.:]*)="[^"]*"/)) {
-            expr = substr(text, RSTART, RLENGTH); sub(/^[^=]*="/, "", expr); sub(/"$/, "", expr)
-            if (logic(expr)) print "logic in template directive (" trim(expr) "): compute it in <script>"
-            text = substr(text, RSTART + RLENGTH)
-          }
-          text = tpl
-          while (match(text, /(@[A-Za-z][-A-Za-z0-9.:]*|v-on:[-A-Za-z0-9.:]+)="[^"]*"/)) {
-            expr = substr(text, RSTART, RLENGTH); sub(/^[^=]*="/, "", expr)
-            if (expr ~ /=>|\)[[:space:]]*\.|\.[A-Za-z_$][A-Za-z0-9_$]*[[:space:]]*\(.*\(/) print "logic in event handler (" trim(expr) "): one direct call at most, no arrow, no chain"
-            text = substr(text, RSTART + RLENGTH)
-          }
-          tpl = ""
-        }
         /defineComponent[[:space:]]*\(/ { print "defineComponent(): Options API / mixins are banned" }
-        # Templates stay dumb. The root template is gathered into one record (a
-        # formatter wraps a long expression across lines, so a per-line check would
-        # miss exactly the expressions this rule exists for) and checked at </template>.
-        in_template { tpl = tpl " " $0 }
         in_script {
           line = $0; sub(/\/\/.*/, "", line);
           if (line ~ /(^|[^[:alnum:]_$.\047"])this([^[:alnum:]_$\047"]|$)/) print "`this` in script (line " NR ")"
         }
-        in_style && /:[^;{]*(#[0-9a-fA-F]{3,8}([^[:alnum:]_-]|$)|(rgb|hsl)a?[[:space:]]*\()/ { print "colour literal in style (line " NR "): use a CSS custom property" }
       ')
       [ -z "$vue" ] || report "$f (docs/engineering.md § Vue)" "$vue" ;;
-    apps/pwa/src/styles/base.css) ;;
-    *.css)
-      colours=$(show "$f" | grep -v 'rules-allow' \
-        | { grep -n -E ':[^;{]*(#[0-9a-fA-F]{3,8}([^[:alnum:]_-]|$)|(rgb|hsl)a?[[:space:]]*\()' || true; })
-      [ -z "$colours" ] || report "$f: colour literal outside src/styles/base.css (docs/engineering.md § Vue: CSS custom properties for theme)" "$colours" ;;
   esac
 done
 
@@ -287,6 +229,6 @@ fi
 
 if [ "$status" -eq 0 ]; then
   count=$(printf '%s\n' "$added" | sed '/^$/d' | wc -l | tr -d ' ')
-  echo "check-added-lines: $count added line(s) checked; no TODO without issue, commented-out code, decorator, function keyword, plain Error, test timer, oversize file, multi-export file, misnamed export, non-setup SFC, template logic, unscoped style, colour literal or unpaired protocol module"
+  echo "check-added-lines: $count added line(s) checked; no TODO without issue, commented-out code, decorator, function keyword, plain Error, test timer, oversize file, multi-export file, misnamed export, non-setup SFC, unscoped style or unpaired protocol module"
 fi
 exit $status
