@@ -273,90 +273,10 @@ p { color: var(--fg); }
 </style>'
 run bad 'unscoped <style lang>'
 
-sfc '<script setup lang="ts">
-const count = 0;
-</script>' '<style scoped>
-p { color: #ff0000; }
-</style>'
-run bad 'hex colour in a scoped style'
-
-sfc '<script setup lang="ts">
-const count = 0;
-</script>' '<style scoped>
-p { background: rgb(0, 0, 0); }
-</style>'
-run bad 'rgb() colour in a scoped style'
-
-sfc '<script setup lang="ts">
-const count = 0;
-</script>' '<style scoped>
-#app p { color: var(--fg); }
-</style>'
-run ok  'id selector is not a colour'
-
 sfc '<script setup lang="ts" generic="T extends string">
 const count = 0;
 </script>' ''
 run ok  'generic script setup is still script setup'
-
-tpl() { printf '<script setup lang="ts">\nconst count = 0;\n</script>\n\n<template>\n%s\n</template>\n' "$1" >src/comp/Thing.vue; }
-tpl '  <p>{{ items.filter((i) => i.ok).map((i) => i.name.toUpperCase()).join(", ") }}</p>'
-run bad 'chained calls and arrows in a mustache'
-
-tpl '  <p>{{ format(date) }}</p>'
-run bad 'a call in a mustache'
-
-tpl '  <p>{{ ok ? label : fallback }} {{ items.length }} {{ user.name }}</p>'
-run ok  'ternary and property access in a mustache'
-
-tpl '  <li v-for="item in visible" :key="item.id" :class="{ active: item.id === current }">{{ item.name }}</li>'
-run ok  'plain v-for, :key and an object :class'
-
-tpl '  <p v-if="items.some((i) => i.ok)">x</p>'
-run bad 'arrow in v-if'
-
-tpl '  <p :title="fmt(item.at)">x</p>'
-run bad 'call in a bound attribute'
-
-tpl '  <button @click="emit(\047save\047)">x</button>\n  <button @click="count++">y</button>\n  <input v-on:input="onInput" />'
-run ok  'event handler with one direct call, an increment or a method name'
-
-tpl '  <button @click="() => save(item)">x</button>'
-run bad 'arrow in an event handler'
-
-tpl '  <button @click="items.filter((i) => i.ok).forEach(save)">x</button>'
-run bad 'chained calls in an event handler'
-
-tpl '  <p>{{ $t("hi") }}</p><!-- rules-allow: i18n -->'
-run ok  'template logic with rules-allow'
-
-tpl '  <li\n    v-for="item in items\n      .filter((i) => i.qty > 1)\n      .map((i) => ({ ...i, label: i.name }))"\n    :key="item.id"\n  >\n    {{\n      item.label.length > 3 ? item.label.slice(0, 3) : [...item.label].reverse().join("")\n    }}\n  </li>'
-run bad 'formatter-wrapped multi-line v-for and mustache with calls'
-
-tpl '  <p v-if="(a > 0 && b > 0) || a === b">x</p>'
-run bad 'logical operators in v-if'
-
-tpl '  <p>{{ a * b + ((a - b) % 2) }}</p>'
-run bad 'arithmetic in a mustache'
-
-q="'"
-tpl "  <p :title=\"label + $q ($q + n + $q)$q\">x</p>"
-run bad 'string concatenation in a bound attribute'
-
-tpl "  <p>{{ a > b ? ${q}x$q : ${q}y$q }} {{ ok ?? fallback }}</p>"
-run bad 'nullish coalescing in a mustache (the ternary alone is fine)'
-
-tpl "  <p :tabindex=\"-1\" :class=\"{ on: item.id === current, off: count > 0 }\">{{ label ? ${q}a-b$q : ${q}c/d$q }}</p>"
-run ok  'negative literal, comparison and operators inside strings are not logic'
-
-tpl '  <button @click="count++">{{ count }}</button>\n  <button @click="step--">y</button>'
-run ok  'increment and decrement in an event handler'
-
-printf ':root { --fg: #222; --bg: rgb(255, 255, 255); }\n' >apps/pwa/src/styles/base.css
-run ok  'base.css may define the colour literals'
-
-printf '.x { color: #222; }\n' >src/styles/other.css
-run bad 'colour literal in any other .css'
 
 # --- 11: protocol modules and tests are siblings.
 printf 'export const frame = 1;\n' >packages/protocol/src/frame.ts

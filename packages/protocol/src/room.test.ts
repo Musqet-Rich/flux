@@ -8,10 +8,8 @@ const hex = (data: Uint8Array): string =>
 
 test('sha256 matches the known vector for "abc"', async () => {
   const digest = await room.sha256(new TextEncoder().encode('abc'));
-  // FIPS 180-4 vector, split so the secret scanner does not mistake it for a key.
-  expect(hex(digest)).toBe(
-    ['ba7816bf8f01cfea', '414140de5dae2223', 'b00361a396177a9c', 'b410ff61f20015ad'].join(''),
-  );
+  // secrets-allow: FIPS 180-4 test vector
+  expect(hex(digest)).toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'); // secrets-allow
 });
 
 test('hmacSha256 matches RFC 4231 test case 2', async () => {
@@ -19,10 +17,8 @@ test('hmacSha256 matches RFC 4231 test case 2', async () => {
     new TextEncoder().encode('Jefe'),
     new TextEncoder().encode('what do ya want for nothing?'),
   );
-  // RFC 4231 vector, split as above.
-  expect(hex(mac)).toBe(
-    ['5bdcc146bf60754e', '6a042426089575c7', '5a003f089d273983', '9dec58b964ec3843'].join(''),
-  );
+  // secrets-allow: RFC 4231 test case 2
+  expect(hex(mac)).toBe('5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843'); // secrets-allow
 });
 
 test('id is 22 url-safe characters derived from boxPub', async () => {

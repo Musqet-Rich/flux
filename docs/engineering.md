@@ -95,7 +95,7 @@ Formatting is Oxfmt's job; nobody discusses it. Beyond formatting:
 
 Vitest everywhere. `pnpm test` runs all packages; `pnpm run check` runs them with coverage.
 
-- Every module in `packages/protocol` has a test file next to it: `thing.ts` / `thing.test.ts`. Coverage target 100% for protocol, enforced.
+- Every module in `packages/protocol` has a test file next to it: `thing.ts` / `thing.test.ts`. Coverage target 100% for protocol, enforced, branches included: with `noUncheckedIndexedAccess` a `data[i] ?? 0` is a dead fallback branch the gate will refuse, so index with `DataView`, `charAt` or a bounds-checked loop instead.
 - Adapters are tested against **fixtures**: captured real output stored under `apps/daemon/test/fixtures/`. A fixture is added or refreshed whenever the upstream agent changes shape. Fixtures are the contract with the outside world.
 - Daemon and relay: unit tests for pure logic, integration tests that run the real thing in-process (real SQLite in a temp dir, real WebSocket on an ephemeral port). No mocking of our own modules. Mock only the process boundary (spawned agents) using fixtures.
 - PWA: component tests with `@vue/test-utils` for anything with logic; composables tested directly. No snapshot tests.
@@ -158,7 +158,7 @@ Explicitly rejected, with the reason, so nobody re-proposes them:
 `pnpm run check` (fmt, lint, types, tests with coverage), `.githooks/pre-commit` (Node 24, exact pins, ledger line for every added dependency, secret shapes, TODO without issue, commented-out code, decorators, `function` keyword, files over 500 lines, lockfile drift, then `check`), `.githooks/commit-msg` (format above), and CI (`check`, `audit`, `hooks` self-tests, `diff` over the PR range, `commits`). `.github/rulesets/main.json` makes those required on `main`; a repo admin applies it with the command in its README. Every rule above not in this list is enforced by review:
 
 - One primary export per file, named the same as the file (the diff check catches the obvious cases only).
-- Comments explain why; templates stay dumb (the diff check bans mustache logic beyond a ternary, judgement covers the rest).
+- Comments explain why; templates stay dumb; theme colours come from CSS custom properties.
 - Ledger rows are honest, not just present.
 - A rule change lands in the same PR as the config it describes.
 - `--no-verify` locally; CI and the ruleset catch what it skips.
