@@ -11,6 +11,7 @@ const summary = {
   agent: 'claude',
   state: 'idle',
   lastSeq: 0,
+  createdAt: '2026-01-01T00:00:00Z',
   updatedAt: '2026-01-01T00:00:00Z',
 };
 const usage = { input: 1, output: 2, cacheRead: 0, cacheWrite: 0 };
@@ -119,4 +120,8 @@ test('optional fields may be present or absent, never wrong', () => {
   expect(rpcResults['devices.list']([{ ...device, name: 1 }])).toBe(false);
   expect(rpcResults['devices.list']([{ ...device, lastSeenAt: 1 }])).toBe(false);
   expect(rpcResults['devices.list']([{ ...device, current: 'yes' }])).toBe(false);
+  const { createdAt, ...older } = summary;
+  expect(createdAt).toBeTypeOf('string');
+  expect(rpcResults['sessions.list']([older])).toBe(true);
+  expect(rpcResults['sessions.list']([{ ...summary, createdAt: 1 }])).toBe(false);
 });

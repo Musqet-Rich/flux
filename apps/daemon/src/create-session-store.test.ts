@@ -34,6 +34,7 @@ test('create returns the full record with defaults', () => {
     state: 'idle',
     archived: false,
     lastSeq: 0,
+    createdAt: '2026-08-29T10:00:00.000Z',
     updatedAt: '2026-08-29T10:00:00.000Z',
   });
 });
@@ -56,6 +57,7 @@ test('list gives summaries, newest first, without archived sessions', () => {
     agent: 'claude',
     state: 'idle',
     lastSeq: 7,
+    createdAt: '2026-08-29T10:00:00.000Z',
     updatedAt: '2026-08-29T10:00:00.000Z',
   });
 });

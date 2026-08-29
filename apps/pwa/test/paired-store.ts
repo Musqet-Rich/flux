@@ -42,6 +42,7 @@ export const pairedStore = async (
     agent: 'claude',
     state: 'idle',
     lastSeq: events.length,
+    createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',
   };
   const seen = reactive<{ method: string; params: unknown }[]>([]);

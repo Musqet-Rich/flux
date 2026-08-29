@@ -7,6 +7,8 @@ import { DaemonError } from './daemon-error.ts';
 // is the history, this is only what the daemon needs to reattach and what the list screen shows.
 
 export interface SessionRecord extends SessionSummary {
+  // Optional on the wire for older daemons; this one has always stored it, so it always sends it.
+  createdAt: string;
   worktree: string;
   base: string;
   agentSessionId: string | null;
@@ -53,7 +55,7 @@ const stateOf = (value: unknown): SessionState => {
 };
 
 const columns =
-  'session, title, repo, worktree, branch, base, agent, agent_session_id, state, archived, updated_at';
+  'session, title, repo, worktree, branch, base, agent, agent_session_id, state, archived, created_at, updated_at';
 
 const toRecord = (row: Record<string, unknown>, lastSeq: number): SessionRecord => ({
   session: String(row['session']),
@@ -67,6 +69,7 @@ const toRecord = (row: Record<string, unknown>, lastSeq: number): SessionRecord 
   state: stateOf(row['state']),
   archived: row['archived'] === 1,
   lastSeq,
+  createdAt: String(row['created_at']),
   updatedAt: String(row['updated_at']),
 });
 
@@ -78,6 +81,7 @@ const toSummary = (record: SessionRecord): SessionSummary => ({
   agent: record.agent,
   state: record.state,
   lastSeq: record.lastSeq,
+  createdAt: record.createdAt,
   updatedAt: record.updatedAt,
 });
 
@@ -86,7 +90,7 @@ const prepareStatements = (db: DatabaseSync) => {
     db.prepare(`UPDATE sessions SET ${column} = ?, updated_at = ? WHERE session = ?`);
   return {
     insert: db.prepare(
-      `INSERT INTO sessions (${columns}, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 'idle', 0, ?, ?)`,
+      `INSERT INTO sessions (${columns}) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 'idle', 0, ?, ?)`,
     ),
     select: db.prepare(`SELECT ${columns} FROM sessions WHERE session = ?`),
     selectAll: db.prepare(
