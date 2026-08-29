@@ -1,13 +1,21 @@
-import type { ChangedFile, CodeRef, Ephemeral, FluxEvent, SessionState } from '@flux/protocol';
+import type {
+  Attachment,
+  ChangedFile,
+  CodeRef,
+  Ephemeral,
+  FluxEvent,
+  SessionState,
+} from '@flux/protocol';
+import { attachment } from '@flux/protocol';
 
+import { attachmentImages } from './attachment-images.ts';
 import { contextWindow } from './claude/context-window.ts';
 import type { AgentProcess } from './claude/spawn-claude.ts';
 import type { EventInput, EventLog } from './create-event-log.ts';
 import type { GitService } from './create-git-service.ts';
 import type { SessionRecord, SessionStore } from './create-session-store.ts';
-import { renderRefs } from './render-refs.ts';
+import { renderPrompt } from './render-prompt.ts';
 import type { Reply } from './render-reply.ts';
-import { renderReply } from './render-reply.ts';
 
 // One session = one agent process + one worktree + one event stream (architecture.md § Daemon).
 // The supervisor owns the process lifecycle and is the only writer to this session's log. Which
@@ -43,13 +51,24 @@ export interface AgentAdapter {
   reset: () => void;
 }
 
+// A stored attachment as the message carries it: what the log records plus where it is.
+export interface AttachedRecord {
+  id: string;
+  name: string;
+  mime: string;
+  size: number;
+  path: string;
+}
+
 export interface SessionSupervisor {
-  // `reply` is the message this one answers, already read from the log by the caller.
+  // `reply` is the message this one answers, already read from the log by the caller;
+  // `attachments` are the files stored for it (create-attachment-store.ts).
   send: (
     text: string,
     refs?: CodeRef[],
     commentIds?: string[],
     reply?: Reply | null,
+    attachments?: AttachedRecord[],
   ) => Promise<number>;
   // A flux_ask in flight: waiting_user while true, back to running when answered.
   waiting: (on: boolean) => void;
@@ -172,22 +191,37 @@ const fileContent = (ctx: Context, ref: CodeRef): Promise<string | null> =>
     () => null,
   );
 
+const logged = (files: AttachedRecord[]): Attachment[] =>
+  files.map(({ id, name, mime, size }) => ({
+    id,
+    name,
+    mime,
+    size,
+    image: attachment.isImage(mime, size),
+  }));
+
 const send = async (
   ctx: Context,
   text: string,
   refs: CodeRef[],
   commentIds: string[],
   reply: Reply | null,
+  attachments: AttachedRecord[],
 ): Promise<number> => {
-  const contents = await Promise.all(refs.map((ref) => fileContent(ctx, ref)));
+  const [contents, images] = await Promise.all([
+    Promise.all(refs.map((ref) => fileContent(ctx, ref))),
+    attachmentImages(attachments),
+  ]);
   const payload = {
     text,
     ...(refs.length === 0 ? {} : { refs }),
     ...(commentIds.length === 0 ? {} : { commentIds }),
     ...(reply === null ? {} : { replyTo: reply.seq }),
+    ...(attachments.length === 0 ? {} : { attachments: logged(attachments) }),
   };
   const event = append(ctx, { type: 'msg.user', payload });
-  ensureAgent(ctx).send(renderReply(renderRefs(text, refs, contents), reply));
+  const prompt = renderPrompt({ text, refs, contents, reply, attachments });
+  ensureAgent(ctx).send(prompt, images);
   setState(ctx, 'running');
   return event.seq;
 };
@@ -204,8 +238,8 @@ export const createSessionSupervisor = (options: SupervisorOptions): SessionSupe
     queue: Promise.resolve(),
   };
   return {
-    send: (text, refs = [], commentIds = [], reply = null) =>
-      send(ctx, text, refs, commentIds, reply),
+    send: (text, refs = [], commentIds = [], reply = null, attachments = []) =>
+      send(ctx, text, refs, commentIds, reply, attachments),
     // An answer that lands after close (the ask's connection dropping with the agent) must not
     // put a closed session back to running.
     waiting: (on) => {

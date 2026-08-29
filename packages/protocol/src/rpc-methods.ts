@@ -1,3 +1,4 @@
+import { attachment } from './attachment.ts';
 import type { AgentKind, CodeRef, SessionState, TokenUsage } from './event-payloads.ts';
 import type { FluxEvent } from './flux-event.ts';
 import { guards } from './guards.ts';
@@ -114,8 +115,15 @@ export interface RpcMethods {
   'sessions.restart': { params: { session: string }; result: Record<string, never> };
   // Gives the session a new title, logged as `session.renamed`; `bad_params` on a blank one.
   'sessions.rename': { params: { session: string; title: string }; result: Record<string, never> };
+  // `attachments` are ids from `attach.end`, each complete and belonging to the session.
   'agent.send': {
-    params: { session: string; text: string; commentIds?: string[]; replyTo?: number };
+    params: {
+      session: string;
+      text: string;
+      commentIds?: string[];
+      replyTo?: number;
+      attachments?: string[];
+    };
     result: { seq: number };
   };
   'agent.answer': {
@@ -172,6 +180,29 @@ export interface RpcMethods {
   'devices.remove': { params: { deviceId: string }; result: Record<string, never> };
   'settings.get': { params: Record<string, never>; result: Settings };
   'settings.set': { params: SettingsPatch; result: Settings };
+  // File attachments, chunked over the channel (ADR 0020): begin, sequential chunks of at most
+  // `attachment.limits.chunkBytes` raw bytes as base64, then end with the sha256 hex of the
+  // whole file. `too_large` past the per-file cap; an out-of-order or duplicate chunk and a
+  // hash mismatch are `bad_params`, the latter also deleting the partial file.
+  'attach.begin': {
+    params: { session: string; name: string; mime: string; size: number };
+    result: { attachmentId: string };
+  };
+  'attach.chunk': {
+    params: { attachmentId: string; index: number; data: string };
+    result: Record<string, never>;
+  };
+  'attach.end': {
+    params: { attachmentId: string; hash: string };
+    result: { path: string; size: number };
+  };
+  // A slice of a stored attachment, `length` capped at `attachment.limits.readBytes`.
+  'attach.read': {
+    params: { attachmentId: string; offset: number; length: number };
+    result: { data: string; size: number; mime: string; name: string };
+  };
+  // Removes an attachment the operator took off the message before sending it.
+  'attach.delete': { params: { attachmentId: string }; result: Record<string, never> };
 }
 
 export type RpcMethod = keyof RpcMethods;
@@ -185,6 +216,7 @@ export type RpcErrorCode =
   | 'gh_error'
   | 'conflict'
   | 'dirty'
+  | 'too_large'
   | 'internal';
 
 type ParamGuards = { [M in RpcMethod]: (value: unknown) => value is RpcMethods[M]['params'] };
@@ -224,7 +256,8 @@ export const rpcMethods: ParamGuards = {
     withSession(v) &&
     isString(v['text']) &&
     isOptional(v['commentIds'], (c): c is string[] => isArrayOf(c, isString)) &&
-    isOptional(v['replyTo'], (n): n is number => isInteger(n, 1)),
+    isOptional(v['replyTo'], (n): n is number => isInteger(n, 1)) &&
+    isOptional(v['attachments'], (a): a is string[] => isArrayOf(a, isString)),
   'agent.answer': (v): v is RpcMethods['agent.answer']['params'] =>
     withSession(v) && isString(v['askId']) && isString(v['answer']),
   'agent.interrupt': withSession,
@@ -271,4 +304,18 @@ export const rpcMethods: ParamGuards = {
     isRecord(v) && isString(v['deviceId']),
   'settings.get': isEmpty,
   'settings.set': settings.isPatch,
+  'attach.begin': (v): v is RpcMethods['attach.begin']['params'] =>
+    withSession(v) && isString(v['name']) && isString(v['mime']) && isInteger(v['size']),
+  'attach.chunk': (v): v is RpcMethods['attach.chunk']['params'] =>
+    isRecord(v) && isString(v['attachmentId']) && isInteger(v['index']) && isString(v['data']),
+  'attach.end': (v): v is RpcMethods['attach.end']['params'] =>
+    isRecord(v) && isString(v['attachmentId']) && isString(v['hash']),
+  'attach.read': (v): v is RpcMethods['attach.read']['params'] =>
+    isRecord(v) &&
+    isString(v['attachmentId']) &&
+    isInteger(v['offset']) &&
+    isInteger(v['length'], 1) &&
+    v['length'] <= attachment.limits.readBytes,
+  'attach.delete': (v): v is RpcMethods['attach.delete']['params'] =>
+    isRecord(v) && isString(v['attachmentId']),
 };

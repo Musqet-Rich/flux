@@ -1,0 +1,24 @@
+# 0020: File attachments: chunked over the channel, stored outside the worktree, image blocks for Claude
+
+Status: accepted, 2026-08-29.
+
+## Context
+
+Dogfooding on 2026-08-29: the operator often has a screenshot, a log or a spec on the phone that the agent needs, and the only way to get it to the box was to paste text. The relay is dumb and sees ciphertext only (ADR 0003), every frame is capped at 1 MiB (`protocol.md` § 2), and a file the agent could reach must never end up committed by accident.
+
+## Decision
+
+1. **Chunked over the existing channel.** Five RPC methods (`protocol.md` § 7): `attach.begin { session, name, mime, size } → { attachmentId }`, `attach.chunk { attachmentId, index, data }` with sequential base64 chunks of at most 512 KiB raw (base64 in JSON, then deflate, stays under the relay's frame cap), `attach.end { attachmentId, hash }` with the sha256 hex of the whole file, `attach.read` for the device to fetch slices back (512 KiB per call at most), and `attach.delete` for a file the operator took off the message. No new transport, no HTTP upload route: the relay stays ignorant and the encryption stays end to end. A chunk out of order or repeated, and a hash that does not match, are `bad_params` (the partial file is deleted); a file over 20 MiB, or a message whose attachments total over 50 MiB, is `too_large`, a new error code.
+2. **Stored outside the worktree.** The box writes to `<dataDir>/attachments/<session>/<id>-<name>` with the name reduced to `[A-Za-z0-9._-]` and the path checked with `inside()`, streaming through a file handle with the digest computed as chunks land (never 20 MiB in memory). Rows live in a new `attachments` table. The agent gets the absolute path, so it can open the file with its own tools, and nothing under a worktree changes, so `git add -A` cannot pick a screenshot up.
+3. **On the message.** `agent.send` gains `attachments?: string[]` (ids that must be complete and the session's own); `msg.user` gains `attachments?: Attachment[]` (`{ id, name, mime, size, image }`). The prompt lists each file as `Attached: <path> (<mime>, <size>)` after the message and the referenced code, before the reply quote wraps it. Both fields are optional, so an older device or daemon ignores them.
+4. **Image blocks.** An image of type png, jpeg, gif or webp within 5 MiB (the model API's limit) also goes to Claude as a base64 `image` content block beside the text block, in the `stream-json` user message; the shape was verified against a real `claude -p --input-format stream-json` run captured as `fixtures/claude/session-image-block` (the model answered the image's colour from the block). pi's `--mode rpc` takes the same images as `images: [{ type: 'image', data, mimeType }]` on the prompt (its `docs/rpc.md`), so both agents get the block; every file keeps its path line regardless.
+5. **Lifetime.** Cleanup is lazy, with no timer: at daemon start and before each `attach.begin`, an upload not ended within 10 minutes and a complete attachment not sent within 24 hours are deleted. A channel that goes away mid-upload is covered by the 10 minutes. A sent attachment lives as long as its session: a plain `sessions.archive` keeps the files, so a reopened session still shows its images; `sessions.archive` with `removeWorktree` (deleting the session) removes the session's whole attachments directory and rows, and the log keeps the names and sizes, so the timeline still lists what was sent.
+6. **PWA.** One attachment list on the composer fed by a `+` button (`<input type=file multiple>`), a drop on the bottom bar (composer and status bar; a drop anywhere else is swallowed so it cannot navigate the tab away) and a paste of files. Uploads start as a file is added; Send waits for every upload; a failed one shows its error with Retry. The draft, text and files, lives in the store, so leaving the session keeps it. Sent images show as thumbnails fetched with `attach.read` and held as blob URLs until the session is left (the relay's CSP gains `img-src blob:`); a tap opens the image full-size.
+
+## Consequences
+
+- Protocol additions only (§ 8): five methods, two optional fields, one error code, no version bump.
+- Transfer speed is the channel's: a 20 MiB file is 40 chunks, each a round trip through the relay, encrypted and deflated. Fine for screenshots and logs, which is what this is for; anything larger belongs in the repository.
+- The box holds up to 50 MiB per message on disk, under the data directory, until the session is deleted. Nothing counts against the worktree or the repository.
+- The digest of the whole file is computed on the device before the first chunk, so a corrupted upload is refused rather than handed to the agent.
+- An image that is too large for a block still reaches the agent as a path; whether the agent can read it depends on its own tools.

@@ -1,5 +1,5 @@
 import type { CodeRef, RpcMethods, SessionSummary, TokenUsage } from '@flux/protocol';
-import { fluxEvent, protocolVersion } from '@flux/protocol';
+import { attachment, fluxEvent, protocolVersion } from '@flux/protocol';
 import { join } from 'node:path';
 
 import type { Peer } from './create-device-channels.ts';
@@ -100,16 +100,33 @@ const quoted = (ctx: HandlerContext, session: string, seq: number): Reply => {
   return reply;
 };
 
+// The attachments a message names must be complete, the session's own, and within the
+// per-message cap together (ADR 0020); the store checks the first two.
+const attached = (ctx: HandlerContext, session: string, ids: string[]) => {
+  if (new Set(ids).size !== ids.length) {
+    throw new DaemonError('bad_params', 'an attachment is named twice');
+  }
+  const files = ctx.attachments.get(session, ids);
+  const total = files.reduce((sum, f) => sum + f.size, 0);
+  if (total > attachment.limits.messageBytes) {
+    throw new DaemonError('too_large', 'attachments on one message may total at most 50 MiB');
+  }
+  return files;
+};
+
 const sendMessage = async (
   ctx: HandlerContext,
-  params: { session: string; text: string; commentIds?: string[]; replyTo?: number },
+  params: RpcMethods['agent.send']['params'],
 ): Promise<{ seq: number }> => {
   const record = ctx.sessions.get(params.session);
   const commentIds = params.commentIds ?? [];
   const comments = ctx.comments.get(params.session, commentIds);
   const refs: CodeRef[] = comments.map((c) => c.ref);
   const reply = params.replyTo === undefined ? null : quoted(ctx, params.session, params.replyTo);
-  const seq = await ctx.supervisor(record).send(params.text, refs, commentIds, reply);
+  const ids = params.attachments ?? [];
+  const files = attached(ctx, params.session, ids);
+  const seq = await ctx.supervisor(record).send(params.text, refs, commentIds, reply, files);
+  if (ids.length > 0) ctx.attachments.markSent(ids, seq);
   if (commentIds.length > 0) {
     ctx.comments.markSent(commentIds, seq);
     ctx.log.append(params.session, { type: 'comment.sent', payload: { commentIds, msgSeq: seq } });

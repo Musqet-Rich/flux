@@ -137,3 +137,27 @@ test('the tail of stderr is kept for the session end reason', async () => {
   expect(await exit).toBe(1);
   expect(agent.stderr()).toContain('Model "no-such-model" not found');
 });
+
+const echo = fileURLToPath(new URL('../../test/echo-agent.ts', import.meta.url));
+
+// pi's rpc.md: a prompt carries images as `images: [{ type: 'image', data, mimeType }]`.
+test('images go on the prompt as pi expects them', async () => {
+  const agent = spawnPi({
+    cwd: process.cwd(),
+    session: 's',
+    sessionDir: process.cwd(),
+    command: echo,
+    close: { graceMs: 100 },
+  });
+  const line = new Promise<string>((resolve) => {
+    agent.onLine(resolve);
+  });
+  agent.send('look', [{ mediaType: 'image/png', data: 'AA==' }]);
+  expect(JSON.parse(await line)).toEqual({
+    type: 'prompt',
+    message: 'look',
+    streamingBehavior: 'followUp',
+    images: [{ type: 'image', data: 'AA==', mimeType: 'image/png' }],
+  });
+  await agent.close();
+});

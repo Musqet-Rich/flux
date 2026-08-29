@@ -91,6 +91,14 @@ const cases: { [M in RpcMethod]: [ok: unknown, bad: unknown] } = {
   'devices.remove': [{}, 0],
   'settings.get': [settings, { ...settings, agent: {} }],
   'settings.set': [settings, { flux: settings.flux }],
+  'attach.begin': [{ attachmentId: 'a' }, {}],
+  'attach.chunk': [{}, null],
+  'attach.end': [{ path: '/d/a', size: 3 }, { path: '/d/a' }],
+  'attach.read': [
+    { data: 'AA==', size: 1, mime: 'image/png', name: 'a.png' },
+    { data: 'AA==', size: 1, mime: 'image/png' },
+  ],
+  'attach.delete': [{}, 0],
 };
 
 test.each(Object.entries(cases))('%s result guard accepts and rejects', (method, [ok, bad]) => {

@@ -16,5 +16,10 @@ export default defineConfig({
   timeout: 120_000,
   expect: { timeout: 15_000 },
   outputDir: 'test-results',
-  use: { browserName: 'chromium', trace: 'retain-on-failure' },
+  // A phone's width: the remote is used from one, and the layout has to hold there.
+  use: {
+    browserName: 'chromium',
+    trace: 'retain-on-failure',
+    viewport: { width: 390, height: 844 },
+  },
 });

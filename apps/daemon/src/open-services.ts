@@ -45,7 +45,7 @@ export const openServices = (options: ServicesOptions): Services => {
   mkdirSync(worktreesDir, { recursive: true });
   const db = openDatabase(join(options.dataDir, 'flux.sqlite'));
   const asks = createAskRegistry();
-  const stores = openStores(db, options.reposDir);
+  const stores = openStores(db, options.reposDir, join(options.dataDir, 'attachments'));
   return {
     ...stores,
     worktreesDir,

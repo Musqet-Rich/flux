@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from 'vitest';
 
@@ -13,6 +14,11 @@ const fixture = fileURLToPath(
 );
 
 const stubborn = fileURLToPath(new URL('../../test/stubborn-agent.ts', import.meta.url));
+const echo = fileURLToPath(new URL('../../test/echo-agent.ts', import.meta.url));
+const png = fileURLToPath(new URL('../../test/red.png', import.meta.url));
+const imageMeta = fileURLToPath(
+  new URL('../../test/fixtures/claude/session-image-block.meta.json', import.meta.url),
+);
 
 const start = (extra: NodeJS.ProcessEnv = {}, command = fake): AgentProcess =>
   spawnClaude({
@@ -78,4 +84,34 @@ test('close ends an agent that ignores EOF and SIGTERM', async () => {
   expect(await ready(agent)).toBe('ready');
   expect(await agent.close()).toBeNull();
   expect(await exit).toBeNull();
+});
+
+// The message with an image block is written exactly as the capture that produced
+// fixtures/claude/session-image-block was fed (its meta.json records the input; the real
+// binary answered from the image), so the shape the daemon sends is the one verified to work.
+test('images go with the text as content blocks, in the shape the real binary accepted', async () => {
+  const agent = start({}, echo);
+  const line = new Promise<string>((resolve) => {
+    agent.onLine(resolve);
+  });
+  const data = (await readFile(png)).toString('base64');
+  agent.send('What colour?', [{ mediaType: 'image/png', data }]);
+  const sent = JSON.parse(await line) as { message: { content: { type: string }[] } };
+  await agent.close();
+  expect(sent).toEqual({
+    type: 'user',
+    message: {
+      role: 'user',
+      content: [
+        { type: 'text', text: 'What colour?' },
+        { type: 'image', source: { type: 'base64', media_type: 'image/png', data } },
+      ],
+    },
+  });
+  const meta = JSON.parse(await readFile(imageMeta, 'utf8')) as {
+    input: { message: { content: { type: string }[] } };
+  };
+  expect(sent.message.content.map((b) => b.type)).toEqual(
+    meta.input.message.content.map((b) => b.type),
+  );
 });

@@ -150,8 +150,13 @@ export const spawnPi = (options: SpawnPiOptions): AgentProcess => {
   return {
     // `followUp` only matters while pi is streaming (the message waits for the run to finish);
     // idle, the prompt starts a run at once. Always sent so a second message never errors.
-    send: (text) => {
-      command({ type: 'prompt', message: text, streamingBehavior: 'followUp' });
+    // Images go as pi's `images` field on the prompt (docs/rpc.md: `ImageContent`), ADR 0020.
+    send: (text, images = []) => {
+      const withImages =
+        images.length === 0
+          ? {}
+          : { images: images.map((i) => ({ type: 'image', data: i.data, mimeType: i.mediaType })) };
+      command({ type: 'prompt', message: text, streamingBehavior: 'followUp', ...withImages });
     },
     interrupt: () => {
       command({ type: 'abort' });

@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import type { FluxEvent, KnownEvent } from '@flux/protocol';
+import type { Attachment, FluxEvent, KnownEvent } from '@flux/protocol';
 import { fluxEvent } from '@flux/protocol';
 import type { VNode } from 'vue';
 import { computed, ref } from 'vue';
 
 import { renderMarkdown } from '../markdown/render-markdown.ts';
+import MessageAttachments from './MessageAttachments.vue';
 import MessageMenu from './MessageMenu.vue';
 
 // One entry of the session timeline. Every event type renders as one of nine shapes so the
@@ -27,9 +28,14 @@ interface View {
   task?: string;
   // The message a `user` row answers.
   replyTo?: number;
+  // The files sent with a `user` row (ADR 0020); `thumbs` has the fetched images by id.
+  attachments?: Attachment[];
 }
 
-const props = defineProps<{ event: FluxEvent; quote?: string | null }>();
+const props = withDefaults(
+  defineProps<{ event: FluxEvent; quote?: string | null; thumbs?: Record<string, string> }>(),
+  { quote: null, thumbs: () => ({}) },
+);
 defineEmits<{ task: [toolUseId: string]; reply: [seq: number]; jump: [seq: number] }>();
 const expanded = ref(false);
 
@@ -150,6 +156,9 @@ const describe = (event: FluxEvent): View => {
         detail: undefined,
         tone: null,
         ...(event.payload.replyTo === undefined ? {} : { replyTo: event.payload.replyTo }),
+        ...(event.payload.attachments === undefined
+          ? {}
+          : { attachments: event.payload.attachments }),
       };
     case 'msg.assistant':
       return { kind: 'assistant', text: event.payload.text, detail: undefined, tone: null };
@@ -207,7 +216,14 @@ const quoteLine = computed(
     >
       ↩ {{ quoteLine }}
     </button>
-    <Markdown v-if="isMessage" />
+    <template v-if="isMessage">
+      <Markdown />
+      <MessageAttachments
+        v-if="view.attachments !== undefined"
+        :attachments="view.attachments"
+        :thumbs="thumbs"
+      />
+    </template>
     <template v-else-if="view.kind === 'tool'">
       <button type="button" class="summary" :disabled="!hasDetail" @click="toggle">
         {{ view.text }}

@@ -59,6 +59,12 @@ button:disabled {
   cursor: default;
 }
 
+/* The bottom bar (composer and status bar) while files are dragged over it (useFileDrop). */
+.drop-target {
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+}
+
 button.secondary {
   background: var(--panel-2);
   color: var(--fg);

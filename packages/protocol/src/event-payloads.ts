@@ -1,3 +1,5 @@
+import type { Attachment } from './attachment.ts';
+import { attachment } from './attachment.ts';
 import { guards } from './guards.ts';
 import { isCodeRef } from './is-code-ref.ts';
 
@@ -57,7 +59,14 @@ export interface EventPayloads {
   'session.renamed': { title: string };
   // The agent's context was dropped (`sessions.clear`); what follows is a fresh conversation.
   'session.cleared': Record<string, never>;
-  'msg.user': { text: string; refs?: CodeRef[]; commentIds?: string[]; replyTo?: number };
+  'msg.user': {
+    text: string;
+    refs?: CodeRef[];
+    commentIds?: string[];
+    replyTo?: number;
+    // Files the operator attached, stored on the box (`attach.end`); absent when there are none.
+    attachments?: Attachment[];
+  };
   'msg.assistant': { text: string };
   'tool.start': { toolId: string; name: string; input: unknown; summary: string };
   'tool.end': { toolId: string; ok: boolean; summary: string; output?: unknown };
@@ -147,7 +156,8 @@ export const eventPayloads: PayloadGuards = {
     isString(v['text']) &&
     isOptional(v['refs'], (r): r is CodeRef[] => isArrayOf(r, isCodeRef)) &&
     isOptional(v['commentIds'], isStrings) &&
-    isOptional(v['replyTo'], (n): n is number => isInteger(n, 1)),
+    isOptional(v['replyTo'], (n): n is number => isInteger(n, 1)) &&
+    isOptional(v['attachments'], (a): a is Attachment[] => isArrayOf(a, attachment.is)),
   'msg.assistant': (v): v is EventPayloads['msg.assistant'] => isRecord(v) && isString(v['text']),
   'tool.start': (v): v is EventPayloads['tool.start'] =>
     isRecord(v) &&

@@ -1,5 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 
+import type { AttachmentStore } from './create-attachment-store.ts';
+import { createAttachmentStore } from './create-attachment-store.ts';
 import type { CommentStore } from './create-comment-store.ts';
 import { createCommentStore } from './create-comment-store.ts';
 import type { DeviceStore } from './create-device-store.ts';
@@ -13,10 +15,12 @@ import { createSessionStore } from './create-session-store.ts';
 import type { SettingsStore } from './create-settings-store.ts';
 import { createSettingsStore } from './create-settings-store.ts';
 
-// Everything that lives in the one SQLite file (ADR 0006), opened over a database handle.
+// Everything that lives in the one SQLite file (ADR 0006), opened over a database handle; the
+// attachment store also owns a directory of files beside it (ADR 0020).
 
 export interface Stores {
   log: EventLog;
+  attachments: AttachmentStore;
   sessions: SessionStore;
   devices: DeviceStore;
   comments: CommentStore;
@@ -24,10 +28,11 @@ export interface Stores {
   settings: SettingsStore;
 }
 
-export const openStores = (db: DatabaseSync, reposDir: string): Stores => {
+export const openStores = (db: DatabaseSync, reposDir: string, attachmentsDir: string): Stores => {
   const log = createEventLog({ db });
   return {
     log,
+    attachments: createAttachmentStore({ db, dir: attachmentsDir }),
     sessions: createSessionStore({ db, lastSeq: log.lastSeq }),
     devices: createDeviceStore({ db }),
     comments: createCommentStore(db),

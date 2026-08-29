@@ -26,6 +26,9 @@ const internals = (): StoreInternals => ({
   deviceId: null,
   errorTimer: null,
   connectionError: null,
+  files: new Map(),
+  thumbLoads: new Map(),
+  thumbOwners: new Map(),
 });
 
 test('appends to the view and writes only the chunks the new tail touches', async () => {

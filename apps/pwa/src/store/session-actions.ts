@@ -1,4 +1,6 @@
 import { ClientError } from '../client/client-error.ts';
+import type { AttachmentActions } from './attachment-actions.ts';
+import { attachmentActions } from './attachment-actions.ts';
 import { boxLink } from './box-link.ts';
 import { pendingComments } from './pending-comments.ts';
 import type { StoreInternals } from './store-state.ts';
@@ -18,8 +20,10 @@ export interface DeleteOptions {
 // worktree holds work that exists nowhere else; null for any other failure, already reported.
 export type DeleteOutcome = { ok: true } | { ok: false; dirty: string | null };
 
-export interface SessionActions {
-  // Sends a message carrying every pending comment; `replyTo` is the seq of the message it answers.
+export interface SessionActions extends AttachmentActions {
+  // Sends a message carrying every pending comment and every attachment the composer holds
+  // ready; `replyTo` is the seq of the message it answers. The composer draft is cleared once
+  // the box has the message.
   send: (session: string, text: string, replyTo?: number) => Promise<boolean>;
   clearSession: (session: string) => Promise<boolean>;
   // The new title reaches the tab through `session.renamed`, so no refresh is needed.
@@ -29,21 +33,26 @@ export interface SessionActions {
   deleteSession: (session: string, options: DeleteOptions) => Promise<DeleteOutcome>;
 }
 
-const send = (
+const send = async (
   i: StoreInternals,
+  files: ReturnType<typeof attachmentActions>,
   session: string,
   text: string,
   replyTo?: number,
 ): Promise<boolean> => {
   const events = i.logs.get(session)?.events() ?? [];
   const commentIds = pendingComments(events).map((c) => c.commentId);
+  const attachments = files.ready(session);
   const params = {
     session,
     text,
     ...(commentIds.length > 0 ? { commentIds } : {}),
     ...(replyTo === undefined ? {} : { replyTo }),
+    ...(attachments.length > 0 ? { attachments } : {}),
   };
-  return boxLink.attempt(i, () => boxLink.call(i, 'agent.send', params));
+  const ok = await boxLink.attempt(i, () => boxLink.call(i, 'agent.send', params));
+  if (ok) files.clear(session);
+  return ok;
 };
 
 const archive = async (i: StoreInternals, session: string): Promise<void> => {
@@ -75,13 +84,17 @@ const remove = async (
   return { ok: true };
 };
 
-export const sessionActions = (i: StoreInternals): SessionActions => ({
-  send: (session, text, replyTo) => send(i, session, text, replyTo),
-  clearSession: (session) =>
-    boxLink.attempt(i, () => boxLink.call(i, 'sessions.clear', { session })),
-  renameSession: (session, title) =>
-    boxLink.attempt(i, () => boxLink.call(i, 'sessions.rename', { session, title })),
-  archiveSession: (session) => boxLink.attempt(i, () => archive(i, session)),
-  unarchiveSession: (session) => boxLink.attempt(i, () => unarchive(i, session)),
-  deleteSession: (session, options) => remove(i, session, options),
-});
+export const sessionActions = (i: StoreInternals): SessionActions => {
+  const files = attachmentActions(i);
+  return {
+    ...files,
+    send: (session, text, replyTo) => send(i, files, session, text, replyTo),
+    clearSession: (session) =>
+      boxLink.attempt(i, () => boxLink.call(i, 'sessions.clear', { session })),
+    renameSession: (session, title) =>
+      boxLink.attempt(i, () => boxLink.call(i, 'sessions.rename', { session, title })),
+    archiveSession: (session) => boxLink.attempt(i, () => archive(i, session)),
+    unarchiveSession: (session) => boxLink.attempt(i, () => unarchive(i, session)),
+    deleteSession: (session, options) => remove(i, session, options),
+  };
+};

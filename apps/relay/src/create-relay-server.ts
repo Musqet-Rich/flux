@@ -32,7 +32,9 @@ export interface RelayServer {
 }
 
 // engineering.md § Security. `wss:` for the relay itself; `data:` for QR and icons.
-const csp = "default-src 'self'; connect-src 'self' wss:; img-src 'self' data:";
+// `blob:` for the thumbnails of image attachments, which the PWA fetches over the channel and
+// shows from object URLs (ADR 0020).
+const csp = "default-src 'self'; connect-src 'self' wss:; img-src 'self' data: blob:";
 const roomPath = /^\/ws\/([A-Za-z0-9_-]{22})$/u;
 const closeCodes = { policy: 1008, tooLarge: 1009, protocol: 1002 } as const;
 

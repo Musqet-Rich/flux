@@ -20,6 +20,7 @@ export interface HandlerContext {
   sessions: Services['sessions'];
   devices: Services['devices'];
   comments: Services['comments'];
+  attachments: Services['attachments'];
   push: Services['push'];
   settings: Services['settings'];
   agentConfig: Services['agentConfig'];
