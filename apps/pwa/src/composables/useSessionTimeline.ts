@@ -6,7 +6,8 @@ import { openAsk } from '../store/open-ask.ts';
 import type { SessionTask } from '../store/session-tasks.ts';
 import { sessionTasks } from '../store/session-tasks.ts';
 
-// What the session screen derives from its log: the subagent tasks for the strip, which chat
+// What the session screen derives from its log: the subagent tasks and the strip's cut of
+// them (the current ones, plus the open chat's own row so Back has somewhere to be), which chat
 // is open (`main`, or a task's Agent call id), that chat's rows, and the agent's open question.
 // Main shows top-level rows only; a subagent's chat shows the rows whose `parent` is its call,
 // the last `pageSize` of them until the operator asks for earlier ones (no virtualisation:
@@ -22,6 +23,9 @@ const hiddenTypes = new Set(['raw', 'rate_limit', 'task.progress']);
 
 export interface SessionTimeline {
   tasks: ComputedRef<SessionTask[]>;
+  // The rows the strip lists: current tasks (store/session-tasks) and the open chat's task,
+  // kept while viewed even when its turn is over.
+  strip: ComputedRef<SessionTask[]>;
   // The open chat: null for main, else the task's `toolUseId`.
   view: Ref<string | null>;
   // The open task's row, null on main or once the task is gone (a cleared context).
@@ -39,6 +43,7 @@ export const useSessionTimeline = (events: () => readonly FluxEvent[]): SessionT
   const all = ref(false);
   const tasks = computed(() => sessionTasks(events()));
   const task = computed(() => tasks.value.find((t) => t.toolUseId === view.value) ?? null);
+  const strip = computed(() => tasks.value.filter((t) => t.current || t.toolUseId === view.value));
   const rows = computed(() =>
     events().filter((e) => !hiddenTypes.has(e.type) && (e.parent ?? null) === view.value),
   );
@@ -51,6 +56,7 @@ export const useSessionTimeline = (events: () => readonly FluxEvent[]): SessionT
   const ask = computed(() => openAsk(events()));
   return {
     tasks,
+    strip,
     view,
     task,
     timeline,

@@ -49,6 +49,7 @@ test('opens a row per task.started and closes it with its task.ended', () => {
       status: 'running',
       summary: '',
       tokens: null,
+      current: true,
     },
     {
       taskId: 't2',
@@ -61,6 +62,7 @@ test('opens a row per task.started and closes it with its task.ended', () => {
       status: 'completed',
       summary: 'alpha',
       tokens: 12070,
+      current: true,
     },
   ]);
 });
@@ -139,4 +141,79 @@ test('ignores unknown events and an ended for a task it never saw', () => {
     started('t1', 'u1', 'a'),
   ]);
   expect(tasks.map((t) => t.status)).toEqual(['running']);
+});
+
+const user = (text: string, parent?: string): FluxEvent => ev('msg.user', { text }, parent);
+
+// The strip is for now: a task that ended before the operator's latest message is over, and its
+// row would only bury the running ones. A running task from an old turn is still work in flight.
+test('a task is current while running or when it ended in the current turn', () => {
+  const tasks = sessionTasks([
+    user('one'),
+    started('t1', 'u1', 'old running'),
+    started('t2', 'u2', 'old done'),
+    ended('t2', 'completed'),
+    user('two'),
+    started('t3', 'u3', 'new done'),
+    ended('t3', 'completed'),
+    user('subagent prompt', 'u1'),
+    started('t4', 'u4', 'new running'),
+  ]);
+  expect(tasks.map((t) => [t.taskId, t.current])).toEqual([
+    ['t1', true],
+    ['t2', false],
+    ['t3', true],
+    ['t4', true],
+  ]);
+});
+
+// Clearing the context is a turn boundary too: the tasks it interrupted belong to the old one.
+test('session.cleared starts a new turn', () => {
+  const tasks = sessionTasks([
+    started('t1', 'u1', 'a'),
+    started('t2', 'u2', 'b'),
+    ended('t2', 'completed'),
+    ev('session.cleared', {}),
+    started('t3', 'u3', 'c'),
+    ended('t3', 'completed'),
+  ]);
+  expect(tasks.map((t) => [t.status, t.current])).toEqual([
+    ['interrupted', false],
+    ['completed', false],
+    ['completed', true],
+  ]);
+});
+
+// A task the session left behind (idle) ended in the turn it was interrupted in, so it stays
+// until the next message; a nested task shows with its parent and goes with it.
+test('an interrupted task stays until the next message; nested tasks follow their parent', () => {
+  const tasks = sessionTasks([
+    started('t1', 'u1', 'outer'),
+    started('t2', 'u2', 'inner', 'u1'),
+    ended('t2', 'completed'),
+    started('t3', 'u3', 'other'),
+    ended('t3', 'completed'),
+    ev('session.state', { state: 'idle' }),
+    user('next'),
+    started('t4', 'u4', 'outer 2'),
+    started('t5', 'u5', 'inner 2', 'u4'),
+    ended('t5', 'completed'),
+  ]);
+  expect(tasks.map((t) => [t.taskId, t.current])).toEqual([
+    ['t1', false],
+    ['t2', false],
+    ['t3', false],
+    ['t4', true],
+    ['t5', true],
+  ]);
+  const before = sessionTasks([
+    started('t1', 'u1', 'outer'),
+    started('t2', 'u2', 'inner', 'u1'),
+    ended('t2', 'completed'),
+    ev('session.state', { state: 'idle' }),
+  ]);
+  expect(before.map((t) => [t.status, t.current])).toEqual([
+    ['interrupted', true],
+    ['completed', true],
+  ]);
 });

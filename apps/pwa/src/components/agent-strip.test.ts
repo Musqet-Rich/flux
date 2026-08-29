@@ -16,6 +16,7 @@ const task = (over: Partial<SessionTask>): SessionTask => ({
   status: 'running',
   summary: '',
   tokens: null,
+  current: true,
   ...over,
 });
 
@@ -66,4 +67,15 @@ test('selects a task or main on tap', async () => {
   await rows[0]?.trigger('click');
   await rows[1]?.trigger('click');
   expect(wrapper.emitted('select')).toEqual([[null], ['u1']]);
+});
+
+// The strip renders what it is given: an old turn's task reaches it only as the open chat,
+// and then it is a row, highlighted, so the operator knows where they are.
+test('lists exactly the rows given, the viewed one highlighted', () => {
+  const tasks = [task({ taskId: 't1', toolUseId: 'u1', status: 'completed', current: false })];
+  const wrapper = mount(AgentStrip, { props: { tasks, active: 'u1', busy: false } });
+  const rows = wrapper.findAll('.row');
+  expect(rows.map((r) => label(r))).toEqual(['● main', '○ Explore List files']);
+  expect(rows[1]?.classes()).toContain('active');
+  expect(rows[1]?.attributes('aria-pressed')).toBe('true');
 });
