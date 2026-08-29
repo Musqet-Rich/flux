@@ -30,20 +30,31 @@ const label = computed(() =>
     : labels[props.status],
 );
 
-const windows = computed(() =>
-  props.rateWindows.map((w) => ({
-    name: w.name,
-    percent: `${Math.round(w.utilisation * 100)}%`,
-    high: w.utilisation >= 0.8,
-  })),
-);
+// The agent names its windows on the wire (`five_hour`, `seven_day`, ...). The two known ones
+// get a short label; any other only earns a place on a phone-width bar when it is the most used,
+// which is the one the operator needs to know about.
+const shortNames: Record<string, string> = { five_hour: '5h', seven_day: '7d' };
+
+const windows = computed(() => {
+  const max = Math.max(...props.rateWindows.map((w) => w.utilisation));
+  return props.rateWindows
+    .filter((w) => Object.hasOwn(shortNames, w.name) || w.utilisation === max)
+    .map((w) => ({
+      name: w.name,
+      label: shortNames[w.name] ?? w.name.replaceAll('_', ' '),
+      percent: `${Math.round(w.utilisation * 100)}%`,
+      high: w.utilisation >= 0.8,
+    }));
+});
 </script>
 
 <template>
   <footer class="bar">
     <span class="status" :class="status">{{ label }}</span>
-    <span v-for="w in windows" :key="w.name" class="window" :class="{ high: w.high }">
-      {{ w.name }} {{ w.percent }}
+    <span v-if="windows.length > 0" class="windows">
+      <span v-for="w in windows" :key="w.name" class="window" :class="{ high: w.high }">
+        {{ w.label }} {{ w.percent }}
+      </span>
     </span>
     <button v-if="push === 'off'" type="button" class="secondary push" @click="$emit('enablePush')">
       Enable notifications
@@ -74,6 +85,15 @@ const windows = computed(() =>
 .status.no_host,
 .status.stopped {
   color: var(--warn);
+}
+
+/* One unbroken run, `5h 13% · 7d 24%`, however narrow the bar is. */
+.windows {
+  white-space: nowrap;
+}
+
+.window + .window::before {
+  content: ' · ';
 }
 
 .window.high {

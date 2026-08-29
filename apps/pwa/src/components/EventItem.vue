@@ -71,8 +71,9 @@ const describeNote = (event: KnownEvent): View => {
   }
 };
 
-// `raw` and any type this build does not know (protocol.md § 8) show their name with the payload
-// behind a tap, so a newer box never leaves a blank line in the timeline.
+// Any type this build does not know (protocol.md § 8) shows its name with the payload behind a
+// tap, so a newer box never leaves a blank line in the timeline. `raw` renders the same way,
+// though `SessionView` keeps it out of the timeline.
 const opaque = (type: string, payload: unknown): View => ({
   kind: 'tool',
   text: `${type} event`,
