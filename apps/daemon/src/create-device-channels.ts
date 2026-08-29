@@ -144,11 +144,13 @@ export const createDeviceChannels = (options: DeviceChannelsOptions): DeviceChan
       send(await entry.channel.seal(encode(message)));
       return true;
     },
+    // Sealed and sent per device, never sealed for all and then sent: a channel numbers its
+    // frames as it seals them, and a reply sealed after this broadcast (an rpc.result behind
+    // the event a handler appended) must not leave before it, or the device refuses the event.
     broadcast: async (message, send) => {
       const payload = encode(message);
       const entries = [...state.connected.values()];
-      const sealed = await Promise.all(entries.map((entry) => entry.channel.seal(payload)));
-      for (const data of sealed) send(data);
+      await Promise.all(entries.map((entry) => entry.channel.seal(payload).then(send)));
     },
     peers: () => [...state.connected.values()].map((entry) => entry.peer),
     reset: () => {

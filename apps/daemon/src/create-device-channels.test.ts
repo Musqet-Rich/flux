@@ -152,3 +152,37 @@ test('garbage, bad frames and unknown senders are dropped silently', async () =>
   h.channels.reset();
   expect(h.channels.peers()).toEqual([]);
 });
+
+const assistant = (seq: number, text: string): Wire => ({
+  kind: 'event',
+  event: { seq, ts: 't', session: 's', type: 'msg.assistant', payload: { text } },
+});
+
+// A channel numbers frames as it seals them, so a reply sealed after a broadcast must leave
+// after it. The first device's channel is given a backlog of large frames so its share of the
+// broadcast is slow; the second device's reply must still not overtake the broadcast on its
+// own channel, which it did when the broadcast sealed for everyone before sending to anyone.
+test('a reply sealed behind a broadcast never overtakes it on its device', async () => {
+  const h = await setup(true, true);
+  await connectDevice(h);
+  const { channel: second } = await connectDevice({
+    ...h,
+    dev: await handshake.generateKeyPair(true),
+  });
+  const [first = '', secondFp = ''] = h.channels.peers().map((peer) => peer.fingerprint);
+  const big = assistant(1, 'x'.repeat(256 * 1024));
+  const result: Wire = { kind: 'rpc.result', id: 'r', ok: true, result: null };
+  await Promise.all([
+    h.channels.sendTo(first, big, h.send),
+    h.channels.sendTo(first, big, h.send),
+    h.channels.sendTo(first, big, h.send),
+    h.channels.broadcast(assistant(2, 'event'), h.send),
+    h.channels.sendTo(secondFp, result, h.send),
+  ]);
+  const frames = h.out.filter((data) => frame.decode(data).kind !== frame.kind.handshake);
+  const opened = await Promise.all(frames.map((data) => second.open(data)));
+  const seen = opened
+    .filter((plain) => plain !== null)
+    .map((plain): unknown => JSON.parse(bytes.toUtf8(plain)));
+  expect(seen).toEqual([assistant(2, 'event'), result]);
+});

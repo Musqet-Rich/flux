@@ -104,43 +104,37 @@ const call = async (channel: Channel, method: string, params: unknown): Promise<
 const untilEvent = (channel: Channel, type: string): Promise<Wire> =>
   untilMatch(channel, (m) => m.kind === 'event' && m.event.type === type);
 
-// An rpc whose handler appends to the log: the device must see the event as well as the
-// result, in whichever order the two frames arrive.
-const callAndEvent = async (
-  channel: Channel,
-  method: string,
-  params: unknown,
-  type: string,
-): Promise<Wire[]> => {
-  const id = crypto.randomUUID();
-  const rpc: Wire = { kind: 'rpc', id, method, params };
-  relay.send(await channel.seal(bytes.fromUtf8(JSON.stringify(rpc))));
-  const either = (m: Wire): boolean =>
-    (m.kind === 'rpc.result' && m.id === id) || (m.kind === 'event' && m.event.type === type);
-  return [await untilMatch(channel, either), await untilMatch(channel, either)];
+// Pairs a fresh device with the proof from its pairing URL.
+const pairDevice = async (d: Awaited<ReturnType<typeof device>>): Promise<unknown> => {
+  const proof = await pairing.proof(d.payload.secret, d.keys.publicKey, d.payload.boxPub);
+  return call(d.channel, 'pair.request', {
+    devPub: base64url.encode(d.keys.publicKey),
+    proof: base64url.encode(proof),
+  });
 };
 
-// A comment added over the wire comes back as an event without a re-sync.
-const commentIsBroadcast = async (channel: Channel, session: string): Promise<void> => {
-  const ref = { path: 'README.md', rev: 'worktree', range: { startLine: 1, endLine: 1 } };
-  const params = { session, ref, text: 'why' };
-  const seen = await callAndEvent(channel, 'comments.add', params, 'comment.added');
-  expect(seen.map((m) => m.kind).toSorted()).toEqual(['event', 'rpc.result']);
-  expect(seen.find((m) => m.kind === 'event')).toMatchObject({
-    event: { type: 'comment.added', payload: { ref, text: 'why' } },
-  });
+// Reads frames until each channel has seen `wanted[i]` messages, decrypting every frame with
+// every channel: what each device sees, in the order it sees it. A frame out of nonce order
+// makes `open` throw, which fails the test.
+const collect = async (channels: Channel[], wanted: number[]): Promise<Wire[][]> => {
+  const seen: Wire[][] = channels.map(() => []);
+  const step = async (): Promise<Wire[][]> => {
+    if (seen.every((list, i) => list.length >= (wanted[i] ?? 0))) return seen;
+    const data = await relay.nextFrame();
+    const opened = await Promise.all(channels.map((channel) => open(channel, data)));
+    opened.forEach((message, i) => {
+      if (message !== null) seen[i]?.push(message);
+    });
+    return step();
+  };
+  return step();
 };
 
 test('pair, create a session, talk to the agent, sync the log', async () => {
   const { repo } = await setup();
   const d = await device();
   await expect(call(d.channel, 'sessions.list', {})).rejects.toThrow('not_paired');
-  const proof = await pairing.proof(d.payload.secret, d.keys.publicKey, d.payload.boxPub);
-  const paired = await call(d.channel, 'pair.request', {
-    devPub: base64url.encode(d.keys.publicKey),
-    proof: base64url.encode(proof),
-  });
-  expect(paired).toMatchObject({ deviceId: expect.any(String) });
+  expect(await pairDevice(d)).toMatchObject({ deviceId: expect.any(String) });
   expect(daemon.devices()).toHaveLength(1);
   expect(await call(d.channel, 'hello', { protocol: 1 })).toEqual({
     protocol: 1,
@@ -169,7 +163,6 @@ test('pair, create a session, talk to the agent, sync the log', async () => {
   expect(synced.complete).toBe(true);
   expect(synced.events.map((e) => e.seq)).toEqual(synced.events.map((_, i) => i + 1));
   expect(synced.events.map((e) => e.type)).toContain('tool.start');
-  await commentIsBroadcast(d.channel, session);
   const status = (await call(d.channel, 'git.status', { session })) as { files: unknown[] };
   expect(status.files).toEqual([]);
   expect(await call(d.channel, 'fs.list', { session, path: '.' })).toEqual({
@@ -264,4 +257,37 @@ test('file access stays inside the worktree and out of .git', async () => {
   await call(d.channel, 'fs.write', { session, path: 'alias.md', content: 'via link\n' });
   expect((await lstat(join(worktree, 'alias.md'))).isSymbolicLink()).toBe(true);
   expect(await readFile(join(worktree, 'README.md'), 'utf8')).toBe('via link\n');
+});
+
+// What a handler appends reaches every device as an event, and the caller sees the event before
+// its own result: the two are sealed on the caller's channel in that order, so the result may
+// not overtake it (a device refuses a frame numbered below one it has already accepted).
+test('a comment added by one device is an event on both, before the result', async () => {
+  const { repo } = await setup();
+  const first = await device();
+  await pairDevice(first);
+  const second = await device();
+  await pairDevice(second);
+  expect(daemon.devices()).toHaveLength(2);
+  const created = await call(first.channel, 'sessions.create', {
+    repo,
+    branch: 'flux/two',
+    agent: 'claude',
+  });
+  const { session } = created as { session: string };
+  const ref = { path: 'README.md', rev: 'worktree', range: { startLine: 1, endLine: 1 } };
+  const rpc: Wire = {
+    kind: 'rpc',
+    id: 'c1',
+    method: 'comments.add',
+    params: { session, ref, text: 'why' },
+  };
+  relay.send(await second.channel.seal(bytes.fromUtf8(JSON.stringify(rpc))));
+  const [onFirst, onSecond] = await collect([first.channel, second.channel], [1, 2]);
+  const event = { kind: 'event', event: expect.objectContaining({ type: 'comment.added' }) };
+  expect(onFirst).toEqual([event]);
+  expect(onSecond).toEqual([
+    event,
+    { kind: 'rpc.result', id: 'c1', ok: true, result: { commentId: expect.any(String) } },
+  ]);
 });
