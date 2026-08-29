@@ -11,7 +11,8 @@ import Composer from './Composer.vue';
 import EventItem from './EventItem.vue';
 import SessionToolbar from './SessionToolbar.vue';
 
-// One session: its toolbar (SessionToolbar), the agents strip once subagents have run, the
+// One session: its toolbar (SessionToolbar), the agents strip while it has a task row (a lone
+// `main` says nothing the toolbar does not), the
 // timeline of the open chat (main, or one subagent's), the streaming reply, the agent's open
 // question and the composer. The store owns the data and reports failures; this only renders
 // and dispatches.
@@ -27,7 +28,7 @@ const { scroller, behind, unread } = tail;
 const log = computed(() => props.store.state.logs[props.session]);
 const events = computed(() => log.value?.events ?? []);
 const chat = useSessionTimeline(() => events.value);
-const { tasks, view, task, timeline, earlier, ask } = chat;
+const { strip, view, task, timeline, earlier, ask } = chat;
 const streaming = computed(() => log.value?.streaming ?? '');
 // The delta buffer renders through the same Markdown pass as the final message, so an open
 // fence is a code block from its first line and the bubble never flickers back to raw text.
@@ -114,8 +115,8 @@ watch(
       @closed="$emit('closed')"
     />
     <AgentStrip
-      v-if="tasks.length > 0"
-      :tasks="tasks"
+      v-if="strip.length > 0"
+      :tasks="strip"
       :active="view"
       :busy="busy"
       @select="select"

@@ -4,7 +4,9 @@ import type { SessionTask } from '../store/session-tasks.ts';
 // The agents of one session, as Claude Code's own TUI lists them under its status bar: `main`
 // first, then one row per subagent task, nested tasks indented under the task that spawned
 // them. A running task's line is its latest progress note when it has sent one, else its
-// description. The selected row is the chat the timeline shows. Rendered only when there are tasks.
+// description. The selected row is the chat the timeline shows. Rendered only when there are
+// tasks. The rows are the caller's cut: the current tasks (store/session-tasks) plus the open
+// chat's, so a strip of one ended row from an old turn is the operator's way back.
 
 defineProps<{ tasks: SessionTask[]; active: string | null; busy: boolean }>();
 defineEmits<{ select: [view: string | null] }>();
