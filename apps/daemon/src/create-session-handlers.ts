@@ -93,7 +93,12 @@ const sendMessage = async (
 
 export const createSessionHandlers = (ctx: HandlerContext): SessionHandlers => ({
   hello: () =>
-    Promise.resolve({ protocol: 1, daemon: ctx.daemonName, sessions: ctx.sessions.list() }),
+    Promise.resolve({
+      protocol: 1,
+      daemon: ctx.daemonName,
+      sessions: ctx.sessions.list(),
+      vapidPublicKey: ctx.vapidPublicKey,
+    }),
   'events.sync': (p) => Promise.resolve(ctx.log.read(p.session, p.since)),
   'sessions.list': () => Promise.resolve(ctx.sessions.list()),
   'sessions.cost': (p) => Promise.resolve(cost(ctx, ctx.sessions.get(p.session).session)),

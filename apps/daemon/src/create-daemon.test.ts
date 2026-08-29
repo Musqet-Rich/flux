@@ -54,6 +54,7 @@ const setup = async () => {
     relayUrl: relay.url,
     reposDir: repos,
     daemonName: 'flux@test',
+    pushSubject: 'mailto:ops@example.com',
     claudeCommand: fake,
   });
   await daemon.start();
@@ -118,6 +119,7 @@ test('pair, create a session, talk to the agent, sync the log', async () => {
     protocol: 1,
     daemon: 'flux@test',
     sessions: [],
+    vapidPublicKey: expect.stringMatching(/^B[\w-]{86}$/u),
   });
   expect(await call(d.channel, 'repos.list', {})).toEqual({
     repos: [{ path: repo, name: 'app', branches: ['main'] }],

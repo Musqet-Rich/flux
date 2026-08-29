@@ -11,6 +11,8 @@ import type { SessionSupervisor } from './create-session-supervisor.ts';
 // else, so what the wire can reach is visible in one place.
 export interface HandlerContext {
   daemonName: string;
+  // base64url of the raw P-256 VAPID public key; the PWA subscribes with it (ADR 0013).
+  vapidPublicKey: string;
   reposDir: string;
   worktreesDir: string;
   log: EventLog;

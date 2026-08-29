@@ -12,6 +12,7 @@ import { DaemonError } from './daemon-error.ts';
 //   FLUX_DATA_DIR    state directory, default ~/.flux
 //   FLUX_REPOS_DIR   directory whose subdirectories are the repositories, default ~/repos
 //   FLUX_CLAUDE      the claude binary, default `claude` on PATH
+//   FLUX_PUSH_SUBJECT VAPID contact (mailto: or https: URL) shown to push services
 // `flux pair` asks a running daemon for a fresh pairing URL over its control socket; devices
 // are managed with `flux devices ls|rm <id>` (which open the database directly, daemon stopped
 // or not).
@@ -58,6 +59,7 @@ const daemon = await createDaemon({
   relayUrl,
   reposDir: env['FLUX_REPOS_DIR'] ?? join(home, 'repos'),
   daemonName: `flux@${hostname()}`,
+  pushSubject: env['FLUX_PUSH_SUBJECT'] ?? `https://${hostname()}`,
   ...(env['FLUX_CLAUDE'] === undefined ? {} : { claudeCommand: env['FLUX_CLAUDE'] }),
 });
 

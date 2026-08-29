@@ -44,7 +44,12 @@ export interface DirEntry {
 export interface RpcMethods {
   hello: {
     params: { protocol: number };
-    result: { protocol: number; daemon: string; sessions: SessionSummary[] };
+    result: {
+      protocol: number;
+      daemon: string;
+      sessions: SessionSummary[];
+      vapidPublicKey?: string;
+    };
   };
   'events.sync': {
     params: { session: string; since: number };
