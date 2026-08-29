@@ -93,9 +93,10 @@ pre {
   margin: 0;
 }
 
-/* Assistant messages (markdown/render-markdown.ts), used by the timeline and the streaming
-   bubble: paragraphs and blocks are spaced, headings are bold lines a step below the app's
-   own, code sits in a panel. Global because both components render the same tree. */
+/* Messages (markdown/render-markdown.ts), used by the timeline and the streaming bubble:
+   paragraphs and blocks are spaced, headings are bold lines a step below the app's own, code
+   sits in a panel, tables scroll sideways on a narrow screen. Global because both components
+   render the same tree. */
 
 .markdown > :first-child {
   margin-top: 0;
@@ -109,7 +110,8 @@ pre {
 .markdown ul,
 .markdown ol,
 .markdown pre,
-.markdown blockquote {
+.markdown blockquote,
+.markdown .table {
   margin: 0.5em 0;
 }
 
@@ -164,6 +166,28 @@ pre {
 
 .markdown a {
   color: var(--accent);
+}
+
+.markdown .table {
+  overflow-x: auto;
+}
+
+.markdown table {
+  border-collapse: collapse;
+  font-size: 0.9em;
+}
+
+.markdown th,
+.markdown td {
+  border: 1px solid var(--border);
+  padding: 0.25em 0.5em;
+  text-align: left;
+  vertical-align: top;
+}
+
+.markdown th {
+  background: var(--panel);
+  font-weight: 600;
 }
 
 /* The one spinner (the operator chose it), shown before "Thinking…" in the streaming bubble

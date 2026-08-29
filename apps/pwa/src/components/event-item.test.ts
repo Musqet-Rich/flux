@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils';
 import { expect, test } from 'vitest';
 
 import EventItem from './EventItem.vue';
+import MessageMenu from './MessageMenu.vue';
 
 const ev = (type: string, payload: unknown): FluxEvent => ({
   seq: 1,
@@ -20,7 +21,7 @@ test('renders messages as bubbles on the right side', () => {
   expect(bot.find('.item').classes()).toContain('assistant');
 });
 
-test('assistant messages are rendered as Markdown; user messages stay as typed', () => {
+test('messages on both sides are rendered as Markdown', () => {
   const bot = mount(EventItem, {
     props: { event: ev('msg.assistant', { text: '## Done\n\n- `a.ts` **saved**\n\n<b>x</b>' }) },
   });
@@ -29,9 +30,15 @@ test('assistant messages are rendered as Markdown; user messages stay as typed',
   expect(bot.find('.markdown li strong').text()).toBe('saved');
   expect(bot.find('b').exists()).toBe(false);
   expect(bot.text()).toContain('<b>x</b>');
-  const user = mount(EventItem, { props: { event: ev('msg.user', { text: '**not** bold' }) } });
-  expect(user.find('.markdown').exists()).toBe(false);
-  expect(user.find('pre.text').text()).toBe('**not** bold');
+  const user = mount(EventItem, {
+    props: { event: ev('msg.user', { text: '**bold** too\n\n| a | b |\n|---|---|\n| 1 | 2 |' }) },
+  });
+  expect(user.find('.user .markdown strong').text()).toBe('bold');
+  expect(user.find('.user .markdown td').text()).toBe('1');
+  // The menu's Copy and Reply work on the text as typed, not the rendered tree.
+  expect(user.findComponent(MessageMenu).props('text')).toBe(
+    '**bold** too\n\n| a | b |\n|---|---|\n| 1 | 2 |',
+  );
 });
 
 test('tool events show their summary and open the detail on tap', async () => {
