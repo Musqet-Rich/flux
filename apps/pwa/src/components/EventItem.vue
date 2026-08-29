@@ -292,16 +292,23 @@ const quoteLine = computed(
   background: var(--panel-2);
 }
 
-/* Code panels in the user bubble sit on the accent colour, so the panel tint is a shade of it
-   rather than the assistant's panel token. */
+/* Code panels and table headers in the user bubble sit on the accent colour, so the panel tint
+   is a shade of it rather than the assistant's panel token. Code inside a fence keeps the
+   global reset, or it would be tinted twice. */
 .user :deep(.markdown code),
 .user :deep(.markdown pre),
-.user :deep(.markdown .table),
+.user :deep(.markdown th) {
+  background: rgb(0 0 0 / 15%);
+}
+
+.user :deep(.markdown pre code) {
+  background: transparent;
+}
+
+.user :deep(.markdown pre),
 .user :deep(.markdown th),
 .user :deep(.markdown td) {
-  background: rgb(0 0 0 / 15%);
   border-color: rgb(0 0 0 / 25%);
-  color: inherit;
 }
 
 .user :deep(.markdown a),

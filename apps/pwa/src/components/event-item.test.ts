@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils';
 import { expect, test } from 'vitest';
 
 import EventItem from './EventItem.vue';
+import MessageMenu from './MessageMenu.vue';
 
 const ev = (type: string, payload: unknown): FluxEvent => ({
   seq: 1,
@@ -34,6 +35,10 @@ test('messages on both sides are rendered as Markdown', () => {
   });
   expect(user.find('.user .markdown strong').text()).toBe('bold');
   expect(user.find('.user .markdown td').text()).toBe('1');
+  // The menu's Copy and Reply work on the text as typed, not the rendered tree.
+  expect(user.findComponent(MessageMenu).props('text')).toBe(
+    '**bold** too\n\n| a | b |\n|---|---|\n| 1 | 2 |',
+  );
 });
 
 test('tool events show their summary and open the detail on tap', async () => {

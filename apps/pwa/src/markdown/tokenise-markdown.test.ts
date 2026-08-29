@@ -81,6 +81,14 @@ const cases: [string, string, MarkdownBlock[]][] = [
     ],
   ],
   [
+    'a pipe inside inline code still splits a cell (GFM: write `\\|`), so a header wider than its delimiter row is a paragraph',
+    '| `a|b` | c |\n|---|---|\n| `a\\|b` | c |\n|---|---|',
+    [
+      { kind: 'paragraph', lines: ['| `a|b` | c |', '|---|---|'] },
+      { kind: 'table', align: [null, null], header: ['`a|b`', 'c'], rows: [] },
+    ],
+  ],
+  [
     'a table ends a paragraph and a list',
     'p\n| h |\n|---|\n| r |\n- i\n| h2 |\n|---|',
     [
