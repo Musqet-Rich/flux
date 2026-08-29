@@ -246,6 +246,9 @@ const quoteLine = computed(
 <style scoped>
 .item {
   max-width: 100%;
+  /* A flex child's min-width is its content by default, so one unbreakable token (a quoted
+     grep pattern, a long path) would widen the whole timeline past the viewport. */
+  min-width: 0;
 }
 
 .user,
@@ -328,6 +331,7 @@ const quoteLine = computed(
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.8rem;
   width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .summary:disabled {
