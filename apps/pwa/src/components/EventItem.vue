@@ -173,8 +173,9 @@ const describe = (event: FluxEvent): View => {
 };
 
 const view = computed(() => describe(props.event));
-// The agent writes Markdown; the operator's own text stays as typed. A functional component so
-// the VNode tree is built inside its own render, not in the template.
+// Both sides write Markdown (the operator pastes agent output back and uses tables and code
+// too). A functional component so the VNode tree is built inside its own render, not in the
+// template.
 const Markdown = (): VNode => renderMarkdown(view.value.text);
 const Report = (): VNode => renderMarkdown(String(view.value.detail));
 const hasDetail = computed(() => view.value.detail !== undefined);
@@ -206,8 +207,7 @@ const quoteLine = computed(
     >
       ↩ {{ quoteLine }}
     </button>
-    <pre v-if="view.kind === 'user'" class="text">{{ view.text }}</pre>
-    <Markdown v-else-if="view.kind === 'assistant'" />
+    <Markdown v-if="isMessage" />
     <template v-else-if="view.kind === 'tool'">
       <button type="button" class="summary" :disabled="!hasDetail" @click="toggle">
         {{ view.text }}
@@ -292,8 +292,21 @@ const quoteLine = computed(
   background: var(--panel-2);
 }
 
-.text {
-  font: inherit;
+/* Code panels in the user bubble sit on the accent colour, so the panel tint is a shade of it
+   rather than the assistant's panel token. */
+.user :deep(.markdown code),
+.user :deep(.markdown pre),
+.user :deep(.markdown .table),
+.user :deep(.markdown th),
+.user :deep(.markdown td) {
+  background: rgb(0 0 0 / 15%);
+  border-color: rgb(0 0 0 / 25%);
+  color: inherit;
+}
+
+.user :deep(.markdown a),
+.user :deep(.markdown blockquote) {
+  color: inherit;
 }
 
 .tool {

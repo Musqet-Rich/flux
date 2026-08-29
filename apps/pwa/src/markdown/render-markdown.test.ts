@@ -36,6 +36,16 @@ const cases: [string, string, [string, string][]][] = [
     ],
   ],
   [
+    'table with inline markup and alignment as a fixed style',
+    '| **a** | b |\n|--:|---|\n| `c` | d |',
+    [
+      ['div.table > table > thead > tr > th[style="text-align: right;"] > strong', 'a'],
+      ['thead th:last-child:not([style])', 'b'],
+      ['tbody > tr > td[style="text-align: right;"] > code', 'c'],
+      ['tbody td:last-child', 'd'],
+    ],
+  ],
+  [
     'blockquote',
     '> q\n> r',
     [

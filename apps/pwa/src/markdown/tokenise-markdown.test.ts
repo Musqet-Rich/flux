@@ -55,6 +55,42 @@ const cases: [string, string, MarkdownBlock[]][] = [
     [{ kind: 'code', lang: '', text: '', closed: false }],
   ],
   [
+    'pipe tables: alignment, escaped pipes, ragged rows, no outer pipes',
+    'before\n| Name | N | Note |\n|:-----|--:|:---:|\n| a \\| b | 1 |\n| c | 2 | x | extra |\nx | y | z\n\n| solo |\n|---|\nafter',
+    [
+      { kind: 'paragraph', lines: ['before'] },
+      {
+        kind: 'table',
+        align: ['left', 'right', 'center'],
+        header: ['Name', 'N', 'Note'],
+        rows: [
+          ['a | b', '1', ''],
+          ['c', '2', 'x'],
+          ['x', 'y', 'z'],
+        ],
+      },
+      { kind: 'table', align: [null], header: ['solo'], rows: [['after']] },
+    ],
+  ],
+  [
+    'a pipe row without a delimiter row, or with the wrong width, is a paragraph',
+    '| a | b |\n| just text |\n\n| a | b |\n|---|',
+    [
+      { kind: 'paragraph', lines: ['| a | b |', '| just text |'] },
+      { kind: 'paragraph', lines: ['| a | b |', '|---|'] },
+    ],
+  ],
+  [
+    'a table ends a paragraph and a list',
+    'p\n| h |\n|---|\n| r |\n- i\n| h2 |\n|---|',
+    [
+      { kind: 'paragraph', lines: ['p'] },
+      { kind: 'table', align: [null], header: ['h'], rows: [['r']] },
+      { kind: 'list', ordered: false, items: [{ lines: ['i'], nested: null }] },
+      { kind: 'table', align: [null], header: ['h2'], rows: [] },
+    ],
+  ],
+  [
     'unordered and ordered lists with one level of nesting',
     '- a\n- b\n  1. b1\n  2. b2\n- c\n  more c\n\n1. x\n2. y',
     [

@@ -3,10 +3,15 @@ import { h } from 'vue';
 
 import type { InlineNode } from './inline-markdown.ts';
 import { inlineMarkdown } from './inline-markdown.ts';
-import type { MarkdownBlock, MarkdownCode, MarkdownListItem } from './tokenise-markdown.ts';
+import type {
+  MarkdownBlock,
+  MarkdownCode,
+  MarkdownListItem,
+  MarkdownTable,
+} from './tokenise-markdown.ts';
 import { tokeniseMarkdown } from './tokenise-markdown.ts';
 
-// Assistant messages and the streaming bubble go through this: a small, deliberately partial
+// Messages from both sides and the streaming bubble go through this: a small, deliberately partial
 // Markdown renderer (engineering.md § Dependencies rejects a package for what ~100 lines cover)
 // that builds VNodes with `h()` from the token tree. There is no `v-html` and no HTML string
 // anywhere, so text from the agent can only ever become text nodes. Links open in a new tab
@@ -48,6 +53,29 @@ const code = (node: MarkdownCode): VNode =>
     h('code', { class: node.lang === '' ? null : `language-${node.lang}` }, node.text),
   ]);
 
+// Cell alignment from the delimiter row becomes a `style`, the only attribute the renderer sets
+// from the text, and it is one of three fixed values.
+const table = (node: MarkdownTable): VNode => {
+  const cell = (tag: 'th' | 'td', text: string, column: number): VNode => {
+    const align = node.align[column] ?? null;
+    return h(tag, align === null ? null : { style: { textAlign: align } }, inlines(text));
+  };
+  const row = (tag: 'th' | 'td', texts: string[]): VNode =>
+    h(
+      'tr',
+      texts.map((text, column) => cell(tag, text, column)),
+    );
+  return h('div', { class: 'table' }, [
+    h('table', [
+      h('thead', [row('th', node.header)]),
+      h(
+        'tbody',
+        node.rows.map((texts) => row('td', texts)),
+      ),
+    ]),
+  ]);
+};
+
 const block = (node: MarkdownBlock): VNode => {
   if (node.kind === 'paragraph') return h('p', lines(node.lines));
   if (node.kind === 'heading') {
@@ -55,6 +83,7 @@ const block = (node: MarkdownBlock): VNode => {
   }
   if (node.kind === 'code') return code(node);
   if (node.kind === 'quote') return h('blockquote', lines(node.lines));
+  if (node.kind === 'table') return table(node);
   return h(
     node.ordered ? 'ol' : 'ul',
     node.items.map((item) => listItem(item)),
