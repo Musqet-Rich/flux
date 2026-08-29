@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import type { VNode } from 'vue';
 import { computed, onMounted, ref, watch } from 'vue';
 
 import { useTailScroll } from '../composables/useTailScroll.ts';
@@ -36,7 +35,7 @@ const timeline = computed(() => events.value.filter((e) => !hiddenTypes.has(e.ty
 const streaming = computed(() => log.value?.streaming ?? '');
 // The delta buffer renders through the same Markdown pass as the final message, so an open
 // fence is a code block from its first line and the bubble never flickers back to raw text.
-const Streaming = (): VNode => renderMarkdown(streaming.value);
+const Streaming = (): ReturnType<typeof renderMarkdown> => renderMarkdown(streaming.value);
 const thinking = computed(() => log.value?.thinking ?? null);
 // "~1.2k tokens" once Claude has reported a count, plain "Thinking…" before that.
 const thinkingText = computed(() => {

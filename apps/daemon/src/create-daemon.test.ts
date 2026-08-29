@@ -1,6 +1,6 @@
 import type { Bytes, Channel, Wire } from '@flux/protocol';
 import { base64url, bytes, handshake, pairing, room } from '@flux/protocol';
-import { lstat, mkdir, readFile, symlink } from 'node:fs/promises';
+import { chmod, lstat, mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { connect } from 'node:net';
 import { afterEach, expect, test } from 'vitest';
@@ -438,6 +438,49 @@ test('a comment added by one device is an event on both, before the result', asy
     event,
     { kind: 'rpc.result', id: 'c1', ok: true, result: { commentId: expect.any(String) } },
   ]);
+});
+
+const fakeGh = `#!/bin/sh
+case "$2" in
+  view) echo "no pull requests found for branch" >&2; exit 1 ;;
+  create) echo "https://github.com/o/r/pull/8" ;;
+esac
+`;
+
+// Opening a PR from the phone logs `pr.published`, the event the adapter logs when the agent
+// opens one itself (ADR 0014, amended), and the caller sees that event before its result. `gh`
+// is a script first on PATH, which the daemon reads when it is created (no PR yet, then one).
+test('git.pr logs pr.published, seen by the caller before the result', async () => {
+  const bin = join((await tempRepo()).root, 'bin');
+  await mkdir(bin);
+  await writeFile(join(bin, 'gh'), fakeGh);
+  await chmod(join(bin, 'gh'), 0o755);
+  const path = String(process.env['PATH']);
+  process.env['PATH'] = `${bin}:${path}`;
+  const { repo } = await setup();
+  process.env['PATH'] = path;
+  const d = await device();
+  await pair(d);
+  const created = await call(d, 'sessions.create', { repo, branch: 'flux/pr', agent: 'claude' });
+  const { session } = created as { session: string };
+  const rpc: Wire = { kind: 'rpc', id: 'p1', method: 'git.pr', params: { session, title: 'Ship' } };
+  relay.send(await d.channel.seal(bytes.fromUtf8(JSON.stringify(rpc))));
+  const [seen] = await collect([d], [2]);
+  const url = 'https://github.com/o/r/pull/8';
+  expect(seen).toEqual([
+    {
+      kind: 'event',
+      event: expect.objectContaining({
+        type: 'pr.published',
+        payload: { provider: 'github', url, repo: 'o/r', identifier: '8', action: 'created' },
+      }),
+    },
+    { kind: 'rpc.result', id: 'p1', ok: true, result: { url } },
+  ]);
+  const synced = (await call(d, 'events.sync', { session, since: 0 })) as {
+    events: { type: string }[];
+  };
+  expect(synced.events.map((e) => e.type)).toEqual(['session.created', 'pr.published']);
 });
 
 test('refuses to create a session for an agent the box does not have', async () => {

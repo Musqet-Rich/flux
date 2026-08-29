@@ -377,7 +377,7 @@ interface FileContent {
 
 Error codes: `bad_params`, `not_found`, `not_paired`, `agent_unavailable`, `git_error`, `gh_error`, `conflict`, `internal`. `conflict` is returned by `fs.write` when `ifMatch` does not match the current file.
 
-`git_error` and `gh_error` carry the tool's own stderr (or stdout when stderr is empty, as for "nothing to commit") as the message, so the device shows what git or gh said. `gh_error` also covers `gh` missing from the box's PATH, with the message `gh not found on PATH`. Git actions emit no events: the device refreshes `git.status` and `git.log` after each one (`adr/0014`).
+`git_error` and `gh_error` carry the tool's own stderr (or stdout when stderr is empty, as for "nothing to commit") as the message, so the device shows what git or gh said. `gh_error` also covers `gh` missing from the box's PATH, with the message `gh not found on PATH`. Git actions emit no events, except that `git.pr` logs `pr.published` (§ 5) so the session's PR has one source; the device refreshes `git.status` and `git.log` after each one (`adr/0014`).
 
 ## 8. Versioning
 

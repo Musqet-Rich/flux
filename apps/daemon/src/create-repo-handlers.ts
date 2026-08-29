@@ -48,8 +48,6 @@ const prOptions = (
   ...(p.draft === undefined ? {} : { draft: p.draft }),
 });
 
-// The PR's base branch: the caller's, else the session's base when that is a branch of the
-// repository (it is usually a commit, in which case gh picks the repository's default branch).
 // `gh` prints https://github.com/<owner>/<repo>/pull/<n>; anything else is kept as the URL alone.
 const prIdentity = (
   url: string,
@@ -63,6 +61,8 @@ const prIdentity = (
   };
 };
 
+// The PR's base branch: the caller's, else the session's base when that is a branch of the
+// repository (it is usually a commit, in which case gh picks the repository's default branch).
 const prBase = async (
   ctx: HandlerContext,
   record: { repo: string; base: string },
