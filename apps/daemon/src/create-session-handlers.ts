@@ -103,6 +103,9 @@ const quoted = (ctx: HandlerContext, session: string, seq: number): Reply => {
 // The attachments a message names must be complete, the session's own, and within the
 // per-message cap together (ADR 0020); the store checks the first two.
 const attached = (ctx: HandlerContext, session: string, ids: string[]) => {
+  if (new Set(ids).size !== ids.length) {
+    throw new DaemonError('bad_params', 'an attachment is named twice');
+  }
   const files = ctx.attachments.get(session, ids);
   const total = files.reduce((sum, f) => sum + f.size, 0);
   if (total > attachment.limits.messageBytes) {

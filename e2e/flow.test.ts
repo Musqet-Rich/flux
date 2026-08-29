@@ -160,6 +160,12 @@ const attachImage = async (page: Page, stack: Stack): Promise<void> => {
   await expect(bubble.locator('.markdown')).toHaveText(thirdPrompt);
   await expect(bubble.locator('.files img')).toBeVisible();
   await expect(bubble.locator('.files img')).toHaveAttribute('src', /^blob:/u);
+  // A tap on the thumbnail opens the image full-size; × closes it.
+  await bubble.getByRole('button', { name: 'Open red.png' }).click();
+  const overlay = page.getByRole('dialog', { name: 'Image' });
+  await expect(overlay.locator('img')).toHaveAttribute('src', /^blob:/u);
+  await overlay.getByRole('button', { name: 'Close' }).click();
+  await expect(overlay).toHaveCount(0);
   // The fake cycles through the fixture's two turns, so the third message gets the first reply.
   await expect(timeline.locator('.item.assistant').last()).toHaveText(
     'notes.txt contains "hello", and greeting.txt has been created with "hi there".',
@@ -216,13 +222,11 @@ const reloadCold = async (page: Page, stack: Stack): Promise<void> => {
 };
 
 // Archiving takes the session off the strip and into the Archived section of the list screen;
-// reopening brings it back with its timeline whole. Archiving deleted the session's
-// attachments (ADR 0020), so the image row now shows the file's name and size in its place.
+// reopening brings it back with its timeline whole, the attached image's thumbnail included:
+// archiving keeps a session's attachments (ADR 0020), only deleting it takes them.
 const archiveAndReopen = async (page: Page): Promise<void> => {
   const items = page.locator('.timeline .item');
-  const before = (await items.allInnerTexts()).map((text) =>
-    text === thirdPrompt ? `${thirdPrompt}📄red.png75 B` : text,
-  );
+  const before = await items.allInnerTexts();
   await page.getByRole('button', { name: 'Session menu' }).click();
   await page.getByRole('menuitem', { name: 'Archive' }).click();
   await expect(page.getByText('No sessions yet.')).toBeVisible();
@@ -234,6 +238,7 @@ const archiveAndReopen = async (page: Page): Promise<void> => {
   await expect(page).toHaveURL(/\/s\/[0-9a-f-]{36}$/u);
   await expect(page.locator('.branch')).toHaveText('e2e/greeting');
   await expect(items).toHaveText(before);
+  await expect(page.locator('.item.user .files img').last()).toHaveAttribute('src', /^blob:/u);
 };
 
 test('pair, run an agent, comment on its diff, send, reload', async ({ page, stack }) => {

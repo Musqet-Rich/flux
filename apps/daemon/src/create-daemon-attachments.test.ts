@@ -128,8 +128,29 @@ test('upload in chunks, send with a message, read back, delete, archive', async 
       },
     ],
   });
+});
+
+// Archiving keeps the files, so the session still shows them when reopened; deleting the
+// session (its worktree with it) takes them. A message naming one attachment twice is refused.
+test('attachments outlive an archive and go with a delete', async () => {
+  const { d, session, root } = await pairedSession();
+  dataDir = join(root, 'data');
+  const data = Buffer.from('kept until the session goes');
+  const attachmentId = await upload(d, session, data);
+  const path = join(root, 'data', 'attachments', session, `${attachmentId}-note__1_.txt`);
+  await expect(
+    call(d, 'agent.send', { session, text: 'again', attachments: [attachmentId, attachmentId] }),
+  ).rejects.toThrow('bad_params');
+  await call(d, 'agent.send', { session, text: 'read it', attachments: [attachmentId] });
+  await untilEvent(d, 'turn.ended');
   await call(d, 'sessions.archive', { session });
+  expect(await readFile(path)).toEqual(data);
+  await call(d, 'sessions.unarchive', { session });
+  await call(d, 'sessions.archive', { session, removeWorktree: true, discard: true });
   await expect(readFile(path)).rejects.toMatchObject({ code: 'ENOENT' });
+  await expect(call(d, 'attach.read', { attachmentId, offset: 0, length: 1 })).rejects.toThrow(
+    'not_found',
+  );
 });
 
 test('an attachment the operator removes before sending is deleted', async () => {

@@ -72,6 +72,7 @@ const schema = `
     created_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS attachments_session ON attachments (session);
+  CREATE INDEX IF NOT EXISTS attachments_stale ON attachments (complete, created_at);
 `;
 
 // Columns a pre-release database lacks, added in place so a box paired before them keeps working.

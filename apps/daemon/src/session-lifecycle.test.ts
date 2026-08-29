@@ -53,7 +53,7 @@ const setup = async () => {
   return { root, repo, worktreesDir, ctx, git, sessions, log, closed, forgotten, create };
 };
 
-test("archiving removes the session's attachments directory", async () => {
+test("archiving keeps the session's attachments; deleting it takes the directory", async () => {
   const { ctx, create, root } = await setup();
   await create('s1', join(root, 'data', 'worktrees', 's1'));
   const id = await ctx.attachments.begin('s1', 'a.txt', 'text/plain', 0);
@@ -62,6 +62,10 @@ test("archiving removes the session's attachments directory", async () => {
   const dir = join(root, 'data', 'attachments', 's1');
   expect(await readdir(dir)).toHaveLength(1);
   await sessionLifecycle.archive(ctx, { session: 's1' });
+  expect(await readdir(dir)).toHaveLength(1);
+  expect(ctx.attachments.get('s1', [id])).toHaveLength(1);
+  await sessionLifecycle.unarchive(ctx, 's1');
+  await sessionLifecycle.archive(ctx, { session: 's1', removeWorktree: true, discard: true });
   await expect(readdir(dir)).rejects.toMatchObject({ code: 'ENOENT' });
   expect(() => ctx.attachments.get('s1', [id])).toThrow(/no attachment/u);
 });

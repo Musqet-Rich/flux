@@ -83,11 +83,12 @@ const archive = async (ctx: Ctx, params: ArchiveParams): Promise<Record<string, 
   if (params.removeWorktree === true) {
     await removeWorktree(ctx, record, params.discard === true);
     if (params.deleteBranch === true) await ctx.git.deleteBranch(record.repo, record.branch);
+    // Deleting the session (its worktree gone) takes the files the operator sent it (ADR 0020);
+    // a plain archive keeps them, so a reopened session still shows its images.
+    await ctx.attachments.removeSession(record.session);
   }
   ctx.sessions.setArchived(record.session, true);
   ctx.forgetAgentSession(record.session);
-  // The files the operator sent it go with the session (ADR 0020); the log keeps their names.
-  await ctx.attachments.removeSession(record.session);
   return {};
 };
 

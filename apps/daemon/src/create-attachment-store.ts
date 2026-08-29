@@ -13,7 +13,8 @@ import { inside } from './inside.ts';
 // SQLite, bytes under `<dataDir>/attachments/<session>/<id>-<name>`, never in a worktree, so an
 // agent cannot commit them by accident. Cleanup is lazy, with no timer: on start and on every
 // `begin`, an upload that never ended within 10 minutes and an attachment that was never
-// sent within 24 hours are deleted; an archived session takes its whole directory with it.
+// sent within 24 hours are deleted; a sent one stays until the session is deleted, which takes
+// the whole directory with it (a plain archive keeps it, so a reopened session shows it).
 
 export interface AttachmentRecord {
   id: string;
