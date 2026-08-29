@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test';
 import { expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 
-import { eventSeqs } from './event-seqs.ts';
+import { eventRows } from './event-rows.ts';
 import { stackTest as test } from './stack-test.ts';
 import type { Stack } from './start-stack.ts';
 
@@ -56,8 +56,9 @@ const firstTurn = async (page: Page): Promise<void> => {
   await expect(timeline.locator('.item.assistant').first()).toHaveText(
     'Reading notes.txt, then writing greeting.txt.',
   );
-  // Everything the agent said that is not a message or a tool call shows as a `raw event`.
-  const tools = timeline.locator('.item.tool .summary').filter({ hasNotText: 'raw event' });
+  // Lines the adapter does not read are logged as `raw` and never rendered, so the tool rows
+  // are the only `.tool` items.
+  const tools = timeline.locator('.item.tool .summary');
   await expect(tools).toHaveText([
     'Bash: cat notes.txt',
     'Bash ok, 1 line',
@@ -110,8 +111,12 @@ const wipeStorage = `indexedDB.databases().then((dbs) => Promise.all(dbs.map((db
     req.onsuccess = req.onerror = req.onblocked = () => done(null);
   }))))`;
 
+// The timeline leaves these in the log unrendered (architecture.md, `SessionView`).
+const hidden = new Set(['raw', 'rate_limit']);
+
 // A wiped device: nothing cached, not even the pairing, so after the reload the timeline can
-// only come from events.sync, from seq 0, and must match what the log holds, once each.
+// only come from events.sync, from seq 0, and must match what the log holds: one row per
+// event of a rendered type, once each, with the hidden types still in the log, gap-free.
 const reloadCold = async (page: Page, stack: Stack): Promise<void> => {
   const items = page.locator('.timeline .item');
   const session = new URL(page.url()).pathname.slice('/s/'.length);
@@ -126,7 +131,12 @@ const reloadCold = async (page: Page, stack: Stack): Promise<void> => {
     .getByRole('button', { name: 'e2e/greeting' })
     .click();
   await expect(items).toHaveText(before);
-  expect(eventSeqs(stack.database, session)).toEqual(before.map((_, index) => index + 1));
+  const rows = eventRows(stack.database, session);
+  expect(rows.map((row) => row.seq)).toEqual(rows.map((_, index) => index + 1));
+  expect(rows.filter((row) => !hidden.has(row.type))).toHaveLength(before.length);
+  expect(rows.filter((row) => hidden.has(row.type)).map((row) => row.type)).toEqual(
+    expect.arrayContaining(['raw', 'rate_limit']),
+  );
 };
 
 test('pair, run an agent, comment on its diff, send, reload', async ({ page, stack }) => {
