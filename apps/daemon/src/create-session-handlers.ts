@@ -6,6 +6,7 @@ import type { Peer } from './create-device-channels.ts';
 import { DaemonError } from './daemon-error.ts';
 import type { HandlerContext } from './handler-context.ts';
 import { inside } from './inside.ts';
+import { quotedMessage } from './quoted-message.ts';
 import type { Reply } from './render-reply.ts';
 import { sessionLifecycle } from './session-lifecycle.ts';
 
@@ -89,13 +90,14 @@ const createSession = async (
 };
 
 // The message a reply answers, read from the log so the quote the agent sees is the log's text.
+// `log.read` is per session, so a seq from another session's log is not found here.
 const quoted = (ctx: HandlerContext, session: string, seq: number): Reply => {
   const event = ctx.log.read(session, seq - 1, 1).events.find((e) => e.seq === seq);
-  if (event !== undefined && fluxEvent.isKnown(event)) {
-    if (event.type === 'msg.user') return { seq, from: 'user', text: event.payload.text };
-    if (event.type === 'msg.assistant') return { seq, from: 'assistant', text: event.payload.text };
+  const reply = quotedMessage(event);
+  if (reply === null) {
+    throw new DaemonError('bad_params', `replyTo ${seq} is not a message in this session`);
   }
-  throw new DaemonError('bad_params', `replyTo ${seq} is not a message in this session`);
+  return reply;
 };
 
 const sendMessage = async (

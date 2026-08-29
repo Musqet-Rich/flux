@@ -182,3 +182,14 @@ test('message bubbles carry a menu on their inboard side; a reply row quotes its
   const note = mount(EventItem, { props: { event: ev('turn.ended', {}) } });
   expect(note.find('.menu-root').exists()).toBe(false);
 });
+
+test('the reply chip skips blank leading lines and names a source the log lacks', () => {
+  const blank = mount(EventItem, {
+    props: { event: ev('msg.user', { text: 'hi', replyTo: 1 }), quote: '\n\n  \nSecond' },
+  });
+  expect(blank.find('.quote').text()).toBe('↩ Second');
+  const gone = mount(EventItem, {
+    props: { event: ev('msg.user', { text: 'hi', replyTo: 1 }), quote: null },
+  });
+  expect(gone.find('.quote').text()).toBe('↩ earlier message');
+});

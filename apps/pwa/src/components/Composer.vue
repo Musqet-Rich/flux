@@ -23,7 +23,9 @@ const draft = ref('');
 const sending = ref(false);
 const box = ref<HTMLTextAreaElement | null>(null);
 const pending = computed(() => pendingComments(props.events));
-const replyLine = computed(() => props.reply?.text.split('\n')[0] ?? '');
+const replyLine = computed(
+  () => props.reply?.text.split('\n').find((line) => line.trim() !== '') ?? '',
+);
 const replyWho = computed(() => (props.reply?.from === 'user' ? 'you' : 'the agent'));
 
 // Picking Reply is the start of typing, so the box takes focus.

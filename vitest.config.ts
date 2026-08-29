@@ -21,6 +21,8 @@ const pwaDom = [
   'src/components/**/*.test.ts',
   'src/editor/**/*.test.ts',
   'src/markdown/render-markdown.test.ts',
+  // Listens on `document`, so it is exercised against one.
+  'src/composables/useDismiss.test.ts',
 ];
 
 export default defineConfig({

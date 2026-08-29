@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 
+import { useDismiss } from '../composables/useDismiss.ts';
 import type { Store } from '../store/create-store.ts';
 import type { DeleteOptions } from '../store/session-actions.ts';
 import DeleteConfirm from './DeleteConfirm.vue';
@@ -8,12 +9,15 @@ import RenameForm from './RenameForm.vue';
 
 // The session's own menu, in its toolbar: rename, clear the agent's context, archive, or
 // delete. No menu library: a button with `aria-haspopup="menu"` and a `role="menu"` list it
-// shows. Archiving and deleting leave the session, so the parent is told to navigate away.
+// shows, closed by Escape or a tap elsewhere. Archiving and deleting leave the session, so the
+// parent is told to navigate away.
 
 const props = defineProps<{ store: Store; session: string }>();
 const emit = defineEmits<{ closed: [] }>();
 
+const root = ref<HTMLElement | null>(null);
 const open = ref(false);
+useDismiss(open, root);
 const confirming = ref(false);
 const renaming = ref(false);
 const dirty = ref<string | null>(null);
@@ -81,7 +85,7 @@ const remove = async (options: DeleteOptions): Promise<void> => {
 </script>
 
 <template>
-  <div class="menu-root">
+  <div ref="root" class="menu-root">
     <button
       type="button"
       class="secondary trigger"

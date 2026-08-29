@@ -28,3 +28,11 @@ test('a long quote is cut at 20 lines with a marker', () => {
   expect(out).toContain('> l19\n> …\n\nok');
   expect(out).not.toContain('l20');
 });
+
+test('a huge quote is cut by size too, so a 200 kB report is not re-sent on a few lines', () => {
+  const text = `${'x'.repeat(100_000)}\n${'y'.repeat(100_000)}`;
+  const out = renderReply('ok', { seq: 1, from: 'assistant', text });
+  expect(out.length).toBeLessThan(4200);
+  expect(out).toMatch(/x{4000}\n> …\n\nok$/u);
+  expect(out).not.toContain('yy');
+});

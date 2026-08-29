@@ -51,8 +51,9 @@ const ended = ref(false);
 const pick = (seq: number): void => {
   if (onMain.value) startReply(seq);
 };
-// Scrolls the quoted message into view when it is in the timeline; an earlier row not yet
-// shown is left where it is.
+// Scrolls the quoted message into view. Replies are main-only and main shows every row (the
+// last-200 cut applies to subagent chats alone), so the source is rendered whenever the log
+// has it; a source the log lacks leaves the scroll where it is.
 const jump = (seq: number): void => {
   scroller.value?.querySelector(`[data-seq="${seq}"]`)?.scrollIntoView({ block: 'center' });
 };

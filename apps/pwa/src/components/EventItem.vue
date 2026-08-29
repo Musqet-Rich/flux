@@ -183,8 +183,11 @@ const toggle = (): void => {
   expanded.value = !expanded.value;
 };
 const isMessage = computed(() => view.value.kind === 'user' || view.value.kind === 'assistant');
-// The chip shows the quoted message's first line only.
-const quoteLine = computed(() => props.quote?.split('\n')[0] ?? '');
+// The chip shows the quoted message's first non-blank line only; a source not in the log
+// (an older device's partial sync) still gets a chip that says what the row is.
+const quoteLine = computed(
+  () => props.quote?.split('\n').find((line) => line.trim() !== '') ?? 'earlier message',
+);
 </script>
 
 <template>
