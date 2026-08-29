@@ -55,19 +55,21 @@ const control = (request: Record<string, unknown>): Promise<unknown> =>
   new Promise((resolve, reject) => {
     const client = connect(socketPath);
     client.on('error', reject);
-    createInterface({ input: client }).once('line', (line) => {
-      client.end();
-      const reply: unknown = JSON.parse(line);
-      if (isRecord(reply) && reply['ok'] === true) resolve(reply['result']);
-      else
-        reject(
-          new DaemonError(
-            'internal',
-            isRecord(reply) && isString(reply['error']) ? reply['error'] : 'bad reply',
-          ),
-        );
-    });
+    // The reader is attached only once connected: readline re-emits its input's errors, so a
+    // reader created before a failed connect would crash the server on an unhandled 'error'.
     client.on('connect', () => {
+      createInterface({ input: client }).once('line', (line) => {
+        client.end();
+        const reply: unknown = JSON.parse(line);
+        if (isRecord(reply) && reply['ok'] === true) resolve(reply['result']);
+        else
+          reject(
+            new DaemonError(
+              'internal',
+              isRecord(reply) && isString(reply['error']) ? reply['error'] : 'bad reply',
+            ),
+          );
+      });
       client.write(`${JSON.stringify(request)}\n`);
     });
   });

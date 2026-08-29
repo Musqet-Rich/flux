@@ -1,0 +1,14 @@
+# Caddy in front of the relay: automatic TLS, HTTP/2, and the WebSocket upgrade for /ws/<room>
+# (reverse_proxy passes Upgrade/Connection through without configuration).
+#
+#   sudo cp deploy/Caddyfile /etc/caddy/Caddyfile   # replace flux.example.com first
+#   sudo systemctl reload caddy
+#
+# The relay sets its own security headers (CSP, nosniff, no-referrer); Caddy adds none and
+# must not strip them. Keep the relay bound to 127.0.0.1 (FLUX_RELAY_HOST default) so the only
+# way in is through this listener.
+
+flux.example.com {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:8787
+}

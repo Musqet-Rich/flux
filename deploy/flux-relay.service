@@ -1,0 +1,61 @@
+# Flux relay: the VPS side (docs/architecture.md § Relay). Forwards encrypted frames and serves
+# the PWA build. It holds no state and needs to write nothing, so it runs fully sandboxed.
+#
+#   sudo cp deploy/flux-relay.service /etc/systemd/system/
+#   sudo install -d -m 750 -o root -g flux /etc/flux
+#   sudo install -m 640 -o root -g flux deploy/.env.example /etc/flux/flux.env   # then edit
+#   sudo systemctl daemon-reload && sudo systemctl enable --now flux-relay
+#   sudo journalctl -fu flux-relay
+#
+# Paths assume the checkout is /opt/flux, built with `pnpm install && pnpm run build`
+# (README § Relay). The relay imports hono and ws from node_modules next to dist, so the
+# checkout must keep its node_modules.
+
+[Unit]
+Description=Flux relay (WebSocket forwarder and PWA host)
+Documentation=https://github.com/Musqet-Rich/flux
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=flux
+Group=flux
+WorkingDirectory=/opt/flux/apps/relay
+EnvironmentFile=/etc/flux/flux.env
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/env node /opt/flux/apps/relay/dist/index.mjs
+Restart=always
+RestartSec=5
+TimeoutStopSec=15
+
+# Hardening: nothing writable, no home, no devices, no privileges. The relay only listens on
+# FLUX_RELAY_HOST:FLUX_RELAY_PORT (127.0.0.1:8787 by default; Caddy fronts it) and reads the
+# checkout.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+RestrictAddressFamilies=AF_INET AF_INET6
+LockPersonality=true
+PrivateDevices=true
+PrivateTmp=true
+PrivateUsers=true
+RemoveIPC=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

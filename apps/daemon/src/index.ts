@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { guards } from '@flux/protocol';
 import { connect } from 'node:net';
 import { hostname } from 'node:os';
@@ -23,12 +24,6 @@ import { renderQr } from './qr/render-qr.ts';
 const { isRecord, isString } = guards;
 const env = process.env;
 const home = env['HOME'] ?? '/';
-const relayUrl = env['FLUX_RELAY_URL'];
-if (relayUrl === undefined) {
-  console.error('FLUX_RELAY_URL is required');
-  process.exit(2);
-}
-
 const dataDir = env['FLUX_DATA_DIR'] ?? join(home, '.flux');
 const command = process.argv[2] ?? 'daemon';
 
@@ -39,15 +34,17 @@ const pairViaSocket = (): Promise<string> =>
     client.on('error', () => {
       reject(new DaemonError('agent_unavailable', 'no running daemon (is `flux daemon` up?)'));
     });
-    createInterface({ input: client }).once('line', (line) => {
-      client.end();
-      const reply: unknown = JSON.parse(line);
-      const result = isRecord(reply) ? reply['result'] : null;
-      const url = isRecord(result) ? result['url'] : null;
-      if (isString(url)) resolve(url);
-      else reject(new DaemonError('internal', 'daemon refused'));
-    });
+    // The reader is attached only once connected: readline re-emits its input's errors, so a
+    // reader created before a failed connect would crash the process on an unhandled 'error'.
     client.on('connect', () => {
+      createInterface({ input: client }).once('line', (line) => {
+        client.end();
+        const reply: unknown = JSON.parse(line);
+        const result = isRecord(reply) ? reply['result'] : null;
+        const url = isRecord(result) ? result['url'] : null;
+        if (isString(url)) resolve(url);
+        else reject(new DaemonError('internal', 'daemon refused'));
+      });
       client.write('{"type":"pair"}\n');
     });
   });
@@ -58,9 +55,22 @@ const printPairing = (url: string): void => {
   console.log(`pair a device within 10 minutes: ${url}`);
 };
 
+// `pair` talks to the running daemon only, so it needs no relay URL: `flux pair` works from any
+// shell of the daemon's user with the default data dir.
 if (command === 'pair') {
-  printPairing(await pairViaSocket());
+  try {
+    printPairing(await pairViaSocket());
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
   process.exit(0);
+}
+
+const relayUrl = env['FLUX_RELAY_URL'];
+if (relayUrl === undefined) {
+  console.error('FLUX_RELAY_URL is required');
+  process.exit(2);
 }
 
 const daemon = await createDaemon({

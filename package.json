@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit -p . && pnpm -r --filter \"!@flux/pwa\" exec tsc --noEmit && pnpm --filter @flux/pwa exec vue-tsc --noEmit && pnpm --filter @flux/protocol exec tsc --noEmit false --emitDeclarationOnly --outDir node_modules/.tsc-dts",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "build": "pnpm --filter @flux/protocol exec tsdown src/index.ts --dts && pnpm -r --filter @flux/daemon --filter @flux/relay exec tsdown src/index.ts --deps.alwaysBundle @flux/protocol && pnpm --filter @flux/pwa run build"
+    "build": "pnpm -r run build"
   },
   "devDependencies": {
     "@types/node": "26.4.0",

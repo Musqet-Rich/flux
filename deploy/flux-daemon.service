@@ -1,0 +1,61 @@
+# Flux daemon: the box side (docs/architecture.md § Daemon). Runs as the `flux` user, whose
+# home holds the repositories (~/repos), the state (~/.flux) and the `claude` login.
+#
+#   sudo cp deploy/flux-daemon.service /etc/systemd/system/
+#   sudo install -d -m 750 -o root -g flux /etc/flux
+#   sudo install -m 640 -o root -g flux deploy/.env.example /etc/flux/flux.env   # then edit
+#   sudo systemctl daemon-reload && sudo systemctl enable --now flux-daemon
+#   sudo journalctl -fu flux-daemon
+#
+# Paths assume the checkout is /home/flux/flux (README § Box). Adjust ExecStart if not.
+
+[Unit]
+Description=Flux daemon (agent box)
+Documentation=https://github.com/Musqet-Rich/flux
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=flux
+Group=flux
+WorkingDirectory=/home/flux
+EnvironmentFile=/etc/flux/flux.env
+# `claude` and `git` are resolved on this PATH; ~/.local/bin is where the Claude Code installer
+# puts its binary. Set FLUX_CLAUDE in flux.env instead if it lives elsewhere.
+Environment=PATH=/home/flux/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/env node /home/flux/flux/apps/daemon/dist/index.mjs daemon
+Restart=always
+RestartSec=5
+# SIGTERM goes to the daemon first, which stops its agents; anything left gets killed after
+# the timeout. Never SIGKILL the daemon while an agent process is still running under it.
+KillMode=mixed
+TimeoutStopSec=60
+
+# Hardening. This unit runs coding agents with permissions bypassed, so it cannot take the
+# usual ProtectHome / read-only filesystem: agents need to write repositories and install
+# tools under /home/flux. What it can do is stop the process (and every agent under it) from
+# gaining privileges or touching the kernel and the rest of the system.
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+PrivateDevices=true
+PrivateTmp=true
+RemoveIPC=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+# Not set, on purpose: RestrictNamespaces (Claude Code's own sandbox uses user namespaces) and
+# MemoryDenyWriteExecute (V8 JITs).
+
+[Install]
+WantedBy=multi-user.target
