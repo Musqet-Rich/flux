@@ -1,4 +1,5 @@
 import type { FluxEvent } from '@flux/protocol';
+import { fluxEvent } from '@flux/protocol';
 import { expect, test } from 'vitest';
 
 import { sessionHarness as setup } from '../test/session-harness.ts';
@@ -22,7 +23,10 @@ const untilEvent = (emitted: FluxEvent[], type: string, after = 0): Promise<Flux
   until(emitted, (e) => e.type === type, after);
 
 const untilState = (emitted: FluxEvent[], state: string): Promise<FluxEvent> =>
-  until(emitted, (e) => e.type === 'session.state' && e.payload.state === state);
+  until(
+    emitted,
+    (e) => fluxEvent.isKnown(e) && e.type === 'session.state' && e.payload.state === state,
+  );
 
 test('a user message runs a turn and the log tells the whole story', async () => {
   const { supervisor, log, sessions, emitted, ephemeral, worktree } = await setup();

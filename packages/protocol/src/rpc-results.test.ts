@@ -63,6 +63,13 @@ test.each(Object.entries(cases))('%s result guard accepts and rejects', (method,
   expect(guard(bad)).toBe(false);
 });
 
+// A page from a newer box may carry event types this build does not know (protocol.md § 8); the
+// page must still be accepted or the session can never catch up.
+test('events.sync accepts a page containing unknown event types', () => {
+  const future = { ...event, seq: 2, type: 'msg.future', payload: { any: true } };
+  expect(rpcResults['events.sync']({ events: [event, future], complete: true })).toBe(true);
+});
+
 test('optional fields may be present or absent, never wrong', () => {
   expect(rpcResults.hello({ protocol: 1, daemon: 'd', sessions: [] })).toBe(true);
   expect(rpcResults.hello({ protocol: 1, daemon: 'd', sessions: [], vapidPublicKey: 1 })).toBe(

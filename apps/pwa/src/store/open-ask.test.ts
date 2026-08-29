@@ -3,8 +3,13 @@ import { expect, test } from 'vitest';
 
 import { openAsk } from './open-ask.ts';
 
-const ev = (seq: number, type: string, payload: unknown): FluxEvent =>
-  ({ seq, ts: '2026-01-01T00:00:00Z', session: 's1', type, payload }) as FluxEvent;
+const ev = (seq: number, type: string, payload: unknown): FluxEvent => ({
+  seq,
+  ts: '2026-01-01T00:00:00Z',
+  session: 's1',
+  type,
+  payload,
+});
 
 const ask = (askId: string) => ({
   askId,

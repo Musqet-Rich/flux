@@ -20,7 +20,7 @@ export type {
   TokenUsage,
 } from './event-payloads.ts';
 export { eventPayloads } from './event-payloads.ts';
-export type { Envelope, FluxEvent } from './flux-event.ts';
+export type { Envelope, FluxEvent, KnownEvent, UnknownEvent } from './flux-event.ts';
 export { fluxEvent } from './flux-event.ts';
 export type { DataFrame, DataFrameKind, Frame, FrameKind, HandshakeFrame } from './frame.ts';
 export { frame } from './frame.ts';

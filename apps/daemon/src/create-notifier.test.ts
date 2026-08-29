@@ -27,7 +27,7 @@ const goneOnTwo = (url: string): number => (url.endsWith('/2') ? 410 : 500);
 
 const event = (type: FluxEvent['type'], payload: unknown, session = 's1'): FluxEvent =>
   // The notifier only reads type, session and payload; the envelope is otherwise irrelevant here.
-  ({ seq: 1, ts: '2026-01-01T00:00:00Z', session, type, payload }) as FluxEvent;
+  ({ seq: 1, ts: '2026-01-01T00:00:00Z', session, type, payload });
 
 const setup = async (statusFor: (url: string) => number) => {
   const db = openDatabase(':memory:');

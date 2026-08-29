@@ -64,7 +64,12 @@ export const pairedStore = async (
     store,
     relay,
     calls: (method) => seen.filter((c) => c.method === method).map((c) => c.params),
-    event: (seq, type, payload) =>
-      ({ seq, ts: '2026-01-01T00:00:00Z', session: 's1', type, payload }) as FluxEvent,
+    event: (seq, type, payload) => ({
+      seq,
+      ts: '2026-01-01T00:00:00Z',
+      session: 's1',
+      type,
+      payload,
+    }),
   };
 };

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { FluxEvent } from '@flux/protocol';
+import type { FluxEvent, KnownEvent } from '@flux/protocol';
+import { fluxEvent } from '@flux/protocol';
 import { computed, ref } from 'vue';
 
 // One entry of the session timeline. Every event type renders as one of four shapes so the
@@ -29,7 +30,7 @@ const note = (text: string, tone: View['tone'] = null): View => ({
 });
 
 // Lifecycle, operator-interaction and code events all render as a one-line note.
-const describeNote = (event: FluxEvent): View => {
+const describeNote = (event: KnownEvent): View => {
   switch (event.type) {
     case 'session.created':
       return note(`Session started on ${event.payload.branch}`);
@@ -63,8 +64,20 @@ const describeNote = (event: FluxEvent): View => {
   }
 };
 
+// `raw` and any type this build does not know (protocol.md § 8) show their name with the payload
+// behind a tap, so a newer box never leaves a blank line in the timeline.
+const opaque = (type: string, payload: unknown): View => ({
+  kind: 'tool',
+  text: `${type} event`,
+  detail: json(payload),
+  tone: null,
+});
+
 const describe = (event: FluxEvent): View => {
+  if (!fluxEvent.isKnown(event)) return opaque(event.type, event.payload);
   switch (event.type) {
+    case 'raw':
+      return opaque(event.type, event.payload.data);
     case 'msg.user':
       return { kind: 'user', text: event.payload.text, detail: null, tone: null };
     case 'msg.assistant':
