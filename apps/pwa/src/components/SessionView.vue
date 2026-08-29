@@ -77,8 +77,9 @@ watch(
     void tail.follow(Math.max(0, count - before));
   },
 );
-watch(streaming, () => {
-  void tail.follow(0);
+// Only growth counts: the text emptying is the reply landing, and that event is counted above.
+watch(streaming, (text) => {
+  if (text !== '') void tail.follow(0);
 });
 </script>
 

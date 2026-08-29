@@ -48,7 +48,11 @@ export const useTailScroll = (): TailScroll => {
     unread.value = 0;
   };
 
+  // Measured again here, not only on `scroll`: the geometry can change without a scroll event
+  // (the keyboard opening on a phone, the composer growing), and the watchers run before the DOM
+  // takes the new content, so this reads where the operator was when it arrived.
   const follow = async (added: number): Promise<void> => {
+    measure();
     if (atTail.value) {
       await jump();
       return;

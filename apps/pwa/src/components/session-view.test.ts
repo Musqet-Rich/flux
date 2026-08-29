@@ -95,11 +95,11 @@ test('offers to stop a running agent and asks the box to interrupt', async () =>
 
 // happy-dom has no layout, so the scroller's geometry is pinned by hand: a 1000 px log in a
 // 200 px viewport, `scrollTop` writable so the component's jumps show up.
-const withGeometry = (el: Element): HTMLElement => {
+const withGeometry = (el: HTMLElement): HTMLElement => {
   Object.defineProperty(el, 'scrollHeight', { value: 1000, configurable: true });
   Object.defineProperty(el, 'clientHeight', { value: 200, configurable: true });
   Object.defineProperty(el, 'scrollTop', { value: 800, writable: true, configurable: true });
-  return el instanceof HTMLElement ? el : document.body;
+  return el;
 };
 
 const scrollTo = async (el: HTMLElement, top: number): Promise<void> => {
@@ -113,7 +113,7 @@ test('follows the tail only while at it, with a pill to catch up', async () => {
   const { store, relay, event } = box;
   const wrapper = mount(SessionView, { props: { store, session: 's1' } });
   await until(() => store.state.logs['s1'] !== undefined);
-  const el = withGeometry(wrapper.find('.timeline').element);
+  const el = withGeometry(wrapper.find<HTMLElement>('.timeline').element);
   await scrollTo(el, 800);
   await relay.emit(event(1, 'msg.assistant', { text: 'one' }));
   await until(() => store.state.logs['s1']?.lastSeq === 1);
