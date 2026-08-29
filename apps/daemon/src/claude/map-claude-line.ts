@@ -180,6 +180,10 @@ export const mapClaudeLine = (line: ClaudeLine, pending: Pending, cwd: string): 
   if (line.kind === 'rate_limit') {
     return { events: [{ type: 'rate_limit', payload: { windows: rateWindows(line.windows) } }] };
   }
+  // The window is the adapter's to resolve (context-window.ts); the mapper only reports the size.
+  if (line.kind === 'context') {
+    return { events: [], context: { tokens: line.tokens, model: line.model } };
+  }
   const mapped = thinking(line, pending) ?? signal(line);
   if (mapped !== null) return mapped;
   return raw(line.kind === 'other' ? line.data : line);

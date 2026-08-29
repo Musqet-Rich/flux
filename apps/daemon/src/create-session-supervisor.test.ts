@@ -60,7 +60,17 @@ test('a user message runs a turn and the log tells the whole story', async () =>
   expect(sessions.get('s1').agentSessionId).toBe('86845ede-f4a6-4fc1-a5fb-b6aa1705796b');
   const files = emitted.find((e) => e.type === 'files.changed');
   expect(files?.payload).toEqual({ files: [{ path: 'notes.txt', status: 'A' }] });
-  expect(ephemeral[0]).toMatchObject({ type: 'delta', session: 's1', text: 'Re' });
+  expect(ephemeral.find((e) => e.type === 'delta')).toMatchObject({
+    type: 'delta',
+    session: 's1',
+    text: 'Re',
+  });
+  expect(ephemeral.find((e) => e.type === 'agent.context')).toMatchObject({
+    type: 'agent.context',
+    session: 's1',
+    model: 'claude-fable-5',
+    window: 1_000_000,
+  });
   expect(emitted.map((e) => e.seq)).toEqual(log.read('s1', 0).events.map((e) => e.seq));
   expect(worktree).toContain('flux-sup-');
   await supervisor.close();
@@ -115,6 +125,8 @@ test('interrupt kills the agent', async () => {
 // replayed fixture cannot produce on its own.
 const scripted = (): AgentAdapter => {
   const replies: Mapped[] = [
+    { events: [], context: { tokens: 238560, model: 'claude-fable-5' } },
+    { events: [], context: { tokens: 300, model: 'mystery' } },
     { events: [], thinking: { active: true, estimatedTokens: 120 } },
     { events: [], vcsChanged: 'push' },
   ];
@@ -127,8 +139,17 @@ const scripted = (): AgentAdapter => {
 test('thinking and vcs signals go out as ephemerals and never touch the log', async () => {
   const { supervisor, log, ephemeral } = await setup({}, scripted());
   await supervisor.send('go');
-  await untilLength(ephemeral, 3);
-  expect(ephemeral.slice(0, 3)).toEqual([
+  await untilLength(ephemeral, 5);
+  // The supervisor names the window from the table; an unknown model gets none.
+  expect(ephemeral.slice(0, 5)).toEqual([
+    {
+      type: 'agent.context',
+      session: 's1',
+      tokens: 238560,
+      model: 'claude-fable-5',
+      window: 1_000_000,
+    },
+    { type: 'agent.context', session: 's1', tokens: 300, model: 'mystery' },
     { type: 'agent.thinking', session: 's1', active: true, estimatedTokens: 120 },
     { type: 'vcs.changed', session: 's1', kind: 'push' },
     { type: 'agent.thinking', session: 's1', active: false },

@@ -14,6 +14,22 @@ const stop = JSON.stringify({
 const tokens = (n: number): string =>
   JSON.stringify({ type: 'system', subtype: 'thinking_tokens', estimated_tokens: n });
 
+const messageStart = (model: string): string =>
+  JSON.stringify({
+    type: 'stream_event',
+    event: {
+      type: 'message_start',
+      message: {
+        model,
+        usage: {
+          input_tokens: 56,
+          cache_creation_input_tokens: 176,
+          cache_read_input_tokens: 238328,
+        },
+      },
+    },
+  });
+
 const withClock = (): { adapter: ReturnType<typeof claudeAdapter>; clock: { now: number } } => {
   const clock = { now: 1000 };
   return { adapter: claudeAdapter('/w', { now: () => clock.now }), clock };
@@ -46,6 +62,15 @@ test('a dropped count still maps the line (to nothing) and other lines are untou
   const other = adapter.mapLine(JSON.stringify({ type: 'system', subtype: 'hook_started' }));
   expect(other?.events[0]?.type).toBe('raw');
   expect(adapter.mapLine('not json')).toBeNull();
+});
+
+test('message_start becomes a context signal, untouched by the thinking throttle', () => {
+  const { adapter } = withClock();
+  adapter.mapLine(start);
+  expect(adapter.mapLine(messageStart('claude-fable-5'))).toEqual({
+    events: [],
+    context: { tokens: 238560, model: 'claude-fable-5' },
+  });
 });
 
 test('reset forgets the open thinking block so a later stop of that index is raw', () => {

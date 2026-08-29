@@ -1,5 +1,6 @@
 import type { ChangedFile, CodeRef, Ephemeral, FluxEvent, SessionState } from '@flux/protocol';
 
+import { contextWindow } from './claude/context-window.ts';
 import type { AgentProcess } from './claude/spawn-claude.ts';
 import type { EventInput, EventLog } from './create-event-log.ts';
 import type { GitService } from './create-git-service.ts';
@@ -28,6 +29,9 @@ export interface Mapped {
   // Ephemeral signals (protocol.md § 6): the thinking indicator and a git state change.
   thinking?: { active: boolean; estimatedTokens?: number };
   vcsChanged?: string;
+  // The prompt size of one model call and the model that took it, for the status bar's context
+  // reading. The supervisor names the window (context-window.ts); the mappers stay pure.
+  context?: { tokens: number; model: string };
 }
 
 export interface AgentAdapter {
@@ -110,6 +114,15 @@ const handleLine = async (ctx: Context, line: string): Promise<void> => {
   }
   if (mapped.vcsChanged !== undefined) {
     ctx.emitEphemeral({ type: 'vcs.changed', session: ctx.session, kind: mapped.vcsChanged });
+  }
+  if (mapped.context !== undefined) {
+    const window = contextWindow(mapped.context.model);
+    ctx.emitEphemeral({
+      type: 'agent.context',
+      session: ctx.session,
+      ...mapped.context,
+      ...(window === undefined ? {} : { window }),
+    });
   }
   for (const event of mapped.events) append(ctx, event);
   if (mapped.filesChanged === true) {

@@ -8,6 +8,7 @@ export type Ephemeral =
   | { type: 'typing'; session: string; deviceId: string }
   | { type: 'agent.status'; session: string; status: 'thinking' | 'tool' | 'idle' }
   | { type: 'agent.thinking'; session: string; active: boolean; estimatedTokens?: number }
+  | { type: 'agent.context'; session: string; tokens: number; model: string; window?: number }
   | { type: 'vcs.changed'; session: string; kind: string }
   | { type: 'device.revoked'; deviceId: string };
 
@@ -26,6 +27,8 @@ const is = (v: unknown): v is Ephemeral => {
       return isOneOf(v['status'], ['thinking', 'tool', 'idle']);
     case 'agent.thinking':
       return isBoolean(v['active']) && isOptional(v['estimatedTokens'], isInteger);
+    case 'agent.context':
+      return isInteger(v['tokens']) && isString(v['model']) && isOptional(v['window'], isInteger);
     case 'vcs.changed':
       return isString(v['kind']);
     default:

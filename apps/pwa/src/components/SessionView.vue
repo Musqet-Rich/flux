@@ -118,7 +118,9 @@ watch(thinking, (state) => {
         <EventItem v-for="e in timeline" :key="e.seq" :event="e" />
         <article v-if="streaming !== '' || thinking !== null" class="streaming">
           <Streaming v-if="streaming !== ''" />
-          <span v-else class="thinking">{{ thinkingText }}</span>
+          <span v-else class="thinking"
+            ><span class="loader" aria-hidden="true" />{{ thinkingText }}</span
+          >
         </article>
         <AskCard v-if="ask !== null" :key="ask.askId" :ask="ask" @answer="answer" />
       </div>
@@ -211,6 +213,10 @@ watch(thinking, (state) => {
 .thinking {
   color: var(--muted);
   font-style: italic;
+}
+
+.thinking .loader {
+  margin-right: 0.5rem;
 }
 
 .pr {

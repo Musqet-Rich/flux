@@ -78,6 +78,8 @@ test('shows the thinking indicator until text streams, and the PR link once one 
   await until(() => store.state.logs['s1']?.thinking !== null);
   await flushPromises();
   expect(wrapper.find('.streaming .thinking').text()).toBe('Thinking…');
+  // The chosen spinner sits before the text while thinking.
+  expect(wrapper.find('.streaming .thinking .loader').exists()).toBe(true);
   await relay.ephemeral({
     type: 'agent.thinking',
     session: 's1',
@@ -91,6 +93,8 @@ test('shows the thinking indicator until text streams, and the PR link once one 
   await until(() => store.state.logs['s1']?.streaming === 'Here');
   await flushPromises();
   expect(wrapper.find('.streaming .thinking').exists()).toBe(false);
+  // The spinner goes with the indicator once the reply's text arrives.
+  expect(wrapper.find('.loader').exists()).toBe(false);
   expect(wrapper.find('.streaming').text()).toBe('Here');
   expect(wrapper.find('.toolbar .pr').exists()).toBe(false);
   await relay.emit(event(1, 'pr.published', pr));

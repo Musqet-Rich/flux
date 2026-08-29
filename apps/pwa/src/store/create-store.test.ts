@@ -260,6 +260,32 @@ test('thinking and vcs notices update the view and never touch the log', async (
   await until(() => view()?.thinking === null);
 });
 
+// The context-window reading (protocol.md § 6) is kept on the view for the status bar; a report
+// without a window leaves it null so the bar shows tokens only.
+test('agent.context updates the view with the tokens and the window', async () => {
+  const { store, link, relay } = await setup();
+  await store.pair('https://relay.example', link());
+  await store.open('s1');
+  const context = (): unknown => store.state.logs['s1']?.context;
+  expect(context()).toBeNull();
+  await relay.ephemeral({
+    type: 'agent.context',
+    session: 's1',
+    tokens: 238560,
+    model: 'claude-fable-5',
+    window: 1_000_000,
+  });
+  await until(() => context() !== null);
+  expect(context()).toEqual({ tokens: 238560, window: 1_000_000 });
+  await relay.ephemeral({
+    type: 'agent.context',
+    session: 's1',
+    tokens: 300,
+    model: 'mystery',
+  });
+  await until(() => JSON.stringify(context()) === '{"tokens":300,"window":null}');
+});
+
 test('a gap in seq triggers a sync that brings in the missed events and the late one', async () => {
   const { store, link, relay, called } = await setup();
   await store.pair('https://relay.example', link());

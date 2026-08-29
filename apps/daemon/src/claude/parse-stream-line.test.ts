@@ -20,10 +20,18 @@ test('every fixture line parses to a known kind', () => {
       'tool_result',
       'result',
       'rate_limit',
+      'context',
       'block_stop',
       'other',
     ]),
   );
+});
+
+test('message_start lines carry the prompt size and model as context', () => {
+  const contexts = lines.map((l) => parseStreamLine(l)).filter((l) => l?.kind === 'context');
+  expect(contexts).toHaveLength(5);
+  // First call in the fixture: 2 + 10745 + 10005 (input + cache creation + cache read).
+  expect(contexts[0]).toEqual({ kind: 'context', tokens: 20752, model: 'claude-fable-5' });
 });
 
 const signals = readFileSync(
@@ -202,6 +210,24 @@ test.each([
   [
     '{"type":"stream_event","event":{"type":"message_stop"}}',
     { kind: 'other', data: { type: 'stream_event', event: { type: 'message_stop' } } },
+  ],
+  [
+    '{"type":"stream_event","event":{"type":"message_start","message":{"model":"claude-opus-5","usage":{"input_tokens":56,"cache_creation_input_tokens":1690,"cache_read_input_tokens":23222,"output_tokens":5}}}}',
+    { kind: 'context', tokens: 24968, model: 'claude-opus-5' },
+  ],
+  [
+    '{"type":"stream_event","event":{"type":"message_start","message":{"usage":{"input_tokens":10,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}}}',
+    { kind: 'context', tokens: 10, model: '' },
+  ],
+  [
+    '{"type":"stream_event","event":{"type":"message_start","message":{"model":"m","usage":{"input_tokens":10}}}}',
+    {
+      kind: 'other',
+      data: {
+        type: 'stream_event',
+        event: { type: 'message_start', message: { model: 'm', usage: { input_tokens: 10 } } },
+      },
+    },
   ],
   [
     '{"type":"user","message":{"role":"user","content":"typed text"}}',

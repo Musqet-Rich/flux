@@ -53,8 +53,14 @@ const assistant = (message: PiAssistantMessage, pending: PiPending): Mapped => {
   const { run } = pending;
   run.messages += 1;
   run.stopReason = message.stopReason;
-  if (message.usage !== undefined) add(run.usage, message.usage);
-  return { events };
+  if (message.usage === undefined) return { events };
+  add(run.usage, message.usage);
+  // pi's per-message usage is this one model call's, so its input side (prompt, cache reads
+  // and writes) is the context in use, the way Claude's `message_start` usage is. A failed call
+  // reports zeros and says nothing about the context.
+  const tokens = message.usage.input + message.usage.cacheRead + message.usage.cacheWrite;
+  if (tokens === 0) return { events };
+  return { events, context: { tokens, model: message.model } };
 };
 
 const toolStart = (

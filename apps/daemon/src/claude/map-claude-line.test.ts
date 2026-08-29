@@ -58,15 +58,19 @@ test('unrecognised lines become raw events so nothing is lost', () => {
 // Operator hooks and the streaming envelopes around a reply (message_start, content_block_stop,
 // thinking deltas, ...) were first seen dogfooding against Claude Code 2.1.251; every one of them
 // must land as `raw` or drive the thinking indicator, and none may throw.
-test('hook and stream_event lines all map to raw or thinking without throwing', () => {
+test('hook and stream_event lines all map to raw, thinking or context without throwing', () => {
   const { mapped, events } = replay(noise);
   expect(mapped.length).toBeGreaterThan(0);
   const thinking = mapped.filter((m) => m.thinking !== undefined);
-  expect(events.length + thinking.length).toBe(mapped.length);
+  const context = mapped.filter((m) => m.context !== undefined);
+  // Every line is exactly one of: a raw/other event, a thinking signal, or a context signal.
+  expect(events.length + thinking.length + context.length).toBe(mapped.length);
   expect(new Set(events.map((e) => e.type))).toEqual(new Set(['raw']));
   const subtypes = events.map((e) => JSON.stringify(e.payload));
   expect(subtypes.some((s) => s.includes('"hook_started"'))).toBe(true);
-  expect(subtypes.some((s) => s.includes('"message_start"'))).toBe(true);
+  // message_start now drives the context indicator, not a raw event.
+  expect(context.length).toBeGreaterThan(0);
+  expect(context.every((m) => m.context?.model === 'claude-fable-5')).toBe(true);
 });
 
 const signals = new URL(

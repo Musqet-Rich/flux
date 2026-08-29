@@ -21,6 +21,9 @@ export interface PiTextBlock {
 export interface PiAssistantMessage {
   blocks: PiTextBlock[];
   stopReason: string;
+  // The model id pi reports on the message (the resolved one, e.g. `claude-haiku-4-5-20251001`
+  // for the alias `claude-haiku-4-5`); the status bar's context reading is keyed by it.
+  model: string;
   errorMessage?: string;
   usage?: PiUsage;
 }
@@ -86,6 +89,7 @@ const messageEnd = (line: Record<string, unknown>): PiLine => {
     message: {
       blocks: textBlocks(message['content']),
       stopReason: isString(message['stopReason']) ? message['stopReason'] : 'stop',
+      model: isString(message['model']) ? message['model'] : '',
       ...(isString(message['errorMessage']) ? { errorMessage: message['errorMessage'] } : {}),
       ...(usage === undefined ? {} : { usage }),
     },
