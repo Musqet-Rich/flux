@@ -1,6 +1,6 @@
 {
   // Oxlint config. Rules mirror docs/engineering.md; change that file in the same PR as this one.
-  // Type-aware rules run through oxlint-tsgolint (hoisted by vite-plus) and need a tsconfig per package.
+  // Type-aware rules run through oxlint-tsgolint and need a tsconfig per package.
   // Plugins: `eslint` and `oxc` are needed on top of the documented five because func-style,
   // prefer-arrow-callback, max-lines, no-warning-comments, no-restricted-imports (eslint) and
   // no-const-enum (oxc) live there, and `vitest` carries the § Testing bans (no .only/.skip, no
