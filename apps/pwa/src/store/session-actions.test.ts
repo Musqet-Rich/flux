@@ -81,3 +81,14 @@ test('a delete that went through refreshes the list and clears a standing action
   await until(() => store.state.sessions.length === 0);
   store.stop();
 });
+
+test('rename sends the title and leaves the list to the session.renamed event', async () => {
+  const { store, calls } = await pairedStore([], {
+    'sessions.rename': () => ({}),
+    'sessions.list': () => [listed],
+  });
+  expect(await store.renameSession('s1', 'Second')).toBe(true);
+  expect(calls('sessions.rename')).toEqual([{ session: 's1', title: 'Second' }]);
+  expect(calls('sessions.list')).toEqual([]);
+  store.stop();
+});

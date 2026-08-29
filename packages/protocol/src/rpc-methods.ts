@@ -112,6 +112,8 @@ export interface RpcMethods {
   // Drops the agent's context, keeps the worktree and the log: the next send starts fresh.
   'sessions.clear': { params: { session: string }; result: Record<string, never> };
   'sessions.restart': { params: { session: string }; result: Record<string, never> };
+  // Gives the session a new title, logged as `session.renamed`; `bad_params` on a blank one.
+  'sessions.rename': { params: { session: string; title: string }; result: Record<string, never> };
   'agent.send': {
     params: { session: string; text: string; commentIds?: string[] };
     result: { seq: number };
@@ -216,6 +218,8 @@ export const rpcMethods: ParamGuards = {
   'sessions.unarchive': withSession,
   'sessions.clear': withSession,
   'sessions.restart': withSession,
+  'sessions.rename': (v): v is RpcMethods['sessions.rename']['params'] =>
+    withSession(v) && isString(v['title']),
   'agent.send': (v): v is RpcMethods['agent.send']['params'] =>
     withSession(v) &&
     isString(v['text']) &&

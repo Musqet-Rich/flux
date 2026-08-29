@@ -61,6 +61,7 @@ const cases: { [M in RpcMethod]: [ok: unknown, bad: unknown] } = {
   'sessions.archive': [{}, null],
   'sessions.unarchive': [{}, null],
   'sessions.clear': [{}, 'done'],
+  'sessions.rename': [{}, 'x'],
   'sessions.restart': [{}, 'ok'],
   'agent.send': [{ seq: 3 }, { seq: 0 }],
   'agent.answer': [{}, []],
