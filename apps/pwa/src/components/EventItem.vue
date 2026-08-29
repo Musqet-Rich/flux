@@ -5,13 +5,16 @@ import type { VNode } from 'vue';
 import { computed, ref } from 'vue';
 
 import { renderMarkdown } from '../markdown/render-markdown.ts';
+import MessageMenu from './MessageMenu.vue';
 
 // One entry of the session timeline. Every event type renders as one of nine shapes so the
 // template stays a switch on `kind`; the detail (tool input/output) opens on tap, a `link`
 // opens in a new tab, a `warning` keeps its text (hook stderr) behind a disclosure, a
 // `divider` rules across the timeline where the agent's context was cleared, a `task` is a
 // note that opens that subagent's chat, and a `report` keeps the subagent's final report (what
-// the parent actually read) behind a disclosure, rendered as Markdown like any reply.
+// the parent actually read) behind a disclosure, rendered as Markdown like any reply. A message
+// bubble carries a menu (MessageMenu) and, when it answers an earlier message, that message's
+// first line as a chip (`quote`, looked up by the parent) that scrolls to it.
 
 interface View {
   kind: 'user' | 'assistant' | 'tool' | 'note' | 'link' | 'warning' | 'divider' | 'task' | 'report';
@@ -22,10 +25,12 @@ interface View {
   href?: string;
   // The Agent call a `task` row opens.
   task?: string;
+  // The message a `user` row answers.
+  replyTo?: number;
 }
 
-const props = defineProps<{ event: FluxEvent }>();
-defineEmits<{ task: [toolUseId: string] }>();
+const props = defineProps<{ event: FluxEvent; quote?: string | null }>();
+defineEmits<{ task: [toolUseId: string]; reply: [seq: number]; jump: [seq: number] }>();
 const expanded = ref(false);
 
 // A tool output or a raw agent line can run to hundreds of KB; the detail is only stringified
@@ -139,7 +144,13 @@ const describe = (event: FluxEvent): View => {
     case 'raw':
       return opaque(event.type, event.payload);
     case 'msg.user':
-      return { kind: 'user', text: event.payload.text, detail: undefined, tone: null };
+      return {
+        kind: 'user',
+        text: event.payload.text,
+        detail: undefined,
+        tone: null,
+        ...(event.payload.replyTo === undefined ? {} : { replyTo: event.payload.replyTo }),
+      };
     case 'msg.assistant':
       return { kind: 'assistant', text: event.payload.text, detail: undefined, tone: null };
     case 'tool.start':
@@ -171,10 +182,30 @@ const detail = computed(() => (expanded.value && hasDetail.value ? json(view.val
 const toggle = (): void => {
   expanded.value = !expanded.value;
 };
+const isMessage = computed(() => view.value.kind === 'user' || view.value.kind === 'assistant');
+// The chip shows the quoted message's first non-blank line only; a source not in the log
+// (an older device's partial sync) still gets a chip that says what the row is.
+const quoteLine = computed(
+  () => props.quote?.split('\n').find((line) => line.trim() !== '') ?? 'earlier message',
+);
 </script>
 
 <template>
-  <article class="item" :class="[view.kind, view.tone]">
+  <article class="item" :class="[view.kind, view.tone]" :data-seq="event.seq">
+    <MessageMenu
+      v-if="isMessage"
+      :text="view.text"
+      :side="view.kind === 'user' ? 'left' : 'right'"
+      @reply="$emit('reply', event.seq)"
+    />
+    <button
+      v-if="view.replyTo !== undefined"
+      type="button"
+      class="quote"
+      @click="$emit('jump', view.replyTo)"
+    >
+      ↩ {{ quoteLine }}
+    </button>
     <pre v-if="view.kind === 'user'" class="text">{{ view.text }}</pre>
     <Markdown v-else-if="view.kind === 'assistant'" />
     <template v-else-if="view.kind === 'tool'">
@@ -219,9 +250,35 @@ const toggle = (): void => {
 
 .user,
 .assistant {
+  position: relative;
   padding: 0.6rem 0.8rem;
   border-radius: var(--radius);
   max-width: 85%;
+}
+
+.user {
+  padding-left: 2rem;
+}
+
+.assistant {
+  padding-right: 2rem;
+}
+
+.quote {
+  display: block;
+  width: 100%;
+  margin-bottom: 0.4rem;
+  padding: 0.25rem 0.5rem;
+  border-left: 2px solid currentColor;
+  border-radius: 0;
+  background: rgb(0 0 0 / 15%);
+  color: inherit;
+  opacity: 0.85;
+  font-size: 0.8rem;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .user {

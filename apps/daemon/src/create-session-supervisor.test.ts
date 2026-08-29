@@ -84,12 +84,14 @@ test('a second message reuses the process and refs are rendered from the worktre
     'now this',
     [{ path: 'notes.txt', rev: 'worktree', range: { startLine: 1, endLine: 1 } }],
     ['c1'],
+    { seq: 1, from: 'user', text: 'first' },
   );
   const user = log.read('s1', seq - 1, 1).events[0];
   expect(user?.payload).toEqual({
     text: 'now this',
     refs: [{ path: 'notes.txt', rev: 'worktree', range: { startLine: 1, endLine: 1 } }],
     commentIds: ['c1'],
+    replyTo: 1,
   });
   await untilEvent(emitted, 'turn.ended', seq);
   expect(spawns).toHaveLength(1);

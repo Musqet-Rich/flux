@@ -28,7 +28,7 @@ const { scroller, behind, unread } = tail;
 const log = computed(() => props.store.state.logs[props.session]);
 const events = computed(() => log.value?.events ?? []);
 const chat = useSessionTimeline(() => events.value);
-const { strip, view, task, timeline, earlier, ask } = chat;
+const { strip, view, task, timeline, earlier, ask, reply, quoteOf, startReply, cancelReply } = chat;
 const streaming = computed(() => log.value?.streaming ?? '');
 // The delta buffer renders through the same Markdown pass as the final message, so an open
 // fence is a code block from its first line and the bubble never flickers back to raw text.
@@ -47,6 +47,16 @@ const busy = computed(() => summary.value?.state === 'running');
 // § Adapter: a subagent's ephemerals are dropped), so they show on main only.
 const onMain = computed(() => view.value === null);
 const ended = ref(false);
+// Replies go with the composer, which main alone has; a subagent's chat has none to reply from.
+const pick = (seq: number): void => {
+  if (onMain.value) startReply(seq);
+};
+// Scrolls the quoted message into view. Replies are main-only and main shows every row (the
+// last-200 cut applies to subagent chats alone), so the source is rendered whenever the log
+// has it; a source the log lacks leaves the scroll where it is.
+const jump = (seq: number): void => {
+  scroller.value?.querySelector(`[data-seq="${seq}"]`)?.scrollIntoView({ block: 'center' });
+};
 
 const pill = computed(() => (unread.value > 0 ? `↓ ${unread.value} new` : '↓ New activity'));
 
@@ -73,6 +83,7 @@ watch(
   () => props.session,
   (session) => {
     select(null);
+    cancelReply();
     void props.store.open(session);
   },
 );
@@ -131,7 +142,15 @@ watch(
         >
           Show {{ earlier }} earlier
         </button>
-        <EventItem v-for="e in timeline" :key="e.seq" :event="e" @task="select" />
+        <EventItem
+          v-for="e in timeline"
+          :key="e.seq"
+          :event="e"
+          :quote="quoteOf(e) ?? null"
+          @task="select"
+          @reply="pick"
+          @jump="jump"
+        />
         <article v-if="onMain && (streaming !== '' || thinking !== null)" class="streaming">
           <Streaming v-if="streaming !== ''" />
           <span v-else class="thinking"
@@ -144,7 +163,15 @@ watch(
         {{ pill }}
       </button>
     </div>
-    <Composer v-if="onMain" :store="store" :session="session" :events="events" @sent="tail.jump" />
+    <Composer
+      v-if="onMain"
+      :store="store"
+      :session="session"
+      :events="events"
+      :reply="reply"
+      @sent="tail.jump"
+      @unreply="cancelReply"
+    />
     <div v-else class="aside">
       <span class="hint">{{ ended ? `Task ${task?.status}. ` : '' }}Messages go to main</span>
       <button type="button" class="secondary" @click="select(null)">Back</button>

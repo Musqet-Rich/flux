@@ -160,3 +160,36 @@ test('a started task is a tappable note, an ended task keeps its report behind a
   expect(failed.find('.note').text()).toBe('Task failed');
   expect(failed.find('.item').classes()).toContain('warn');
 });
+
+test('message bubbles carry a menu on their inboard side; a reply row quotes its source', async () => {
+  const user = mount(EventItem, {
+    props: {
+      event: { ...ev('msg.user', { text: 'hi', replyTo: 1 }), seq: 3 },
+      quote: 'Plan\nmore',
+    },
+  });
+  expect(user.find('.menu-root').classes()).toContain('left');
+  expect(user.find('.item').attributes('data-seq')).toBe('3');
+  expect(user.find('.quote').text()).toBe('↩ Plan');
+  await user.find('.quote').trigger('click');
+  expect(user.emitted('jump')).toEqual([[1]]);
+  await user.find('.trigger').trigger('click');
+  await user.findAll('[role="menuitem"]')[1]?.trigger('click');
+  expect(user.emitted('reply')).toEqual([[3]]);
+  const bot = mount(EventItem, { props: { event: ev('msg.assistant', { text: 'hi' }) } });
+  expect(bot.find('.menu-root').classes()).toContain('right');
+  expect(bot.find('.quote').exists()).toBe(false);
+  const note = mount(EventItem, { props: { event: ev('turn.ended', {}) } });
+  expect(note.find('.menu-root').exists()).toBe(false);
+});
+
+test('the reply chip skips blank leading lines and names a source the log lacks', () => {
+  const blank = mount(EventItem, {
+    props: { event: ev('msg.user', { text: 'hi', replyTo: 1 }), quote: '\n\n  \nSecond' },
+  });
+  expect(blank.find('.quote').text()).toBe('↩ Second');
+  const gone = mount(EventItem, {
+    props: { event: ev('msg.user', { text: 'hi', replyTo: 1 }), quote: null },
+  });
+  expect(gone.find('.quote').text()).toBe('↩ earlier message');
+});

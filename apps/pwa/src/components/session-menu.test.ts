@@ -7,6 +7,7 @@ import { ClientError } from '../client/client-error.ts';
 import SessionMenu from './SessionMenu.vue';
 
 const dirty = '2 uncommitted files and 1 unpushed commit';
+const escape = 'Escape';
 
 // The menu is busy until the box has answered; `busy` is the component's own ref.
 const settled = async (wrapper: ReturnType<typeof mount>): Promise<void> => {
@@ -51,6 +52,10 @@ test('the menu opens from a menu button and offers rename, clear, archive and de
   expect(wrapper.find('[role="menu"]').exists()).toBe(false);
   await settled(wrapper);
   expect(wrapper.emitted('closed')).toBeUndefined();
+  await trigger.trigger('click');
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: escape }));
+  await flushPromises();
+  expect(wrapper.find('[role="menu"]').exists()).toBe(false);
   await trigger.trigger('click');
   await wrapper.findAll('[role="menuitem"]')[2]?.trigger('click');
   await until(() => calls('sessions.archive').length === 1);

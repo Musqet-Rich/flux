@@ -5,13 +5,16 @@ import { computed, ref } from 'vue';
 import { openAsk } from '../store/open-ask.ts';
 import type { SessionTask } from '../store/session-tasks.ts';
 import { sessionTasks } from '../store/session-tasks.ts';
+import type { MessageReply } from './useMessageReply.ts';
+import { useMessageReply } from './useMessageReply.ts';
 
 // What the session screen derives from its log: the subagent tasks and the strip's cut of
 // them (the current ones, plus the open chat's own row so Back has somewhere to be), which chat
 // is open (`main`, or a task's Agent call id), that chat's rows, and the agent's open question.
 // Main shows top-level rows only; a subagent's chat shows the rows whose `parent` is its call,
 // the last `pageSize` of them until the operator asks for earlier ones (no virtualisation:
-// hundreds of rows render fine, thousands are what the button is for).
+// hundreds of rows render fine, thousands are what the button is for). The reply state
+// (useMessageReply) rides along so the screen has one object for what its log means.
 
 const pageSize = 200;
 
@@ -21,7 +24,7 @@ const pageSize = 200;
 // `task.progress` only feeds the agents strip.
 const hiddenTypes = new Set(['raw', 'rate_limit', 'task.progress']);
 
-export interface SessionTimeline {
+export interface SessionTimeline extends MessageReply {
   tasks: ComputedRef<SessionTask[]>;
   // The rows the strip lists: current tasks (store/session-tasks) and the open chat's task,
   // kept while viewed even when its turn is over.
@@ -55,6 +58,7 @@ export const useSessionTimeline = (events: () => readonly FluxEvent[]): SessionT
   );
   const ask = computed(() => openAsk(events()));
   return {
+    ...useMessageReply(events),
     tasks,
     strip,
     view,

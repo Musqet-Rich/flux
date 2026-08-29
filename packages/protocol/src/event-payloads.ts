@@ -57,7 +57,7 @@ export interface EventPayloads {
   'session.renamed': { title: string };
   // The agent's context was dropped (`sessions.clear`); what follows is a fresh conversation.
   'session.cleared': Record<string, never>;
-  'msg.user': { text: string; refs?: CodeRef[]; commentIds?: string[] };
+  'msg.user': { text: string; refs?: CodeRef[]; commentIds?: string[]; replyTo?: number };
   'msg.assistant': { text: string };
   'tool.start': { toolId: string; name: string; input: unknown; summary: string };
   'tool.end': { toolId: string; ok: boolean; summary: string; output?: unknown };
@@ -146,7 +146,8 @@ export const eventPayloads: PayloadGuards = {
     isRecord(v) &&
     isString(v['text']) &&
     isOptional(v['refs'], (r): r is CodeRef[] => isArrayOf(r, isCodeRef)) &&
-    isOptional(v['commentIds'], isStrings),
+    isOptional(v['commentIds'], isStrings) &&
+    isOptional(v['replyTo'], (n): n is number => isInteger(n, 1)),
   'msg.assistant': (v): v is EventPayloads['msg.assistant'] => isRecord(v) && isString(v['text']),
   'tool.start': (v): v is EventPayloads['tool.start'] =>
     isRecord(v) &&

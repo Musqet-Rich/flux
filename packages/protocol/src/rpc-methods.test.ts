@@ -40,6 +40,8 @@ const cases: [RpcMethod, unknown, boolean][] = [
   ['agent.send', { ...s, text: 'go' }, true],
   ['agent.send', { ...s, text: 'go', commentIds: ['c'] }, true],
   ['agent.send', { ...s, text: 'go', commentIds: 'c' }, false],
+  ['agent.send', { ...s, text: 'go', replyTo: 2 }, true],
+  ['agent.send', { ...s, text: 'go', replyTo: 1.5 }, false],
   ['agent.send', { ...s }, false],
   ['agent.answer', { ...s, askId: 'a', answer: 'y' }, true],
   ['agent.answer', { ...s, askId: 'a' }, false],

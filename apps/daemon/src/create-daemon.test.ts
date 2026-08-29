@@ -4,6 +4,7 @@ import { chmod, lstat, mkdir, readFile, symlink, writeFile } from 'node:fs/promi
 import { join } from 'node:path';
 import { afterEach, expect, test } from 'vitest';
 
+import type { Dev } from '../test/daemon-device.ts';
 import { daemonDevice } from '../test/daemon-device.ts';
 import type { FakeRelay } from '../test/fake-relay.ts';
 import { startFakeRelay } from '../test/fake-relay.ts';
@@ -57,6 +58,33 @@ const { device, call, untilEvent, untilRevoked, controlRm, pair, collect } = dae
   frames: () => frames,
 });
 
+// A reply names a message by seq: an unknown one, or one from another session's log, is
+// refused; a known one is logged as `replyTo`.
+const replyRoundTrip = async (d: Dev, session: string, repo: string): Promise<void> => {
+  await expect(call(d, 'agent.send', { session, text: 'and', replyTo: 99 })).rejects.toThrow(
+    'bad_params',
+  );
+  const other = (await call(d, 'sessions.create', {
+    repo,
+    branch: 'flux/other',
+    agent: 'claude',
+  })) as {
+    session: string;
+  };
+  await expect(
+    call(d, 'agent.send', { session: other.session, text: 'and', replyTo: 2 }),
+  ).rejects.toThrow('bad_params');
+  await call(d, 'sessions.archive', { session: other.session });
+  const replied = (await call(d, 'agent.send', { session, text: 'and', replyTo: 2 })) as {
+    seq: number;
+  };
+  await untilEvent(d, 'turn.ended');
+  const { events } = (await call(d, 'events.sync', { session, since: 0 })) as {
+    events: { seq: number; payload: unknown }[];
+  };
+  expect(events.find((e) => e.seq === replied.seq)?.payload).toEqual({ text: 'and', replyTo: 2 });
+};
+
 test('pair, create a session, talk to the agent, sync the log', async () => {
   const { repo } = await setup();
   const d = await device();
@@ -92,17 +120,18 @@ test('pair, create a session, talk to the agent, sync the log', async () => {
   expect(synced.complete).toBe(true);
   expect(synced.events.map((e) => e.seq)).toEqual(synced.events.map((_, i) => i + 1));
   expect(synced.events.map((e) => e.type)).toContain('tool.start');
+  await replyRoundTrip(d, session, repo);
   const status = (await call(d, 'git.status', { session })) as { files: unknown[] };
   expect(status.files).toEqual([]);
   expect(await call(d, 'fs.list', { session, path: '.' })).toEqual({
     entries: [{ name: 'README.md', kind: 'file' }],
   });
   await expect(call(d, 'fs.read', { session, path: '../x' })).rejects.toThrow('bad_params');
-  expect(await call(d, 'sessions.cost', { session })).toMatchObject({ turns: 1 });
+  expect(await call(d, 'sessions.cost', { session })).toMatchObject({ turns: 2 });
   await call(d, 'sessions.archive', { session });
-  expect(await call(d, 'sessions.list', {})).toEqual([
+  expect(await call(d, 'sessions.list', {})).toContainEqual(
     expect.objectContaining({ session, archived: true, worktreeExists: true }),
-  ]);
+  );
 });
 
 const lastTypes = async (d: Awaited<ReturnType<typeof device>>, session: string, n: number) => {
