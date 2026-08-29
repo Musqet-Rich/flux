@@ -39,6 +39,34 @@ test('an unknown window is shown, humanised, only when it is the most used', asy
   ]);
 });
 
+// The edges of the max rule: nothing, one unknown window on its own, an unknown tied with a
+// known one (both stay), and a name that is a property every object has.
+test('the most-used rule holds at the edges', async () => {
+  const wrapper = mount(StatusBar, {
+    props: { status: 'connected', daemon: null, error: null, push: 'on', rateWindows: [] },
+  });
+  const shown = (): string[] => wrapper.findAll('.window').map((w) => w.text());
+  expect(wrapper.find('.windows').exists()).toBe(false);
+  await wrapper.setProps({
+    rateWindows: [{ name: 'monthly_spend', utilisation: 0.5, resetsAt: 'x' }],
+  });
+  expect(shown()).toEqual(['monthly spend 50%']);
+  await wrapper.setProps({
+    rateWindows: [
+      { name: 'five_hour', utilisation: 0.3, resetsAt: 'x' },
+      { name: 'monthly_spend', utilisation: 0.3, resetsAt: 'x' },
+    ],
+  });
+  expect(shown()).toEqual(['5h 30%', 'monthly spend 30%']);
+  await wrapper.setProps({
+    rateWindows: [
+      { name: 'five_hour', utilisation: 0.9, resetsAt: 'x' },
+      { name: 'constructor', utilisation: 0.1, resetsAt: 'x' },
+    ],
+  });
+  expect(shown()).toEqual(['5h 90%']);
+});
+
 test('reports an empty room and a stopped connection without a daemon name', async () => {
   const wrapper = mount(StatusBar, {
     props: { status: 'no_host', daemon: 'box', error: null, push: 'unavailable', rateWindows: [] },
