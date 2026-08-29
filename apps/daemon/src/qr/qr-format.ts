@@ -2,7 +2,7 @@
 // computed rather than tabulated. Format is 5 data bits (2 level, 3 mask) with 10 check bits,
 // masked with 0x5412; version is 6 data bits with 12 check bits, unmasked.
 
-export type EcLevel = 'L' | 'M' | 'Q' | 'H';
+type EcLevel = 'L' | 'M' | 'Q' | 'H';
 
 const levelBits: Record<EcLevel, number> = { L: 1, M: 0, Q: 3, H: 2 };
 // x^10 + x^8 + x^5 + x^4 + x^2 + x + 1

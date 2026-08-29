@@ -1,3 +1,4 @@
+import { DaemonError } from '../daemon-error.ts';
 import type { Grid } from './qr-grid.ts';
 import { qrGrid } from './qr-grid.ts';
 
@@ -17,8 +18,8 @@ const conditions: ((row: number, col: number) => boolean)[] = [
 
 const apply = (modules: Grid, reserved: Grid, mask: number): Grid => {
   const condition = conditions[mask];
+  if (condition === undefined) throw new DaemonError('internal', `no QR mask ${mask}`);
   const out = qrGrid.clone(modules);
-  if (condition === undefined) return out;
   const size = modules.length;
   for (let r = 0; r < size; r += 1) {
     for (let c = 0; c < size; c += 1) {
@@ -44,7 +45,9 @@ const runPenalty = (line: boolean[]): number => {
   return score;
 };
 
-// N3: the finder-like 1:1:3:1:1 pattern with four light modules on either side scores 40.
+// N3: the finder-like 1:1:3:1:1 pattern with four light modules before or after it scores 40;
+// a run with light modules on both sides matches both windows and scores 80 (as in Nayuki's
+// reference encoder, which the reference libraries agree with).
 const finderLikePenalty = (line: boolean[]): number => {
   const text = line.map((dark) => (dark ? '1' : '0')).join('');
   let score = 0;
@@ -85,8 +88,7 @@ const balancePenalty = (grid: Grid): number => {
 
 const penalty = (grid: Grid): number => {
   let score = blockPenalty(grid) + balancePenalty(grid);
-  for (let i = 0; i < grid.length; i += 1) {
-    const row = grid[i] ?? [];
+  for (const [i, row] of grid.entries()) {
     const col = column(grid, i);
     score += runPenalty(row) + runPenalty(col) + finderLikePenalty(row) + finderLikePenalty(col);
   }

@@ -29,3 +29,9 @@ test('a fully dark pair renders as a space', () => {
   const lines = renderQr(grid(['##', '##'])).split('\n');
   expect(lines[2]).toBe('████  ████');
 });
+
+test('invert swaps which modules are drawn', () => {
+  const lines = renderQr(grid(['#.', '.#']), true).split('\n');
+  expect(lines[0]).toBe('          ');
+  expect(lines[2]).toBe('    ▀▄    ');
+});

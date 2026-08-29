@@ -15,6 +15,7 @@ import { renderQr } from './qr/render-qr.ts';
 //   FLUX_REPOS_DIR   directory whose subdirectories are the repositories, default ~/repos
 //   FLUX_CLAUDE      the claude binary, default `claude` on PATH
 //   FLUX_PUSH_SUBJECT VAPID contact (mailto: or https: URL) shown to push services
+//   FLUX_QR_INVERT   set to 1 on a light terminal; the pairing QR is drawn for a dark one
 // `flux pair` asks a running daemon for a fresh pairing URL over its control socket; devices
 // are managed with `flux devices ls|rm <id>` (which open the database directly, daemon stopped
 // or not).
@@ -51,9 +52,9 @@ const pairViaSocket = (): Promise<string> =>
     });
   });
 
-// The QR above the URL is plain half-block text, so it prints the same piped or under NO_COLOR.
+// The QR is for a person at a terminal; a pipe or journald gets the URL only.
 const printPairing = (url: string): void => {
-  console.log(renderQr(qrMatrix(url)));
+  if (process.stdout.isTTY) console.log(renderQr(qrMatrix(url), env['FLUX_QR_INVERT'] === '1'));
   console.log(`pair a device within 10 minutes: ${url}`);
 };
 
