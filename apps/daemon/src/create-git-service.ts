@@ -22,7 +22,9 @@ export interface GitService extends GitActions {
   status: (worktree: string) => Promise<FileStatus[]>;
   diff: (worktree: string, base: string, options: DiffOptions) => Promise<string>;
   show: (worktree: string, path: string, rev: string) => Promise<FileContent>;
-  log: (worktree: string, limit: number) => Promise<Commit[]>;
+  // The commits the session added on top of `base`, newest first; the base's own history is
+  // not the session's work, and it is what the PR title and the "last commit" line are about.
+  log: (worktree: string, base: string, limit: number) => Promise<Commit[]>;
   branches: (repo: string) => Promise<string[]>;
   revParse: (repo: string, rev: string) => Promise<string>;
   // `base` null checks out an existing branch instead of creating one.
@@ -136,9 +138,15 @@ export const createGitService = (options: GitServiceOptions = {}): GitService =>
       return git(worktree, ['diff', '--no-color', ...revs, ...path]);
     },
     show: (worktree, path, rev) => show(git, worktree, path, rev),
-    log: async (worktree, limit) =>
+    log: async (worktree, base, limit) =>
       parseLog(
-        await git(worktree, ['log', '--format=%H%x1f%s%x1f%an%x1f%aI', '-n', String(limit)]),
+        await git(worktree, [
+          'log',
+          '--format=%H%x1f%s%x1f%an%x1f%aI',
+          '-n',
+          String(limit),
+          `${base}..HEAD`,
+        ]),
       ),
     branches: (repo) => localBranches(git, repo),
     revParse: async (repo, rev) => (await git(repo, ['rev-parse', '--verify', rev])).trim(),

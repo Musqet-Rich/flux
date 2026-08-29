@@ -29,8 +29,8 @@ const draft = ref(false);
 const busy = ref<Action | null>(null);
 const failure = ref<string | null>(null);
 const commits = ref<Commit[]>([]);
-// `git.log` is the branch's history, base included: the device cannot tell where the branch
-// forked, so a fresh branch seeds the title from the base's last commit until the agent commits.
+// `git.log` lists the session's own commits beyond its base; a page of 20 is enough to find a
+// Conventional Commit subject behind a few "wip" ones, and costs one small `git log`.
 const logLimit = 20;
 
 const summary = computed(() => props.store.state.sessions.find((s) => s.session === props.session));
@@ -152,6 +152,8 @@ onMounted(() => {
         aria-label="Pull request title"
         :disabled="!idle"
       />
+      <!-- Always rendered: a live region only announces text added to a region already in
+           the accessibility tree, and an empty `p` with no margin takes no space. -->
       <p class="hint" aria-live="polite">{{ titleHint }}</p>
       <textarea
         id="pr-body"
@@ -230,10 +232,6 @@ onMounted(() => {
   margin: 0;
   color: var(--muted);
   font-size: 0.8rem;
-}
-
-.hint:empty {
-  display: none;
 }
 
 .url {
