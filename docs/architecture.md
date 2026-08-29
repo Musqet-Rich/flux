@@ -96,7 +96,7 @@ Hono on Node 24. Two jobs:
 2. `GET /ws/:room` WebSocket. First frame declares role `host` or `guest`. One host per room; the second host is rejected. Frames from host fan out to all guests; frames from a guest go to the host only. Frames are opaque binary. No persistence, no logging of room ids beyond ephemeral metrics.
    The relay holds no state beyond live connections. Web Push is sent by the daemon directly (`adr/0013`).
 
-Limits: max frame size, max guests per room, per-IP connection rate. All hard-coded initially.
+Limits: max frame size, max guests per room, per-IP connection rate. All hard-coded initially. Behind a reverse proxy every socket is the proxy's address, so the deployment sets `FLUX_TRUST_PROXY=1` and the rate key is the last hop of `X-Forwarded-For` (`client-key.ts`); without the flag the header is ignored.
 
 ## PWA
 
@@ -140,9 +140,12 @@ Triggered by the daemon on `ask` and on `session.state idle` (after `running`) a
 
 ## Deployment
 
-- Box: `pnpm dlx` or a single bundled `flux` binary via tsdown output; systemd unit template provided. Requires `git`, `claude` (and later `pi`) on PATH.
-- Relay: single Node process behind Caddy or nginx for TLS. Serves PWA from `apps/pwa/dist`.
-- PWA: built once, served by the relay. No separate hosting.
+`pnpm run build` runs each package's `build` in dependency order (daemon, relay, pwa; the protocol package is consumed from source and bundled, so it has no build). tsdown config lives in `apps/daemon/tsdown.config.ts` and `apps/relay/tsdown.config.ts`; `@flux/protocol` is bundled into both so neither built app depends on the workspace, node built-ins stay external. `deploy/` holds the systemd units, a Caddyfile and `.env.example` (every `FLUX_*` variable); `README.md` is the quickstart.
+
+- Box: `apps/daemon/dist/index.mjs` (`bin: flux`) and `dist/flux-mcp.mjs` (`bin: flux-mcp`, the MCP server the daemon points agents at; resolved as a sibling of `index.mjs`, or of `index.ts` when run from source). No runtime dependencies. `deploy/flux-daemon.service` runs it as the `flux` user with `Restart=always` and the hardening a box that runs agents can bear (no privilege escalation, no kernel or `/usr` writes; the home stays writable because agents work there, and there is no system-call filter because Claude Code's sandbox needs mount and user namespaces). The daemon prints the pairing QR at start only on a terminal; under systemd the operator runs `flux pair`. Requires `git`, `claude` (and later `pi`) on PATH.
+- Relay: `apps/relay/dist/index.mjs`, a single Node process bound to `127.0.0.1:8787` behind Caddy (`deploy/Caddyfile`, automatic TLS, HSTS, WebSocket passthrough) with `FLUX_TRUST_PROXY=1`. `hono`, `@hono/node-server` and `ws` are external, so the checkout keeps its `node_modules`. `deploy/flux-relay.service` runs it fully sandboxed (read-only system, no home, no devices). Serves PWA from `apps/pwa/dist`.
+- PWA: built once by Vite, served by the relay. No separate hosting.
+- `apps/daemon/test/built-daemon.test.ts` builds the daemon into a temp dir under the real config and runs both files, so `pnpm run check` fails if the production build breaks.
 
 ## Out of scope for this document
 

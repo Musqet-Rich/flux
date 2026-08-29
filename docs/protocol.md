@@ -53,7 +53,7 @@ After that, all messages are binary and opaque to the relay:
 - Guest → relay: forwarded to host. If no host is present, the relay sends the guest `{ type: 'no_host' }` (plaintext JSON control frame) and drops the message.
 - Relay → all: `{ type: 'host_joined' }` / `{ type: 'host_left' }` plaintext control frames so guests can show connection state without waiting for a timeout.
 
-Limits (initial, hard-coded): frame ≤ 1 MiB, guests per room ≤ 8, connections per IP per minute ≤ 30.
+Limits (initial, hard-coded): frame ≤ 1 MiB, guests per room ≤ 8, connections per IP per minute ≤ 30. The IP is the socket's peer address, or the last hop of `X-Forwarded-For` when the relay runs with `FLUX_TRUST_PROXY=1` behind a reverse proxy (never inferred). Counters only; no address is logged.
 
 Room tokens: the relay cannot derive a token (it never sees `boxPub`), so the first host to claim a room registers its token and later claims must present the same one. Tokens are kept in memory for the relay's lifetime, so a squatter cannot take the host slot while the real box is reconnecting.
 

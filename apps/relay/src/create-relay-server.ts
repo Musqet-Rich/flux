@@ -8,6 +8,7 @@ import { createServer } from 'node:http';
 import type { RawData, WebSocket } from 'ws';
 import { WebSocketServer } from 'ws';
 
+import { clientKey } from './client-key.ts';
 import { createRateLimiter } from './create-rate-limiter.ts';
 import type { Peer, Rooms } from './create-rooms.ts';
 import { createRooms } from './create-rooms.ts';
@@ -21,6 +22,8 @@ export interface RelayServerOptions {
   maxGuests?: number;
   connectionsPerMinute?: number;
   joinTimeoutMs?: number;
+  // Key the per-IP limit on X-Forwarded-For (see client-key.ts). Only behind a reverse proxy.
+  trustProxy?: boolean;
 }
 
 export interface RelayServer {
@@ -129,6 +132,7 @@ export const createRelayServer = (options: RelayServerOptions): RelayServer => {
     windowMs: 60_000,
   });
   const joinTimeoutMs = options.joinTimeoutMs ?? 5000;
+  const trustProxy = options.trustProxy ?? false;
   const listener = getRequestListener(createApp(options.pwaDir).fetch);
   // The listener's promise is its own error boundary; node:http wants a void callback.
   const server: Server = createServer((req, res) => {
@@ -141,7 +145,7 @@ export const createRelayServer = (options: RelayServerOptions): RelayServer => {
 
   server.on('upgrade', (request, socket, head) => {
     const roomId = roomPath.exec(request.url ?? '')?.[1];
-    if (roomId === undefined || !limiter.allow(request.socket.remoteAddress ?? '')) {
+    if (roomId === undefined || !limiter.allow(clientKey(request, trustProxy))) {
       socket.destroy();
       return;
     }

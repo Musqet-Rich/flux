@@ -50,25 +50,50 @@ const tools = [
   },
 ];
 
-// One connection per call: the socket is local and calls are rare.
+// One connection per call: the socket is local and calls are rare. One line back, accumulated
+// by hand: readline would re-emit the socket's errors on an Interface nobody listens to, and
+// would say nothing if the daemon closed without replying.
 const control = (request: Record<string, unknown>): Promise<unknown> =>
   new Promise((resolve, reject) => {
     const client = connect(socketPath);
-    client.on('error', reject);
-    createInterface({ input: client }).once('line', (line) => {
+    let buffer = '';
+    let settled = false;
+    const settle = (outcome: () => void): void => {
+      if (settled) return;
+      settled = true;
       client.end();
-      const reply: unknown = JSON.parse(line);
-      if (isRecord(reply) && reply['ok'] === true) resolve(reply['result']);
-      else
-        reject(
-          new DaemonError(
-            'internal',
-            isRecord(reply) && isString(reply['error']) ? reply['error'] : 'bad reply',
-          ),
-        );
+      outcome();
+    };
+    const fail = (message: string): void => {
+      settle(() => {
+        reject(new DaemonError('internal', message));
+      });
+    };
+    client.on('error', (error) => {
+      fail(`flux daemon unreachable: ${error.message}`);
     });
     client.on('connect', () => {
       client.write(`${JSON.stringify(request)}\n`);
+    });
+    client.on('data', (chunk: Buffer) => {
+      buffer += chunk.toString();
+      const end = buffer.indexOf('\n');
+      if (end === -1) return;
+      let reply: unknown;
+      try {
+        reply = JSON.parse(buffer.slice(0, end));
+      } catch {
+        fail('flux daemon sent an unreadable reply');
+        return;
+      }
+      if (isRecord(reply) && reply['ok'] === true) {
+        settle(() => {
+          resolve(reply['result']);
+        });
+      } else fail(isRecord(reply) && isString(reply['error']) ? reply['error'] : 'bad reply');
+    });
+    client.on('close', () => {
+      fail('flux daemon closed without replying');
     });
   });
 

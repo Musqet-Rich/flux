@@ -2,8 +2,13 @@
   "name": "@flux/daemon",
   "version": "0.0.0",
   "private": true,
+  "bin": {
+    "flux": "./dist/index.mjs",
+    "flux-mcp": "./dist/flux-mcp.mjs"
+  },
   "type": "module",
   "scripts": {
+    "build": "tsdown",
     "test": "vitest run"
   },
   "dependencies": {
