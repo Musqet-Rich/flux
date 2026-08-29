@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { rmSync } from 'node:fs';
 import { access, mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,11 +12,14 @@ import { startProcess } from './start-process.ts';
 // The deployed shape on one machine, ephemeral ports, throwaway state: the built relay serving
 // the built PWA, the built daemon in a temp data dir with one repository to pick from, and the
 // fixture-driven fake `claude` behind it (fake-claude.sh). Pairing goes through the URL that
-// `flux pair` prints, as an operator's does.
+// `flux pair` prints, as an operator's does. Whatever ends this process (a finished run, an
+// error, Ctrl-C) takes the relay, the daemon and the temp dir with it.
 
 export interface Stack {
   pwaUrl: string;
   pairingUrl: string;
+  // A fresh single-use pairing URL, for a second device or a wiped one.
+  pair: () => Promise<string>;
   // Every line the daemon wrote to the agent's stdin, appended by fake-claude.sh.
   agentStdin: string;
   // The daemon's SQLite file, the event log the timeline is checked against.
@@ -43,9 +47,14 @@ const run = (
     });
   });
 
-// GIT_* from a hook would point every git call at the flux checkout instead of the temp repo.
-const baseEnv = (): NodeJS.ProcessEnv =>
-  Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
+// The operator's own git and shell configuration stay out of it: GIT_* from a hook would point
+// every git call at the flux checkout, and a global gitconfig (signing, hooks, aliases) would
+// shape the temp repository. HOME is the temp dir for every child.
+const isolatedEnv = (home: string): NodeJS.ProcessEnv => ({
+  ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_'))),
+  HOME: home,
+  GIT_CONFIG_NOSYSTEM: '1',
+});
 
 const requireBuilt = async (): Promise<void> => {
   const files = [relayBin, daemonBin, join(pwaDist, 'index.html')];
@@ -86,7 +95,7 @@ const startRelay = (env: NodeJS.ProcessEnv): Promise<StartedProcess> =>
     ready: /listening on 127\.0\.0\.1:(\d+)$/u,
   });
 
-// Not a terminal, so the daemon prints no QR and mints no secret; `flux pair` does that below.
+// Not a terminal, so the daemon prints no QR and mints no secret; `flux pair` does that.
 const startDaemon = (env: NodeJS.ProcessEnv): Promise<StartedProcess> =>
   startProcess({
     name: 'daemon',
@@ -103,19 +112,43 @@ const pair = async (env: NodeJS.ProcessEnv): Promise<string> => {
   return url;
 };
 
+// Whatever this process dies of, the children and the temp dir go too: `exit` covers a normal
+// end and an uncaught error; Ctrl-C reaches the worker as SIGINT, which would otherwise leave
+// the daemon and relay running and the dir behind.
+const attachCleanup = (children: StartedProcess[], dir: string): (() => void) => {
+  const cleanup = (): void => {
+    for (const child of children) child.killNow();
+    rmSync(dir, { recursive: true, force: true });
+  };
+  const onSignal = (): void => {
+    cleanup();
+    process.exit(130);
+  };
+  process.once('exit', cleanup);
+  process.once('SIGINT', onSignal);
+  process.once('SIGTERM', onSignal);
+  return () => {
+    process.off('exit', cleanup);
+    process.off('SIGINT', onSignal);
+    process.off('SIGTERM', onSignal);
+  };
+};
+
 export const startStack = async (label: string): Promise<Stack> => {
   await requireBuilt();
   const dir = await mkdtemp(join(tmpdir(), `flux-e2e-${label}-`));
   const reposDir = join(dir, 'repos');
   const dataDir = join(dir, 'data');
-  const env = baseEnv();
+  const env = isolatedEnv(dir);
   await createRepo(reposDir, env);
+  const children: StartedProcess[] = [];
+  const detach = attachCleanup(children, dir);
   const relay = await startRelay(env);
+  children.push(relay);
   const pwaUrl = `http://127.0.0.1:${relay.match[1] ?? ''}`;
   const agentStdin = join(dir, 'agent-stdin.jsonl');
   const daemonEnv = {
     ...env,
-    HOME: dir,
     FLUX_RELAY_URL: pwaUrl,
     FLUX_DATA_DIR: dataDir,
     FLUX_REPOS_DIR: reposDir,
@@ -126,15 +159,17 @@ export const startStack = async (label: string): Promise<Stack> => {
     FLUX_E2E_NODE: process.execPath,
   };
   const daemon = await startDaemon(daemonEnv);
-  const pairingUrl = await pair(daemonEnv);
+  children.push(daemon);
   return {
     pwaUrl,
-    pairingUrl,
+    pairingUrl: await pair(daemonEnv),
+    pair: () => pair(daemonEnv),
     agentStdin,
     database: join(dataDir, 'flux.sqlite'),
     stop: async () => {
       await daemon.stop();
       await relay.stop();
+      detach();
       await rm(dir, { recursive: true, force: true });
     },
   };

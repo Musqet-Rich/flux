@@ -23,11 +23,11 @@ name: ci
 #                 only for pull requests from forks, which get no push run here.
 #                 GitHub treats a skipped required check as satisfied, and the
 #                 push run reports against the same head SHA, so the rulesets in
-#                 .github/rulesets/main.json still require all five contexts.
+#                 .github/rulesets/main.json still require all six contexts.
 #   e2e           the one Playwright flow (docs/engineering.md § Testing) against
 #                 the built relay, daemon and PWA with the fixture-driven fake
 #                 agent; same trigger rule as check, so it reports on the same
-#                 head SHA. Not in the ruleset yet. The Chromium build is cached
+#                 head SHA and is required by the ruleset. The Chromium build is cached
 #                 by Playwright version; its system libraries are installed on
 #                 every run (apt, seconds).
 #
@@ -154,6 +154,8 @@ jobs:
     name: e2e (Playwright flow against the built relay, daemon and PWA)
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
+    # A hung browser or stack must not hold a runner for the default six hours.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Enable corepack

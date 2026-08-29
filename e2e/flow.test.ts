@@ -15,9 +15,10 @@ const firstPrompt = 'Read notes.txt and write greeting.txt';
 const secondPrompt = 'Change the greeting';
 const connected = /^Connected to flux@/u;
 
-// The lines the daemon wrote to the agent's stdin, one JSON message each.
+// The lines the daemon wrote to the agent's stdin, one JSON message each. The file exists
+// from the first prompt on, so a missing one is a failure, not something to wait out.
 const agentMessages = async (path: string): Promise<string[]> =>
-  (await readFile(path, 'utf8').catch(() => ''))
+  (await readFile(path, 'utf8'))
     .split('\n')
     .filter((line) => line !== '')
     .map((line) => (JSON.parse(line) as { message: { content: string } }).message.content);
@@ -100,13 +101,31 @@ const sendWithComment = async (page: Page, stack: Stack): Promise<void> => {
     .toEqual([firstPrompt, `${secondPrompt}\n\n\`\`\`greeting.txt:1-1\nhi there\n\`\`\``]);
 };
 
-const reload = async (page: Page, stack: Stack): Promise<void> => {
+// Every IndexedDB database the page has, deleted; the page's own connection closes on the
+// reload that follows, which is when a blocked deletion goes through. A string, not a
+// function: the harness is a Node program and has no DOM types to write this against.
+const wipeStorage = `indexedDB.databases().then((dbs) => Promise.all(dbs.map((db) =>
+  new Promise((done) => {
+    const req = indexedDB.deleteDatabase(db.name);
+    req.onsuccess = req.onerror = req.onblocked = () => done(null);
+  }))))`;
+
+// A wiped device: nothing cached, not even the pairing, so after the reload the timeline can
+// only come from events.sync, from seq 0, and must match what the log holds, once each.
+const reloadCold = async (page: Page, stack: Stack): Promise<void> => {
   const items = page.locator('.timeline .item');
   const session = new URL(page.url()).pathname.slice('/s/'.length);
   const before = await items.allInnerTexts();
+  await page.evaluate(wipeStorage);
   await page.reload();
-  await expect(items).toHaveText(before);
+  await page.getByLabel('Or paste the link').fill(await stack.pair());
+  await page.getByRole('button', { name: 'Pair', exact: true }).click();
   await expect(page.locator('.status')).toHaveText(connected);
+  await page
+    .getByRole('navigation', { name: 'Sessions' })
+    .getByRole('button', { name: 'e2e/greeting' })
+    .click();
+  await expect(items).toHaveText(before);
   expect(eventSeqs(stack.database, session)).toEqual(before.map((_, index) => index + 1));
 };
 
@@ -117,5 +136,6 @@ test('pair, run an agent, comment on its diff, send, reload', async ({ page, sta
   await test.step('comment on a line of the diff', () => commentOnDiff(page));
   await test.step('send it with a message; the agent gets the reference', () =>
     sendWithComment(page, stack));
-  await test.step('after a reload the timeline is the event log, whole', () => reload(page, stack));
+  await test.step('wiped and reloaded, the timeline is the event log, whole', () =>
+    reloadCold(page, stack));
 });
