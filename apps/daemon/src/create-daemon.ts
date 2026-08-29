@@ -3,9 +3,9 @@ import type { FluxEvent } from '@flux/protocol';
 import type { AttachedControl } from './attach-control.ts';
 import { attachControl } from './attach-control.ts';
 import { connectRelay } from './connect-relay.ts';
-import type { Device } from './create-device-store.ts';
 import type { HostTransport, TransportStatus } from './create-host-transport.ts';
 import { createMcpConfig } from './create-mcp-config.ts';
+import { createNotifier } from './create-notifier.ts';
 import type { PairingGate } from './create-pairing-gate.ts';
 import { createPairingGate } from './create-pairing-gate.ts';
 import { createRpcHandlers } from './create-rpc-handlers.ts';
@@ -22,6 +22,8 @@ export interface DaemonConfig {
   relayUrl: string;
   reposDir: string;
   daemonName: string;
+  // VAPID subject (RFC 8292), a mailto: or https: URL the push services may contact.
+  pushSubject: string;
   claudeCommand?: string;
 }
 
@@ -29,7 +31,7 @@ export interface Daemon {
   start: () => Promise<void>;
   stop: () => Promise<void>;
   pairingUrl: () => string;
-  devices: () => Device[];
+  devices: Services['devices']['devices'];
   removeDevice: (deviceId: string) => void;
   status: () => TransportStatus;
   controlSocket: string;
@@ -66,8 +68,12 @@ export const createDaemon = async (config: DaemonConfig): Promise<Daemon> => {
     boxPub: identity.publicKey,
     ...services,
   });
+  const notifier = await createNotifier({ push: services.push, subject: config.pushSubject });
   // Transport and supervisors are created below; nothing calls these before start.
-  const emit = (event: FluxEvent): void => void transport.broadcast({ kind: 'event', event });
+  const emit = (event: FluxEvent): void => {
+    void transport.broadcast({ kind: 'event', event });
+    void notifier.notify(event);
+  };
   const control = attachControl({
     ...services,
     dataDir: config.dataDir,
@@ -89,6 +95,7 @@ export const createDaemon = async (config: DaemonConfig): Promise<Daemon> => {
   const handlers = createRpcHandlers({
     ...services,
     daemonName,
+    vapidPublicKey: notifier.vapidPublicKey,
     reposDir,
     supervisor,
     closeSupervisor,

@@ -1,8 +1,12 @@
+import type { Bytes } from '@flux/protocol';
 import { guards } from '@flux/protocol';
 import type { DatabaseSync } from 'node:sqlite';
 
-// Web Push subscriptions, one row per endpoint (architecture.md § Notifications). The box
-// holds them because it is the one that sends pushes (ADR 0013); the relay never sees them.
+import { DaemonError } from './daemon-error.ts';
+import type { VapidKeys } from './web-push/vapid-token.ts';
+
+// Web Push subscriptions, one row per endpoint, and the box's VAPID signing key (architecture.md
+// § Notifications). The box holds them because it is the one that sends pushes (ADR 0013).
 
 export interface PushSubscription {
   endpoint: string;
@@ -13,7 +17,37 @@ export interface PushStore {
   put: (deviceId: string, subscription: unknown) => PushSubscription;
   all: () => PushSubscription[];
   remove: (endpoint: string) => void;
+  // The VAPID P-256 key, generated on first use and kept in box_keys next to the identity.
+  vapid: () => Promise<VapidKeys>;
 }
+
+const ecdsa = { name: 'ECDSA', namedCurve: 'P-256' };
+
+const toBytes = (value: unknown): Bytes =>
+  value instanceof Uint8Array ? new Uint8Array(value) : new Uint8Array(0);
+
+const loadOrCreateVapid = async (db: DatabaseSync): Promise<VapidKeys> => {
+  const row = db.prepare('SELECT vapid_public, vapid_private FROM box_keys WHERE id = 1').get();
+  if (row === undefined) throw new DaemonError('internal', 'box identity missing');
+  if (row['vapid_public'] !== null) {
+    const privateKey = await crypto.subtle.importKey(
+      'pkcs8',
+      toBytes(row['vapid_private']),
+      ecdsa,
+      false,
+      ['sign'],
+    );
+    return { publicKey: toBytes(row['vapid_public']), privateKey };
+  }
+  const pair = await crypto.subtle.generateKey(ecdsa, true, ['sign', 'verify']);
+  const publicKey = new Uint8Array(await crypto.subtle.exportKey('raw', pair.publicKey));
+  const pkcs8 = new Uint8Array(await crypto.subtle.exportKey('pkcs8', pair.privateKey));
+  db.prepare('UPDATE box_keys SET vapid_public = ?, vapid_private = ? WHERE id = 1').run(
+    publicKey,
+    pkcs8,
+  );
+  return { publicKey, privateKey: pair.privateKey };
+};
 
 const { isString, isRecord } = guards;
 
@@ -51,5 +85,6 @@ export const createPushStore = (db: DatabaseSync): PushStore => {
     remove: (endpoint) => {
       del.run(endpoint);
     },
+    vapid: () => loadOrCreateVapid(db),
   };
 };
