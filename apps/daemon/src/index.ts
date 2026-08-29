@@ -6,6 +6,8 @@ import { createInterface } from 'node:readline';
 
 import { createDaemon } from './create-daemon.ts';
 import { DaemonError } from './daemon-error.ts';
+import { qrMatrix } from './qr/qr-matrix.ts';
+import { renderQr } from './qr/render-qr.ts';
 
 // `flux daemon`: the box side of Flux (architecture.md § Daemon). Configuration is environment:
 //   FLUX_RELAY_URL   the relay origin, e.g. https://flux.example.com (required)
@@ -13,6 +15,7 @@ import { DaemonError } from './daemon-error.ts';
 //   FLUX_REPOS_DIR   directory whose subdirectories are the repositories, default ~/repos
 //   FLUX_CLAUDE      the claude binary, default `claude` on PATH
 //   FLUX_PUSH_SUBJECT VAPID contact (mailto: or https: URL) shown to push services
+//   FLUX_QR_INVERT   set to 1 on a light terminal; the pairing QR is drawn for a dark one
 // `flux pair` asks a running daemon for a fresh pairing URL over its control socket; devices
 // are managed with `flux devices ls|rm <id>` (which open the database directly, daemon stopped
 // or not).
@@ -49,8 +52,14 @@ const pairViaSocket = (): Promise<string> =>
     });
   });
 
+// The QR is for a person at a terminal; a pipe or journald gets the URL only.
+const printPairing = (url: string): void => {
+  if (process.stdout.isTTY) console.log(renderQr(qrMatrix(url), env['FLUX_QR_INVERT'] === '1'));
+  console.log(`pair a device within 10 minutes: ${url}`);
+};
+
 if (command === 'pair') {
-  console.log(await pairViaSocket());
+  printPairing(await pairViaSocket());
   process.exit(0);
 }
 
@@ -66,8 +75,7 @@ const daemon = await createDaemon({
 if (command === 'daemon') {
   await daemon.start();
   console.log(`flux daemon: relay ${relayUrl}`);
-  const url = daemon.pairingUrl();
-  console.log(`pair a device within 10 minutes: ${url}`);
+  printPairing(daemon.pairingUrl());
   const shutdown = (): void => {
     daemon
       .stop()

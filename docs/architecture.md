@@ -47,7 +47,7 @@ Single Node 24 process. Responsibilities, in order of importance:
 4. **Flux tools.** A stdio MCP server, spawned by the agent, that calls back into the daemon over a local Unix socket. Provides `flux_ask` and `flux_notify`. This is how "the agent needs you" happens; the agent's own interactive tools are absent in headless mode.
 5. **Git and fs service.** Worktree create/list/remove, status, diff (against branch base and against HEAD), show, log, file read, file write (P2). Executed by spawning `git`; no git library.
 6. **Transport.** One outbound WebSocket to the relay, reconnecting with backoff. Handshake and encryption per `protocol.md`. Multiplexes: event stream (replayable), ephemeral stream (deltas, presence), RPC (request/response).
-7. **Pairing.** `flux daemon` on first run generates the box keypair. `flux pair` prints a QR containing `https://<relay>/#<boxPub>.<secret>`. Paired device public keys live in the daemon's SQLite.
+7. **Pairing.** `flux daemon` on first run generates the box keypair. `flux daemon` and `flux pair` print a QR containing `https://<relay>/#<boxPub>.<secret>` above the URL. The encoder is in-house (`src/qr/`, no dependency per ADR 0010): byte mode, error correction level M, versions 1 to 15, rendered with Unicode half blocks so it fits a terminal. Paired device public keys live in the daemon's SQLite.
 
 ### Adapter: read side and write side
 

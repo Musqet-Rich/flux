@@ -44,7 +44,10 @@ Same columns, lighter bar (tooling churn is expected).
 
 Listed in `engineering.md` § Dependencies with reasons, so they are not re-proposed.
 
+## Resolved
+
+- QR rendering in the daemon's terminal output: written in-house (`apps/daemon/src/qr/`: byte mode, level M, versions 1 to 15; ~650 lines of source, ~1000 with the known-answer tests against the published tables and matrices captured from python-qrcode). No dependency, dev or runtime.
+
 ## Pending decisions
 
-- QR rendering in the daemon's terminal output: write a minimal QR encoder (~300 lines, well-specified) or take a dev-only dependency that pre-generates. Decide when built.
 - Web Push in the relay: VAPID signing is JWT + ECDSA P-256, all WebCrypto. Write it (~100 lines) rather than take `web-push` (which pulls in several deps). Confirm when built.
