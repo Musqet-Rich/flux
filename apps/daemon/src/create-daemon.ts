@@ -1,10 +1,17 @@
-import { pairing } from '@flux/protocol';
+import type { FluxEvent } from '@flux/protocol';
 
+import type { AttachedControl } from './attach-control.ts';
+import { attachControl } from './attach-control.ts';
 import { connectRelay } from './connect-relay.ts';
 import type { Device } from './create-device-store.ts';
-import type { TransportStatus } from './create-host-transport.ts';
+import type { HostTransport, TransportStatus } from './create-host-transport.ts';
+import { createMcpConfig } from './create-mcp-config.ts';
+import type { PairingGate } from './create-pairing-gate.ts';
+import { createPairingGate } from './create-pairing-gate.ts';
 import { createRpcHandlers } from './create-rpc-handlers.ts';
+import type { SupervisorPool } from './create-supervisor-pool.ts';
 import { createSupervisorPool } from './create-supervisor-pool.ts';
+import type { Services } from './open-services.ts';
 import { openServices } from './open-services.ts';
 
 // Composition root: wires the stores, the git service, the session supervisors, the device
@@ -19,57 +26,79 @@ export interface DaemonConfig {
 }
 
 export interface Daemon {
-  start: () => void;
+  start: () => Promise<void>;
   stop: () => Promise<void>;
   pairingUrl: () => string;
   devices: () => Device[];
   removeDevice: (deviceId: string) => void;
   status: () => TransportStatus;
+  controlSocket: string;
 }
 
-const pairingWindowMs = 10 * 60 * 1000;
+interface Parts {
+  services: Services;
+  supervisors: SupervisorPool;
+  transport: HostTransport;
+  control: AttachedControl;
+  gate: PairingGate;
+}
+
+const assemble = ({ services, supervisors, transport, control, gate }: Parts): Daemon => ({
+  start: () => control.listen().then(transport.start),
+  stop: async () => {
+    transport.stop();
+    await control.close();
+    await supervisors.closeAll();
+    services.close();
+  },
+  pairingUrl: gate.url,
+  devices: services.devices.devices,
+  removeDevice: services.devices.remove,
+  status: transport.status,
+  controlSocket: control.path,
+});
 
 export const createDaemon = async (config: DaemonConfig): Promise<Daemon> => {
   const services = openServices(config.dataDir);
   const identity = await services.devices.identity();
-  let pairingUntil = 0;
+  const gate = createPairingGate({
+    relayUrl: config.relayUrl,
+    boxPub: identity.publicKey,
+    ...services,
+  });
+  // Transport and supervisors are created below; nothing calls these before start.
+  const emit = (event: FluxEvent): void => void transport.broadcast({ kind: 'event', event });
+  const control = attachControl({
+    ...services,
+    dataDir: config.dataDir,
+    supervisor: (record) => supervisors.get(record),
+    emit,
+    pairingUrl: gate.url,
+  });
   const supervisors = createSupervisorPool({
     log: services.log,
     sessions: services.sessions,
     git: services.git,
+    mcpConfig: createMcpConfig({ dataDir: config.dataDir, controlSocket: control.path }),
     ...(config.claudeCommand === undefined ? {} : { claudeCommand: config.claudeCommand }),
-    // The transport is created below; supervisors only emit after start, by which time it exists.
-    emit: (event) => void transport.broadcast({ kind: 'event', event }),
+    emit,
     emitEphemeral: (data) => void transport.broadcast({ kind: 'ephemeral', data }),
   });
+  const { daemonName, reposDir } = config;
+  const { get: supervisor, close: closeSupervisor } = supervisors;
   const handlers = createRpcHandlers({
     ...services,
-    daemonName: config.daemonName,
-    reposDir: config.reposDir,
-    supervisor: supervisors.get,
-    closeSupervisor: supervisors.close,
+    daemonName,
+    reposDir,
+    supervisor,
+    closeSupervisor,
   });
   const transport = await connectRelay({
     relayUrl: config.relayUrl,
     identity,
     deviceByKey: services.devices.deviceByKey,
-    pairingOpen: () => Date.now() < pairingUntil,
+    pairingOpen: gate.open,
     handlers,
   });
-  return {
-    start: transport.start,
-    stop: async () => {
-      transport.stop();
-      await supervisors.closeAll();
-      services.close();
-    },
-    pairingUrl: () => {
-      pairingUntil = Date.now() + pairingWindowMs;
-      const secret = services.devices.newSecret();
-      return pairing.url(config.relayUrl, { boxPub: identity.publicKey, secret });
-    },
-    devices: services.devices.devices,
-    removeDevice: services.devices.remove,
-    status: transport.status,
-  };
+  return assemble({ services, supervisors, transport, control, gate });
 };

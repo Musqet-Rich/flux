@@ -15,6 +15,7 @@ const flip = (data: Bytes, index: number): Bytes => {
   view.setUint8(index, view.getUint8(index) ^ 0xff);
   return out;
 };
+const lengthOf = (opened: Bytes | null): number => (opened === null ? -1 : opened.length);
 const nonceAt = (sealed: Bytes): number => frame.counterOf(sealed.subarray(9, 21));
 
 // Two channels sharing one key agreement, as the box and a device would after the handshake.
@@ -111,4 +112,12 @@ test('a handshake frame on an open channel is a protocol error', async () => {
   const { box } = await pair();
   const hs = frame.encode({ kind: frame.kind.handshake, payload: new Uint8Array([1]) });
   await expect(box.open(hs)).rejects.toMatchObject({ code: 'bad_frame' });
+});
+
+test('concurrent seals leave in counter order and concurrent opens accept them', async () => {
+  const { box, device } = await pair();
+  const sealed = await Promise.all([1, 2, 3, 4].map((n) => box.seal(new Uint8Array(n * 300))));
+  expect(sealed.map((s) => nonceAt(s))).toEqual([0, 1, 2, 3]);
+  const opened = await Promise.all(sealed.map((s) => device.open(s)));
+  expect(opened.map((o) => lengthOf(o))).toEqual([300, 600, 900, 1200]);
 });

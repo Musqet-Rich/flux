@@ -32,11 +32,20 @@ const baseArgs = [
   '--dangerously-skip-permissions',
 ];
 
+// Goes with the Flux tools (ADR 0008): the agent has no interactive prompt in headless mode, so
+// it is told how to reach the operator instead of guessing or stalling.
+const fluxPrompt =
+  'You are running unattended under Flux. The operator is on a phone. For any material decision ' +
+  '(design choices, destructive actions, ambiguous requirements) call flux_ask instead of guessing; ' +
+  'call flux_notify with level "done" when the task is complete and "blocked" when you cannot proceed.';
+
 export const spawnClaude = (options: SpawnClaudeOptions): AgentProcess => {
   const args = [
     ...baseArgs,
     ...(options.resume === undefined ? [] : ['--resume', options.resume]),
-    ...(options.mcpConfig === undefined ? [] : ['--mcp-config', options.mcpConfig]),
+    ...(options.mcpConfig === undefined
+      ? []
+      : ['--mcp-config', options.mcpConfig, '--append-system-prompt', fluxPrompt]),
   ];
   const child = spawn(options.command ?? 'claude', args, {
     cwd: options.cwd,

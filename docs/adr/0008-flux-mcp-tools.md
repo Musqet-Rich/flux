@@ -8,7 +8,7 @@ Verified on Claude Code 2.1.251: in `-p` mode the tool list contains no `AskUser
 
 ## Decision
 
-The daemon ships a stdio MCP server exposing `flux_ask(question, options?)` and `flux_notify(summary, level)`. It is injected into every session via a per-session `.mcp.json` and `--mcp-config`. The MCP process talks to the daemon over a local Unix socket. `flux_ask` blocks the agent until the operator answers or a timeout fires. Box-side `CLAUDE.md` tells the agent to use `flux_ask` for material decisions.
+The daemon ships a stdio MCP server exposing `flux_ask(question, options?)` and `flux_notify(summary, level)`. It is injected into every session via a per-session `.mcp.json` and `--mcp-config`. The MCP process talks to the daemon over a local Unix socket. `flux_ask` blocks the agent until the operator answers or a timeout fires. The daemon passes `--append-system-prompt` alongside `--mcp-config`, telling the agent to use `flux_ask` for material decisions and `flux_notify` when done or blocked, so no per-repo `CLAUDE.md` edit is needed.
 
 ## Consequences
 

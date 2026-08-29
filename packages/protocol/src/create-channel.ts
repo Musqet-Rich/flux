@@ -8,7 +8,8 @@ import { ProtocolError } from './protocol-error.ts';
 
 // One encrypted channel between the box and one device (protocol.md § 3). Nonces are per-direction
 // counters; a receiver refuses anything at or below the last counter it accepted, so replays and
-// reordering within a connection are rejected outright.
+// reordering within a connection are rejected outright. Because encryption is asynchronous, seals
+// (and opens) are queued per channel so that frames leave, and are checked, in counter order.
 
 export interface Channel {
   seal: (plaintext: Bytes) => Promise<Bytes>;
@@ -26,6 +27,30 @@ export interface ChannelOptions {
 
 const defaultCompressAbove = 1024;
 
+const decryptOrThrow = async (
+  key: CryptoKey,
+  params: { iv: Bytes; additionalData: Bytes },
+  ciphertext: Bytes,
+): Promise<Bytes> => {
+  try {
+    return new Uint8Array(
+      await crypto.subtle.decrypt({ name: 'AES-GCM', ...params }, key, ciphertext),
+    );
+  } catch {
+    throw new ProtocolError('decrypt_failed', 'authentication failed');
+  }
+};
+
+// Runs async tasks one at a time in call order; a failed task does not block the next.
+const serial = (): (<T>(task: () => Promise<T>) => Promise<T>) => {
+  let tail: Promise<unknown> = Promise.resolve();
+  return (task) => {
+    const next = tail.then(task);
+    tail = next.catch(() => null);
+    return next;
+  };
+};
+
 const aad = (kind: DataFrameKind, fingerprint: Bytes): Bytes =>
   bytes.concat(new Uint8Array([kind]), fingerprint);
 
@@ -34,8 +59,10 @@ export const createChannel = (options: ChannelOptions): Channel => {
   const compressAbove = options.compressAbove ?? defaultCompressAbove;
   let sendCounter = 0;
   let lastReceived = -1;
+  const sending = serial();
+  const receiving = serial();
 
-  const seal = async (plaintext: Bytes): Promise<Bytes> => {
+  const sealNow = async (plaintext: Bytes): Promise<Bytes> => {
     const compressed = plaintext.length > compressAbove;
     const kind = compressed ? frame.kind.compressed : frame.kind.data;
     const body = compressed ? await compress.deflate(plaintext) : plaintext;
@@ -50,7 +77,7 @@ export const createChannel = (options: ChannelOptions): Channel => {
     return frame.encode({ kind, fingerprint, nonce, ciphertext });
   };
 
-  const open = async (data: Bytes): Promise<Bytes | null> => {
+  const openNow = async (data: Bytes): Promise<Bytes | null> => {
     const decoded = frame.decode(data);
     if (decoded.kind === frame.kind.handshake) {
       throw new ProtocolError('bad_frame', 'handshake frame on an open channel');
@@ -60,21 +87,17 @@ export const createChannel = (options: ChannelOptions): Channel => {
     if (counter <= lastReceived) {
       throw new ProtocolError('bad_nonce', `nonce ${counter} already seen`);
     }
-    let body: Bytes;
-    try {
-      body = new Uint8Array(
-        await crypto.subtle.decrypt(
-          { name: 'AES-GCM', iv: decoded.nonce, additionalData: aad(decoded.kind, fingerprint) },
-          keys.recv,
-          decoded.ciphertext,
-        ),
-      );
-    } catch {
-      throw new ProtocolError('decrypt_failed', 'authentication failed');
-    }
+    const body = await decryptOrThrow(
+      keys.recv,
+      { iv: decoded.nonce, additionalData: aad(decoded.kind, fingerprint) },
+      decoded.ciphertext,
+    );
     lastReceived = counter;
     return decoded.kind === frame.kind.compressed ? compress.inflate(body) : body;
   };
 
-  return { seal, open };
+  return {
+    seal: (plaintext) => sending(() => sealNow(plaintext)),
+    open: (data) => receiving(() => openNow(data)),
+  };
 };

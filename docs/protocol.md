@@ -91,7 +91,7 @@ Device initiates. Each side has a static keypair and generates an ephemeral X255
    ```
 4. The device sends the first data frame: the `hello` RPC (§ 7). If `devPub` is not trusted and no pairing secret is live, the box does not answer the handshake at all. A device that can decrypt the `hello` result knows the box holds `boxPriv`; a box that receives a validly encrypted frame knows the device holds `devPriv`. An untrusted device may only call `pair.request` until it is paired (`not_paired` otherwise).
 
-Properties: mutual authentication via `ss`, forward secrecy via `es`. Replay across connections is impossible because `es` and `salt` are fresh. Nonces are counters per direction starting at 0; a receiver rejects any nonce ≤ the last seen.
+Properties: mutual authentication via `ss`, forward secrecy via `es`. Replay across connections is impossible because `es` and `salt` are fresh. Nonces are counters per direction starting at 0; a receiver rejects any nonce ≤ the last seen. Senders must therefore emit frames in counter order even though encryption is asynchronous (the reference implementation queues seals per channel).
 
 Because the box broadcasts to all guests via the relay, each data frame carries the device's `devPub` fingerprint (first 8 bytes of `sha256(devPub)`) in the plaintext associated data so a guest can discard frames not meant for it without attempting decryption. Concretely: AAD = `kind || fingerprint`, and the fingerprint is prepended to the frame on the wire between `kind` and `nonce`. Final layout:
 

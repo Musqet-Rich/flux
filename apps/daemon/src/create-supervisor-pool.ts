@@ -20,6 +20,8 @@ export interface SupervisorPoolOptions {
   sessions: SessionStore;
   git: GitService;
   claudeCommand?: string;
+  // Path of the per-session MCP config injecting the Flux tools (ADR 0008).
+  mcpConfig?: (session: string) => string;
   emit: (event: FluxEvent) => void;
   emitEphemeral: (message: Ephemeral) => void;
 }
@@ -43,6 +45,9 @@ export const createSupervisorPool = (options: SupervisorPoolOptions): Supervisor
             cwd: request.cwd,
             ...(request.resume === undefined ? {} : { resume: request.resume }),
             ...(options.claudeCommand === undefined ? {} : { command: options.claudeCommand }),
+            ...(options.mcpConfig === undefined
+              ? {}
+              : { mcpConfig: options.mcpConfig(record.session) }),
           }),
       });
       pool.set(record.session, created);
