@@ -4,7 +4,7 @@ import { pendingComments } from './pending-comments.ts';
 import type { StoreInternals } from './store-state.ts';
 
 // Talking to a session, ending it and coming back (protocol.md § 7): send, clear the agent's
-// context, archive, reopen, delete. The lifecycle ones refresh the session list, since
+// context, archive, reopen, delete, rename. The lifecycle ones refresh the session list, since
 // `archived` and `worktreeExists` come from the box. Deleting resolves to an outcome because a
 // `dirty` refusal is the view's to handle (it asks whether to discard), not the status bar's.
 
@@ -22,6 +22,8 @@ export interface SessionActions {
   // Sends a message carrying every pending comment.
   send: (session: string, text: string) => Promise<boolean>;
   clearSession: (session: string) => Promise<boolean>;
+  // The new title reaches the tab through `session.renamed`, so no refresh is needed.
+  renameSession: (session: string, title: string) => Promise<boolean>;
   archiveSession: (session: string) => Promise<boolean>;
   unarchiveSession: (session: string) => Promise<boolean>;
   deleteSession: (session: string, options: DeleteOptions) => Promise<DeleteOutcome>;
@@ -67,6 +69,8 @@ export const sessionActions = (i: StoreInternals): SessionActions => ({
   send: (session, text) => send(i, session, text),
   clearSession: (session) =>
     boxLink.attempt(i, () => boxLink.call(i, 'sessions.clear', { session })),
+  renameSession: (session, title) =>
+    boxLink.attempt(i, () => boxLink.call(i, 'sessions.rename', { session, title })),
   archiveSession: (session) => boxLink.attempt(i, () => archive(i, session)),
   unarchiveSession: (session) => boxLink.attempt(i, () => unarchive(i, session)),
   deleteSession: (session, options) => remove(i, session, options),

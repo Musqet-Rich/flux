@@ -11,7 +11,8 @@ import { openDatabase } from './open-database.ts';
 import { sessionLifecycle } from './session-lifecycle.ts';
 
 // The lifecycle against a real repository and a stand-in for the supervisor pool: what
-// archiving refuses, what it tells git, and how clearing orders the asks and the marker.
+// archiving refuses, what it tells git, how clearing orders the asks and the marker, and what
+// renaming accepts.
 
 const setup = async () => {
   const { root, repo } = await tempRepo();
@@ -112,4 +113,22 @@ test('clear settles a pending ask through the registry, an orphan in the log, th
     ['ask.answered', { askId: 'live', answer: '', by: 'aborted' }],
     ['session.cleared', {}],
   ]);
+});
+
+test('rename trims the title, stores it and logs it; a blank title is refused untouched', async () => {
+  const { worktreesDir, ctx, sessions, log, create } = await setup();
+  await create('s4', join(worktreesDir, 's4'));
+  sessionLifecycle.rename(ctx, 's4', '  Fix login  ');
+  expect(sessions.get('s4').title).toBe('Fix login');
+  expect(sessions.list().find((s) => s.session === 's4')?.title).toBe('Fix login');
+  const tail = log.read('s4', 0).events.at(-1);
+  expect([tail?.type, tail?.payload]).toEqual(['session.renamed', { title: 'Fix login' }]);
+  expect(() => sessionLifecycle.rename(ctx, 's4', '   ')).toThrow(
+    expect.objectContaining({ code: 'bad_params' }),
+  );
+  expect(sessions.get('s4').title).toBe('Fix login');
+  expect(log.read('s4', 0).events.at(-1)?.seq).toBe(tail?.seq);
+  expect(() => sessionLifecycle.rename(ctx, 'nope', 'x')).toThrow(
+    expect.objectContaining({ code: 'not_found' }),
+  );
 });

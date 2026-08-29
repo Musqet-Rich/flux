@@ -26,6 +26,7 @@ export type SessionHandlers = Pick<
   | 'sessions.unarchive'
   | 'sessions.clear'
   | 'sessions.restart'
+  | 'sessions.rename'
   | 'agent.send'
   | 'agent.answer'
   | 'agent.interrupt'
@@ -125,6 +126,7 @@ export const createSessionHandlers = (ctx: HandlerContext): SessionHandlers => (
     await ctx.closeSupervisor(p.session);
     return {};
   },
+  'sessions.rename': (p) => Promise.resolve(sessionLifecycle.rename(ctx, p.session, p.title)),
   'agent.send': (p) => sendMessage(ctx, p),
   'agent.answer': (p) => {
     if (!ctx.asks.answer(p.askId, p.answer)) throw new DaemonError('not_found', 'no such ask');

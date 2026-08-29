@@ -34,6 +34,9 @@ const cases: [RpcMethod, unknown, boolean][] = [
   ['sessions.clear', s, true],
   ['sessions.clear', { session: 1 }, false],
   ['sessions.restart', s, true],
+  ['sessions.rename', { ...s, title: 'T' }, true],
+  ['sessions.rename', s, false],
+  ['sessions.rename', { ...s, title: 1 }, false],
   ['agent.send', { ...s, text: 'go' }, true],
   ['agent.send', { ...s, text: 'go', commentIds: ['c'] }, true],
   ['agent.send', { ...s, text: 'go', commentIds: 'c' }, false],
@@ -107,5 +110,5 @@ test.each(cases)('%s params %j accepted=%s', (method, value, expected) => {
 });
 
 test('covers every method in protocol.md § 7', () => {
-  expect(Object.keys(rpcMethods)).toHaveLength(31);
+  expect(Object.keys(rpcMethods)).toHaveLength(32);
 });

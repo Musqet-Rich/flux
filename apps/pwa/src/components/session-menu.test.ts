@@ -18,6 +18,7 @@ const setup = async (refusals = 0) => {
   let refused = 0;
   const box = await pairedStore([], {
     'sessions.clear': () => ({}),
+    'sessions.rename': () => ({}),
     'sessions.archive': (p) => {
       if (p.discard !== true && refused < refusals) {
         refused += 1;
@@ -31,7 +32,7 @@ const setup = async (refusals = 0) => {
   return { ...box, wrapper };
 };
 
-test('the menu opens from a menu button and offers clear, archive and delete', async () => {
+test('the menu opens from a menu button and offers rename, clear, archive and delete', async () => {
   const { wrapper, calls, store } = await setup();
   const trigger = wrapper.find('button[aria-haspopup="menu"]');
   expect(trigger.attributes('aria-expanded')).toBe('false');
@@ -39,18 +40,19 @@ test('the menu opens from a menu button and offers clear, archive and delete', a
   await trigger.trigger('click');
   expect(trigger.attributes('aria-expanded')).toBe('true');
   expect(wrapper.findAll('[role="menuitem"]').map((b) => b.text())).toEqual([
+    'Rename…',
     'Clear context',
     'Archive',
     'Delete…',
   ]);
-  await wrapper.findAll('[role="menuitem"]')[0]?.trigger('click');
+  await wrapper.findAll('[role="menuitem"]')[1]?.trigger('click');
   await until(() => calls('sessions.clear').length === 1);
   expect(calls('sessions.clear')).toEqual([{ session: 's1' }]);
   expect(wrapper.find('[role="menu"]').exists()).toBe(false);
   await settled(wrapper);
   expect(wrapper.emitted('closed')).toBeUndefined();
   await trigger.trigger('click');
-  await wrapper.findAll('[role="menuitem"]')[1]?.trigger('click');
+  await wrapper.findAll('[role="menuitem"]')[2]?.trigger('click');
   await until(() => calls('sessions.archive').length === 1);
   expect(calls('sessions.archive')).toEqual([{ session: 's1' }]);
   await settled(wrapper);
@@ -61,7 +63,7 @@ test('the menu opens from a menu button and offers clear, archive and delete', a
 test('delete confirms what to remove; a dirty refusal asks again before discarding', async () => {
   const { wrapper, calls, store } = await setup(1);
   await wrapper.find('button[aria-haspopup="menu"]').trigger('click');
-  await wrapper.findAll('[role="menuitem"]')[2]?.trigger('click');
+  await wrapper.findAll('[role="menuitem"]')[3]?.trigger('click');
   const boxes = wrapper.findAll<HTMLInputElement>('input[type="checkbox"]');
   expect(boxes.map((b) => b.element.checked)).toEqual([true, false]);
   await boxes[1]?.setValue(true);
@@ -91,10 +93,41 @@ test('delete confirms what to remove; a dirty refusal asks again before discardi
 test('cancel closes the confirm without a call', async () => {
   const { wrapper, calls, store } = await setup();
   await wrapper.find('button[aria-haspopup="menu"]').trigger('click');
-  await wrapper.findAll('[role="menuitem"]')[2]?.trigger('click');
+  await wrapper.findAll('[role="menuitem"]')[3]?.trigger('click');
   expect(wrapper.find('form.confirm').exists()).toBe(true);
   await wrapper.find('form.confirm button.secondary').trigger('click');
   expect(wrapper.find('form.confirm').exists()).toBe(false);
   expect(calls('sessions.archive')).toEqual([]);
+  store.stop();
+});
+
+test('rename shows the current title, refuses a blank one, and sends the trimmed one', async () => {
+  const { wrapper, calls, store } = await setup();
+  await wrapper.find('button[aria-haspopup="menu"]').trigger('click');
+  await wrapper.findAll('[role="menuitem"]')[0]?.trigger('click');
+  expect(wrapper.find('[role="menu"]').exists()).toBe(false);
+  const input = wrapper.find<HTMLInputElement>('form.rename input');
+  expect(input.element.value).toBe('First');
+  await input.setValue('   ');
+  expect(wrapper.find('form.rename button[type="submit"]').attributes('disabled')).toBeDefined();
+  await wrapper.find('form.rename').trigger('submit');
+  expect(calls('sessions.rename')).toEqual([]);
+  await input.setValue('  Second  ');
+  await wrapper.find('form.rename').trigger('submit');
+  await until(() => calls('sessions.rename').length === 1);
+  expect(calls('sessions.rename')).toEqual([{ session: 's1', title: 'Second' }]);
+  await settled(wrapper);
+  expect(wrapper.find('form.rename').exists()).toBe(false);
+  expect(wrapper.emitted('closed')).toBeUndefined();
+  store.stop();
+});
+
+test('cancel closes the rename form without a call', async () => {
+  const { wrapper, calls, store } = await setup();
+  await wrapper.find('button[aria-haspopup="menu"]').trigger('click');
+  await wrapper.findAll('[role="menuitem"]')[0]?.trigger('click');
+  await wrapper.find('form.rename button.secondary').trigger('click');
+  expect(wrapper.find('form.rename').exists()).toBe(false);
+  expect(calls('sessions.rename')).toEqual([]);
   store.stop();
 });

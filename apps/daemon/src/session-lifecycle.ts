@@ -7,8 +7,9 @@ import { inside } from './inside.ts';
 import { settleAsks } from './settle-asks.ts';
 
 // Ending a session and coming back (protocol.md § 7: `sessions.archive`, `sessions.unarchive`,
-// `sessions.clear`). Archiving always closes the agent; removing the worktree is the operator's
-// call, refused while it holds work that exists nowhere else unless they say to discard it.
+// `sessions.clear`), and renaming it. Archiving always closes the agent; removing the worktree
+// is the operator's call, refused while it holds work that exists nowhere else unless they say
+// to discard it.
 
 export interface ArchiveParams {
   session: string;
@@ -103,8 +104,20 @@ const clear = async (ctx: Ctx, session: string): Promise<Record<string, never>> 
   return {};
 };
 
+// The title is the tab's label and nothing else, so a rename touches only the row and the log.
+// Whitespace is trimmed; a title that is nothing but whitespace would leave a blank tab.
+const rename = (ctx: Ctx, session: string, title: string): Record<string, never> => {
+  ctx.sessions.get(session);
+  const trimmed = title.trim();
+  if (trimmed === '') throw new DaemonError('bad_params', 'title is empty');
+  ctx.sessions.setTitle(session, trimmed);
+  ctx.log.append(session, { type: 'session.renamed', payload: { title: trimmed } });
+  return {};
+};
+
 export const sessionLifecycle: {
   archive: typeof archive;
   unarchive: typeof unarchive;
   clear: typeof clear;
-} = { archive, unarchive, clear };
+  rename: typeof rename;
+} = { archive, unarchive, clear, rename };

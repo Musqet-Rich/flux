@@ -102,6 +102,7 @@ export const rpcResults: ResultGuards = {
   'sessions.unarchive': isEmpty,
   'sessions.clear': isEmpty,
   'sessions.restart': isEmpty,
+  'sessions.rename': isEmpty,
   'agent.send': (v): v is { seq: number } => isRecord(v) && isInteger(v['seq'], 1),
   'agent.answer': isEmpty,
   'agent.interrupt': isEmpty,
