@@ -9,12 +9,13 @@ import type { ClaudeLine } from './parse-stream-line.ts';
 import { parseStreamLine } from './parse-stream-line.ts';
 
 const fixture = new URL('../../test/fixtures/claude/session-two-turns.jsonl', import.meta.url);
+const noise = new URL('../../test/fixtures/claude/session-hooks-and-stream.jsonl', import.meta.url);
 const cwd =
   '/private/tmp/claude-501/-Users-richhenderson-code-flux/73ccd0c9-0938-49eb-9548-e002f2d31a8d/scratchpad/fixture-repo';
 
-const replay = (): { mapped: Mapped[]; events: EventInput[] } => {
+const replay = (source = fixture): { mapped: Mapped[]; events: EventInput[] } => {
   const pending: Pending = { tools: new Map() };
-  const lines = readFileSync(fixture, 'utf8')
+  const lines = readFileSync(source, 'utf8')
     .split('\n')
     .filter((l) => l.trim() !== '');
   const mapped = lines.map((l) => {
@@ -52,6 +53,19 @@ test('unrecognised lines become raw events so nothing is lost', () => {
   const raw = events.filter((e) => e.type === 'raw');
   expect(raw.length).toBeGreaterThan(0);
   expect(raw[0]?.payload).toMatchObject({ agent: 'claude' });
+});
+
+// Operator hooks and the streaming envelopes around a reply (message_start, content_block_stop,
+// thinking deltas, ...) were first seen dogfooding against Claude Code 2.1.251; every one of them
+// must land as `raw`, and none may throw.
+test('hook and stream_event lines all map to raw without throwing', () => {
+  const { mapped, events } = replay(noise);
+  expect(mapped.length).toBeGreaterThan(0);
+  expect(events).toHaveLength(mapped.length);
+  expect(new Set(events.map((e) => e.type))).toEqual(new Set(['raw']));
+  const subtypes = events.map((e) => JSON.stringify(e.payload));
+  expect(subtypes.some((s) => s.includes('"hook_started"'))).toBe(true);
+  expect(subtypes.some((s) => s.includes('"message_start"'))).toBe(true);
 });
 
 test('deltas, session id, running and turn flags are surfaced', () => {
