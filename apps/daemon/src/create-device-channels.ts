@@ -43,13 +43,22 @@ export interface DeviceChannelsOptions {
   deviceByKey: (publicKey: Bytes) => Device | null;
   pairingOpen: () => boolean;
   onMessage: (peer: Peer, message: Wire) => Promise<Wire | null>;
+  now?: () => Date;
 }
 
 // The relay admits this many guests per room (protocol.md § 2), so a device cannot hold more
 // live connections than this. The relay tells the host nothing when a guest leaves, so a channel
-// whose tab is gone is only found out when the device handshakes past the cap: the channel
-// heard from least recently goes.
+// whose tab is gone is only found out when the device's channels pass the cap. Past it, the
+// channels still waiting for their first frame go first, oldest first: anyone in the room can
+// replay handshakes under a device's public key, and that must never cost the device a channel
+// that works. A confirmed channel only goes for a confirmed newcomer, when the device really
+// holds more working tabs than the relay lets in, and then the one heard from least recently.
 const maxChannelsPerDevice = 8;
+
+// A handshake whose first frame has not arrived within this long was never going to be
+// confirmed (the device's own `hello` times out well before it), so it is dropped the next time
+// the box admits or hears a frame for the device. No timer: the check is lazy.
+const confirmWithinMs = 30_000;
 
 interface Connected {
   peer: Peer;
@@ -63,6 +72,8 @@ interface Connected {
   revoked: string | null;
   // The tick of the last frame this channel opened, or of its handshake.
   heard: number;
+  // Wall-clock time of the handshake, for `confirmWithinMs`.
+  since: number;
 }
 
 interface State {
@@ -70,6 +81,7 @@ interface State {
   // Channels by device fingerprint, in handshake order.
   connected: Map<string, Connected[]>;
   tick: number;
+  now: () => Date;
 }
 
 type Send = (data: Bytes) => void;
@@ -111,13 +123,40 @@ const forget = (state: State, entry: Connected): void => {
   else state.connected.set(entry.peer.fingerprint, remaining);
 };
 
+const quietest = (entries: Connected[]): Connected | null =>
+  entries.reduce<Connected | null>((a, b) => (a === null || b.heard < a.heard ? b : a), null);
+
+// The device's channels still in their handshake window; a stale one is forgotten on the way.
+const withoutStale = (state: State, fingerprint: string): Connected[] => {
+  const deadline = state.now().getTime() - confirmWithinMs;
+  const live = channelsOf(state, fingerprint).filter((c) => c.confirmed || c.since > deadline);
+  if (live.length === 0) state.connected.delete(fingerprint);
+  else state.connected.set(fingerprint, live);
+  return live;
+};
+
+// A new handshake past the cap evicts the oldest channel still waiting for its first frame,
+// never a confirmed one: the newcomer is itself unconfirmed, and only earns a confirmed
+// channel's place by confirming (`confirm`). Channels are kept in handshake order, so the
+// first unconfirmed one is the oldest.
 const admit = (state: State, entry: Connected): void => {
-  const entries = [...channelsOf(state, entry.peer.fingerprint), entry];
+  const entries = [...withoutStale(state, entry.peer.fingerprint), entry];
   if (entries.length > maxChannelsPerDevice) {
-    const quietest = entries.reduce((a, b) => (b.heard < a.heard ? b : a));
-    entries.splice(entries.indexOf(quietest), 1);
+    const oldest = entries.findIndex((c) => !c.confirmed && c !== entry);
+    if (oldest !== -1) entries.splice(oldest, 1);
   }
   state.connected.set(entry.peer.fingerprint, entries);
+};
+
+// A channel's first opened frame confirms it. If that puts the device over the cap in
+// confirmed channels, it has more working tabs than the relay admits, so the confirmed channel
+// heard from least recently (a tab that has gone quiet) makes room.
+const confirm = (state: State, entry: Connected): void => {
+  entry.confirmed = true;
+  const confirmed = channelsOf(state, entry.peer.fingerprint).filter((c) => c.confirmed);
+  if (confirmed.length <= maxChannelsPerDevice) return;
+  const victim = quietest(confirmed.filter((c) => c !== entry));
+  if (victim !== null) forget(state, victim);
 };
 
 interface Agreement {
@@ -147,7 +186,15 @@ const admitChannel = async (state: State, a: Agreement): Promise<void> => {
     device: a.device,
   };
   state.tick += 1;
-  admit(state, { peer, channel, confirmed: false, busy: 0, revoked: null, heard: state.tick });
+  admit(state, {
+    peer,
+    channel,
+    confirmed: false,
+    busy: 0,
+    revoked: null,
+    heard: state.tick,
+    since: state.now().getTime(),
+  });
 };
 
 const accept = async (state: State, payload: Bytes, send: Send): Promise<void> => {
@@ -258,9 +305,9 @@ const deliver = async (
     return;
   }
   const { entry, message } = opened;
-  entry.confirmed = true;
   state.tick += 1;
   entry.heard = state.tick;
+  if (!entry.confirmed) confirm(state, entry);
   // A frame that was in flight when the device was revoked is dropped, not answered.
   if (entry.revoked !== null) return;
   entry.busy += 1;
@@ -284,7 +331,7 @@ const handleFrame = async (state: State, data: Bytes, send: Send): Promise<void>
     await accept(state, decoded.payload, send);
     return;
   }
-  const entries = channelsOf(state, hex(new Uint8Array(decoded.fingerprint)));
+  const entries = withoutStale(state, hex(new Uint8Array(decoded.fingerprint)));
   if (entries.length > 0) await deliver(state, entries, decoded, data, send);
 };
 
@@ -297,7 +344,12 @@ const sealToAll = async (entries: Connected[], message: Wire, send: Send): Promi
 };
 
 export const createDeviceChannels = (options: DeviceChannelsOptions): DeviceChannels => {
-  const state: State = { options, connected: new Map(), tick: 0 };
+  const state: State = {
+    options,
+    connected: new Map(),
+    tick: 0,
+    now: options.now ?? ((): Date => new Date()),
+  };
   return {
     handleFrame: (data, send) => handleFrame(state, data, send),
     sendTo: async (fingerprint, message, send) => {
