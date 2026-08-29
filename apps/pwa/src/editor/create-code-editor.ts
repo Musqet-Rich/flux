@@ -1,7 +1,13 @@
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { bracketMatching, indentOnInput } from '@codemirror/language';
 import { Compartment, EditorState } from '@codemirror/state';
-import { EditorView, highlightActiveLine, keymap, lineNumbers } from '@codemirror/view';
+import {
+  EditorView,
+  highlightActiveLine,
+  highlightActiveLineGutter,
+  keymap,
+  lineNumbers,
+} from '@codemirror/view';
 
 import { editorTheme } from './editor-theme.ts';
 
@@ -47,6 +53,7 @@ export const createCodeEditor = (options: CodeEditorOptions): CodeEditor => {
     EditorView.lineWrapping,
     history(),
     highlightActiveLine(),
+    highlightActiveLineGutter(),
     bracketMatching(),
     indentOnInput(),
     keymap.of([{ key: 'Mod-s', run: save }, ...defaultKeymap, ...historyKeymap, indentWithTab]),

@@ -59,6 +59,9 @@ test('wraps long lines and wears the shared theme', () => {
   const css = adoptedCss(parent);
   expect(css).toContain('var(--bg)');
   expect(css).toContain('var(--panel)');
+  // The cursor's line number is lit as well as its line; the theme colours both.
+  expect(parent.shadowRoot?.querySelector('.cm-activeLineGutter')).not.toBeNull();
+  expect(css).toContain('.cm-activeLineGutter');
   editor.destroy();
 });
 

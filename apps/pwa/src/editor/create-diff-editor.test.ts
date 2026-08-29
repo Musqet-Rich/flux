@@ -46,6 +46,12 @@ test('wraps long lines and wears the shared theme, on the current and the delete
   expect(css).toContain('var(--bg)');
   expect(css).toContain('var(--panel)');
   expect(css).toContain('var(--danger)');
+  // The merge package scopes its own current-side rules to `.cm-merge-b`; ours must match
+  // that specificity or its defaults win (they did, until this was caught in a browser).
+  expect(root?.querySelector('.cm-editor')?.classList.contains('cm-merge-b')).toBe(true);
+  expect(css).toMatch(/\.cm-merge-b \.cm-changedLine\b/u);
+  expect(css).toMatch(/\.cm-merge-b \.cm-changedText\b/u);
+  expect(css).toMatch(/\.cm-merge-b \.cm-changedLineGutter\b/u);
   editor.destroy();
 });
 

@@ -15,12 +15,13 @@ export const editorTheme = EditorView.theme(
       color: 'var(--fg)',
     },
     '.cm-scroller': { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' },
+    // Neither editor uses drawSelection(), so the caret and the selection are the browser's
+    // own: caret-color and ::selection are what style them, not .cm-cursor or
+    // .cm-selectionBackground.
     '.cm-content': { caretColor: 'var(--fg)' },
-    '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--fg)' },
-    '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground':
-      {
-        backgroundColor: 'color-mix(in srgb, var(--accent) 35%, transparent)',
-      },
+    '.cm-content ::selection, .cm-content::selection': {
+      backgroundColor: 'color-mix(in srgb, var(--accent) 35%, transparent)',
+    },
     '.cm-activeLine': { backgroundColor: 'color-mix(in srgb, var(--fg) 6%, transparent)' },
     '.cm-gutters': {
       backgroundColor: 'var(--panel)',
@@ -32,14 +33,17 @@ export const editorTheme = EditorView.theme(
       color: 'var(--fg)',
     },
     // The unified merge view: the current side's changed lines read as additions, the deleted
-    // chunk widgets as removals, the changed text within them underlined in the same hue.
-    '.cm-changedLine': {
+    // chunk widgets as removals, the changed text within them underlined in the same hue. The
+    // view marks its editor `cm-merge-b`, and the merge package's own rules for the current
+    // side are scoped to that class (`&.cm-merge-b .cm-changedLine`, `&dark.cm-merge-b
+    // .cm-changedText`, ...), so ours must be too or theirs win on specificity.
+    '&.cm-merge-b .cm-changedLine': {
       backgroundColor: 'color-mix(in srgb, var(--ok) 14%, transparent)',
     },
-    '.cm-changedText': {
+    '&.cm-merge-b .cm-changedText': {
       background: 'linear-gradient(var(--ok), var(--ok)) bottom/100% 2px no-repeat',
     },
-    '.cm-changedLineGutter': { background: 'var(--ok)' },
+    '&.cm-merge-b .cm-changedLineGutter': { background: 'var(--ok)' },
     '.cm-deletedChunk': {
       backgroundColor: 'color-mix(in srgb, var(--danger) 14%, transparent)',
     },
