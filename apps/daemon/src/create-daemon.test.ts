@@ -1,11 +1,10 @@
-import type { Bytes, Channel, Wire } from '@flux/protocol';
-import { base64url, bytes, handshake, pairing, room } from '@flux/protocol';
+import type { Wire } from '@flux/protocol';
+import { bytes } from '@flux/protocol';
 import { chmod, lstat, mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { connect } from 'node:net';
 import { afterEach, expect, test } from 'vitest';
 
-import { deviceHandshake } from '../test/device-side.ts';
+import { daemonDevice } from '../test/daemon-device.ts';
 import type { FakeRelay } from '../test/fake-relay.ts';
 import { startFakeRelay } from '../test/fake-relay.ts';
 import type { FrameRouter } from '../test/frame-router.ts';
@@ -52,98 +51,11 @@ const setup = async (extra: Partial<DaemonConfig> = {}) => {
   return { repo, root, repos, claudeDir };
 };
 
-interface Dev {
-  keys: Awaited<ReturnType<typeof handshake.generateKeyPair>>;
-  payload: NonNullable<ReturnType<typeof pairing.parse>>;
-  channel: Channel;
-  next: () => Promise<Bytes>;
-  fingerprint: Bytes;
-}
-
-// A device: parses a fresh pairing URL, handshakes over the fake relay, returns an rpc caller.
-// `keys` lets a device come back with the identity it had.
-const device = async (keys?: Dev['keys']): Promise<Dev> => {
-  const url = daemon.pairingUrl();
-  const payload = pairing.parse(new URL(url).hash);
-  if (payload === null) throw new Error('bad pairing url');
-  const own = keys ?? (await handshake.generateKeyPair(true));
-  const fingerprint = await room.fingerprint(own.publicKey);
-  const next = frames.register(fingerprint);
-  const channel = await deviceHandshake({
-    keys: own,
-    boxPub: payload.boxPub,
-    roomId: await room.id(payload.boxPub),
-    send: relay.send,
-    next,
-  });
-  return { keys: own, payload, channel, next, fingerprint };
-};
-
-const open = async (channel: Channel, data: Bytes): Promise<Wire | null> => {
-  const plain = await channel.open(data);
-  return plain === null ? null : (JSON.parse(bytes.toUtf8(plain)) as Wire);
-};
-
-// Reads frames until one decrypts to a message the predicate accepts (recursion, not a loop:
-// every frame is awaited in turn, which is the point).
-const untilMatch = async (d: Dev, match: (m: Wire) => boolean): Promise<Wire> => {
-  const message = await open(d.channel, await d.next());
-  return message !== null && match(message) ? message : untilMatch(d, match);
-};
-
-// Sends an rpc and returns its result, skipping any events broadcast in between.
-const call = async (d: Dev, method: string, params: unknown): Promise<unknown> => {
-  const id = crypto.randomUUID();
-  const rpc: Wire = { kind: 'rpc', id, method, params };
-  relay.send(await d.channel.seal(bytes.fromUtf8(JSON.stringify(rpc))));
-  const message = await untilMatch(d, (m) => m.kind === 'rpc.result' && m.id === id);
-  if (message.kind !== 'rpc.result') throw new Error('unreachable');
-  if (message.ok) return message.result;
-  throw new Error(`${message.error.code}: ${message.error.message}`);
-};
-
-const untilEvent = (d: Dev, type: string): Promise<Wire> =>
-  untilMatch(d, (m) => m.kind === 'event' && m.event.type === type);
-
-const untilRevoked = (d: Dev): Promise<Wire> =>
-  untilMatch(d, (m) => m.kind === 'ephemeral' && m.data.type === 'device.revoked');
-
-// What `flux devices rm` does: one line to the control socket, one line back.
-const controlRm = (deviceId: string): Promise<unknown> =>
-  new Promise((resolve) => {
-    const client = connect(daemon.controlSocket, () => {
-      client.write(`${JSON.stringify({ type: 'devices.rm', deviceId })}\n`);
-    });
-    client.once('data', (chunk: Buffer) => {
-      client.end();
-      resolve(JSON.parse(chunk.toString()));
-    });
-  });
-
-const pair = async (d: Dev): Promise<string> => {
-  const proof = await pairing.proof(d.payload.secret, d.keys.publicKey, d.payload.boxPub);
-  const paired = (await call(d, 'pair.request', {
-    devPub: base64url.encode(d.keys.publicKey),
-    proof: base64url.encode(proof),
-  })) as { deviceId: string };
-  return paired.deviceId;
-};
-
-// Reads each device's frames until it has seen `wanted[i]` messages: what each device sees, in
-// the order it sees it. A frame out of nonce order makes `open` throw, which fails the test.
-const collect = (devs: Dev[], wanted: number[]): Promise<Wire[][]> =>
-  Promise.all(
-    devs.map(async (d, i) => {
-      const seen: Wire[] = [];
-      const step = async (): Promise<Wire[]> => {
-        if (seen.length >= (wanted[i] ?? 0)) return seen;
-        const message = await open(d.channel, await d.next());
-        if (message !== null) seen.push(message);
-        return step();
-      };
-      return step();
-    }),
-  );
+const { device, call, untilEvent, untilRevoked, controlRm, pair, collect } = daemonDevice({
+  daemon: () => daemon,
+  relay: () => relay,
+  frames: () => frames,
+});
 
 test('pair, create a session, talk to the agent, sync the log', async () => {
   const { repo } = await setup();

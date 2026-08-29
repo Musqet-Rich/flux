@@ -43,6 +43,8 @@ export interface SessionSupervisor {
   waiting: (on: boolean) => void;
   interrupt: () => void;
   close: () => Promise<void>;
+  // The agent's group is SIGKILLed now, nothing awaited (a shutdown that cannot wait).
+  kill: () => void;
   state: () => SessionState;
 }
 
@@ -186,10 +188,19 @@ export const createSessionSupervisor = (options: SupervisorOptions): SessionSupe
     interrupt: () => {
       ctx.agent?.interrupt();
     },
+    // The agent is gone on purpose (stop, archive, restart), so a session caught mid-turn is
+    // idle now, not running forever: the next message resumes it.
     close: async () => {
       ctx.closing = true;
       if (ctx.agent !== null) await ctx.agent.close();
       await ctx.queue;
+      if (ctx.state === 'running' || ctx.state === 'waiting_user') {
+        setState(ctx, 'idle', 'agent closed');
+      }
+    },
+    kill: () => {
+      ctx.closing = true;
+      ctx.agent?.kill();
     },
     state: () => ctx.state,
   };

@@ -1,6 +1,10 @@
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 
+import type { CloseChildOptions } from '../close-child.ts';
+import { closeChild } from '../close-child.ts';
+import { killChildGroup } from '../kill-child-group.ts';
+
 // Write side of the Claude adapter, StreamJsonInput (ADR 0007): one long-lived headless process
 // per session, user turns written as JSON lines to stdin, output read as JSON lines. The
 // command is injectable so tests drive a fixture-replaying fake instead of the real binary.
@@ -11,7 +15,9 @@ export interface AgentProcess {
   interrupt: () => void;
   onLine: (listener: (line: string) => void) => void;
   onExit: (listener: (code: number | null) => void) => void;
+  // Bounded (close-child.ts): stdin EOF, then SIGTERM, then SIGKILL of the process group.
   close: () => Promise<number | null>;
+  // SIGKILL of the process group, nothing awaited: for a shutdown that cannot wait.
   kill: () => void;
   // The tail of what the agent wrote to stderr, for the reason a session ended.
   stderr: () => string;
@@ -23,6 +29,7 @@ export interface SpawnClaudeOptions {
   resume?: string;
   mcpConfig?: string;
   env?: NodeJS.ProcessEnv;
+  close?: CloseChildOptions;
 }
 
 const baseArgs = [
@@ -56,6 +63,8 @@ export const spawnClaude = (options: SpawnClaudeOptions): AgentProcess => {
     cwd: options.cwd,
     env: options.env ?? process.env,
     stdio: ['pipe', 'pipe', 'ignore'],
+    // Its own process group, so closing it can reach the MCP server it spawned.
+    detached: true,
   });
   const lineListeners: ((line: string) => void)[] = [];
   const exitListeners: ((code: number | null) => void)[] = [];
@@ -88,12 +97,9 @@ export const spawnClaude = (options: SpawnClaudeOptions): AgentProcess => {
     onExit: (listener) => {
       exitListeners.push(listener);
     },
-    close: () => {
-      child.stdin.end();
-      return exited;
-    },
+    close: () => closeChild(child, exited, options.close),
     kill: () => {
-      child.kill('SIGTERM');
+      killChildGroup(child);
     },
     // Claude's stderr is not captured (ADR 0007): its failures arrive as `result` lines.
     stderr: () => '',

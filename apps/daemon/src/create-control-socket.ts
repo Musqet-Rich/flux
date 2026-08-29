@@ -95,7 +95,13 @@ const serve = (socket: Socket, handle: ControlSocketOptions['handle']): void => 
 };
 
 export const createControlSocket = (options: ControlSocketOptions): ControlSocket => {
+  // Open connections are agents blocked in `ask`; `server.close` alone would wait for them.
+  const open = new Set<Socket>();
   const server: Server = createServer((socket) => {
+    open.add(socket);
+    socket.once('close', () => {
+      open.delete(socket);
+    });
     serve(socket, options.handle);
   });
   return {
@@ -111,6 +117,7 @@ export const createControlSocket = (options: ControlSocketOptions): ControlSocke
     },
     close: () =>
       new Promise((resolve) => {
+        for (const socket of open) socket.destroy();
         server.close(() => {
           resolve();
         });

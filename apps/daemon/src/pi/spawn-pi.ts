@@ -4,6 +4,9 @@ import { spawn } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
 
 import type { AgentProcess } from '../claude/spawn-claude.ts';
+import type { CloseChildOptions } from '../close-child.ts';
+import { closeChild } from '../close-child.ts';
+import { killChildGroup } from '../kill-child-group.ts';
 
 const { isRecord, isString, isOneOf } = guards;
 
@@ -21,6 +24,7 @@ export interface SpawnPiOptions {
   provider?: string;
   model?: string;
   env?: NodeJS.ProcessEnv;
+  close?: CloseChildOptions;
 }
 
 // Goes with the Flux tools (ADR 0008): the agent has no interactive prompt in headless mode, so
@@ -133,6 +137,8 @@ export const spawnPi = (options: SpawnPiOptions): AgentProcess => {
     cwd: options.cwd,
     env: options.env ?? process.env,
     stdio: ['pipe', 'pipe', 'pipe'],
+    // Its own process group, so closing it can reach anything it spawned.
+    detached: true,
   });
   const stderr = stderrTail();
   child.stderr.on('data', stderr.push);
@@ -156,12 +162,9 @@ export const spawnPi = (options: SpawnPiOptions): AgentProcess => {
     onExit: (listener) => {
       exitListeners.push(listener);
     },
-    close: () => {
-      child.stdin.end();
-      return exited;
-    },
+    close: () => closeChild(child, exited, options.close),
     kill: () => {
-      child.kill('SIGTERM');
+      killChildGroup(child);
     },
     stderr: stderr.text,
   };

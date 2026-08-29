@@ -128,3 +128,21 @@ test('a client that hangs up mid-request aborts the handler signal', async () =>
   await aborted;
   expect(signal.aborted).toBe(true);
 });
+
+// A connection still open at close is an agent waiting for an answer that will not come;
+// waiting for it to hang up would hold the daemon's shutdown.
+// `close()` resolving is the proof: with the ask connection still open, `server.close` alone
+// would wait for it for ever, so a resolved close is a destroyed connection.
+test('close destroys open connections instead of waiting for them', async () => {
+  const client = connect(path);
+  client.on('error', () => {});
+  await new Promise<void>((resolve) => {
+    client.on('connect', resolve);
+  });
+  client.write(`${JSON.stringify({ type: 'ask', session: 's', question: 'anyone?' })}\n`);
+  await untilSignal();
+  await socket.close();
+  socket = createControlSocket({ path, handle: () => Promise.resolve({}) });
+  await socket.listen();
+  expect(await roundTrip([JSON.stringify({ type: 'pair' })])).toEqual(['{"ok":true,"result":{}}']);
+});
