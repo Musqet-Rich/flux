@@ -47,6 +47,9 @@ const cases: { [M in RpcMethod]: [ok: unknown, bad: unknown] } = {
   'git.diff': [{ diff: '' }, { diff: null }],
   'git.show': [content, { content: 'x' }],
   'git.log': [{ commits: [{ sha: 'a', subject: 's', author: 'me', ts: 't' }] }, { commits: [{}] }],
+  'git.commit': [{ sha: 'abc' }, { sha: 1 }],
+  'git.push': [{ remote: 'origin', branch: 'b' }, { remote: 'origin' }],
+  'git.pr': [{ url: 'https://x/pull/1' }, {}],
   'fs.read': [content, { content: 1, binary: false }],
   'fs.list': [{ entries: [{ name: 'a', kind: 'dir' }] }, { entries: [{ name: 'a', kind: 'x' }] }],
   'repos.list': [

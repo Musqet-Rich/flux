@@ -88,6 +88,10 @@ export const rpcResults: ResultGuards = {
   'git.diff': (v): v is { diff: string } => isRecord(v) && isString(v['diff']),
   'git.show': isContent,
   'git.log': (v): v is { commits: Commit[] } => isRecord(v) && isArrayOf(v['commits'], isCommit),
+  'git.commit': (v): v is { sha: string } => isRecord(v) && isString(v['sha']),
+  'git.push': (v): v is { remote: string; branch: string } =>
+    isRecord(v) && isString(v['remote']) && isString(v['branch']),
+  'git.pr': (v): v is { url: string } => isRecord(v) && isString(v['url']),
   'fs.read': isContent,
   'fs.list': (v): v is { entries: DirEntry[] } =>
     isRecord(v) && isArrayOf(v['entries'], isDirEntry),

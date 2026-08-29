@@ -36,6 +36,36 @@ test('lists the worktree status, disables deleted files, and emits open and back
   box.store.stop();
 });
 
+test('ticked files narrow the commit, and a commit refreshes the list and clears ticks', async () => {
+  let files = [
+    { path: 'a.ts', status: 'M' as const },
+    { path: 'b.ts', status: 'R' as const, from: 'old.ts' },
+  ];
+  const box = await pairedStore([], {
+    'git.status': () => ({ files }),
+    'git.log': () => ({ commits: [] }),
+    'git.commit': () => ({ sha: 'abc' }),
+  });
+  const wrapper = mount(ChangesView, { props: { store: box.store, session: 's1' } });
+  await until(() => Reflect.get(wrapper.vm, 'files').length === 2);
+  await flushPromises();
+  await wrapper.findAll('.pick')[1]?.setValue(true);
+  expect(wrapper.find('.commit').text()).toBe('Commit 1 selected');
+  files = [{ path: 'a.ts', status: 'M' as const }];
+  await wrapper.find('#commit-message').setValue('only b');
+  await wrapper.find('.commit').trigger('click');
+  await until(() => Reflect.get(wrapper.vm, 'files').length === 1);
+  await flushPromises();
+  // A rename is one tick, two paths: the old one is the staged deletion.
+  expect(box.calls('git.commit')).toEqual([
+    { session: 's1', message: 'only b', paths: ['b.ts', 'old.ts'] },
+  ]);
+  expect(wrapper.findAll('.path').map((p) => p.text())).toEqual(['a.ts']);
+  expect(Reflect.get(wrapper.vm, 'selected')).toEqual([]);
+  expect(wrapper.find('.commit').text()).toBe('Commit all');
+  box.store.stop();
+});
+
 test('falls back to the last files.changed event when git.status is unavailable', async () => {
   const box = await pairedStore([]);
   const changed = box.event(1, 'files.changed', { files: [{ path: 'x.ts', status: 'A' }] });

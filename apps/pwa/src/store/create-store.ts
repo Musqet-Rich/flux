@@ -17,6 +17,8 @@ import { storeState } from './store-state.ts';
 // Actions a view fires resolve to whether they succeeded; the failure itself is in
 // `state.error` for the status bar, so views never handle rejections.
 
+export type PrParams = Omit<RpcMethods['git.pr']['params'], 'session'>;
+
 export interface Store {
   state: StoreState;
   // Loads the paired box from storage and connects, or lands on the pair screen.
@@ -35,6 +37,10 @@ export interface Store {
   enablePush: () => Promise<boolean>;
   createSession: (params: RpcMethods['sessions.create']['params']) => Promise<SessionSummary>;
   refreshSessions: () => Promise<void>;
+  // Git actions resolve to their result, or null with the failure in `state.error`.
+  commit: (session: string, message: string, paths?: string[]) => Promise<string | null>;
+  push: (session: string) => Promise<{ remote: string; branch: string } | null>;
+  openPr: (session: string, pr: PrParams) => Promise<string | null>;
   call: RpcCall;
   stop: () => void;
 }
@@ -90,6 +96,27 @@ const createSession = async (
   return summary;
 };
 
+// Like boxLink.attempt, for actions whose result the view needs (a sha, a URL).
+const outcome = async <T>(i: StoreInternals, action: () => Promise<T>): Promise<T | null> => {
+  try {
+    return await action();
+  } catch (error) {
+    boxLink.reportError(i, error);
+    return null;
+  }
+};
+
+const gitActions = (i: StoreInternals): Pick<Store, 'commit' | 'push' | 'openPr'> => ({
+  commit: (session, message, paths) =>
+    outcome(i, async () => {
+      const params = paths === undefined ? { session, message } : { session, message, paths };
+      return (await boxLink.call(i, 'git.commit', params)).sha;
+    }),
+  push: (session) => outcome(i, () => boxLink.call(i, 'git.push', { session })),
+  openPr: (session, pr) =>
+    outcome(i, async () => (await boxLink.call(i, 'git.pr', { session, ...pr })).url),
+});
+
 export const createStore = (options: StoreOptions): Store => {
   const i: StoreInternals = {
     options,
@@ -127,6 +154,7 @@ export const createStore = (options: StoreOptions): Store => {
     },
     createSession: (params) => createSession(i, params),
     refreshSessions: () => boxLink.refreshSessions(i),
+    ...gitActions(i),
     call: (method, params) => boxLink.call(i, method, params),
     stop: () => {
       i.connection?.stop();
