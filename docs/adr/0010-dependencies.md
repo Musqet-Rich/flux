@@ -1,0 +1,49 @@
+# 0010: Dependency ledger
+
+Status: living. Every runtime and dev dependency is listed here with its justification. A PR that adds a package without a line here fails review.
+
+Process: see `engineering.md` § Dependencies.
+
+## Runtime
+
+Columns follow `engineering.md` § Dependencies step 2; the pre-commit check requires every one of them (notes excepted) for a row added in a change, and the version must equal the pin in package.json. Downloads are weekly at the time of the row; transitive is the size of the package's closure in `pnpm-lock.yaml`.
+
+| package                | app           | version | why not platform / own code                                                                                                                                                                                 | weekly downloads | maintainer | licence | transitive deps | notes    |
+| ---------------------- | ------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- | ---------- | ------- | --------------- | -------- |
+| `hono`                 | relay         | 4.13.5  | Standards-based router over `Request`/`Response`; static serving, WebSocket upgrade helper. Writing a router is easy; writing a correct static file server with ranges and caching is not.                  | 59M              | yusukebe   | MIT     | 0               | See 0011 |
+| `@hono/node-server`    | relay         | 2.1.1   | Bridges Node's `http` server to Hono's fetch-style `Request`/`Response`; hand-rolling the body streaming and header translation correctly is more than 50 lines and Hono's own adapter tracks Node changes. | 56M              | yusukebe   | MIT     | 1               | See 0011 |
+| `ws`                   | relay, daemon | 8.21.3  | Node has no WebSocket server. `ws` is the reference implementation, ~0 transitive deps. Daemon uses it only for the local MCP-tool socket if a Unix socket proves awkward; otherwise relay only.            | 270M             | lpinca     | MIT     | 0               |          |
+| `vue`                  | pwa           | 3.5.42  | UI framework. See 0004.                                                                                                                                                                                     | 16M              | yyx990803  | MIT     | 23              |          |
+| `@codemirror/state`    | pwa           | 6.7.1   | Editor state. See 0005.                                                                                                                                                                                     | 13M              | marijn     | MIT     | 1               |          |
+| `@codemirror/view`     | pwa           | 6.43.9  | Editor view. See 0005.                                                                                                                                                                                      | 14M              | marijn     | MIT     | 5               |          |
+| `@codemirror/merge`    | pwa           | 6.12.2  | Diff view. See 0005.                                                                                                                                                                                        | 1.8M             | marijn     | MIT     | 10              |          |
+| `@codemirror/language` | pwa           | 6.12.4  | Language support base; language packs added per need, one line each. See 0005.                                                                                                                              | 12M              | marijn     | MIT     | 9               |          |
+
+## Dev
+
+Same columns, lighter bar (tooling churn is expected).
+
+| package               | scope                   | version | why                                                                                                                                                                  | weekly downloads | maintainer      | licence    | transitive deps | notes |
+| --------------------- | ----------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- | --------------- | ---------- | --------------- | ----- |
+| `vite-plus` (`vp`)    | root                    | 0.3.0   | Pins one coherent set of Vite, Vitest, Oxlint and Oxfmt versions and provides `vp` for scripts; kept so the toolchain upgrades as a unit, see 0001.                  | 1.1M             | boshen          | MIT        | 199             |       |
+| `typescript`          | root                    | 5.9.3   | The TypeScript compiler, used for type checking with `--noEmit`; there is no platform substitute for the type system itself.                                         | 276M             | microsoft       | Apache-2.0 | 0               |       |
+| `vite`                | root                    | 8.2.2   | Bundles and dev-serves the PWA with SFC support, HMR and code splitting; a browser bundler is far outside the 50-lines-of-our-own bar.                               | 176M             | yyx990803       | MIT        | 41              |       |
+| `vitest`              | root                    | 4.1.11  | Runs colocated unit tests with Vite's module pipeline; chosen over `node:test` because it understands `.vue` SFCs and the vitest plugin API enforces our test rules. | 98M              | ariperkkio      | MIT        | 112             |       |
+| `@vitest/coverage-v8` | root                    | 4.1.11  | V8 coverage provider for Vitest, needed to enforce the 100 percent line and branch gate on `packages/protocol`.                                                      | 37M              | ariperkkio      | MIT        | 112             |       |
+| `oxlint`              | root                    | 1.80.0  | Fast type-aware linter enforcing the rules in engineering.md; writing a linter is not an option and ESLint would pull hundreds more transitive packages.             | 19M              | boshen          | MIT        | 219             |       |
+| `oxfmt`               | root                    | 0.65.0  | Deterministic formatter so style never comes up in review; Prettier-compatible output with a Rust binary and no plugin tree.                                         | 12M              | boshen          | MIT        | 219             |       |
+| `vue-tsc`             | pwa                     | 3.3.11  | Type-checks `<template>` blocks in Vue SFCs, which `tsc` cannot see; without it template errors only appear at runtime.                                              | 6.1M             | johnsoncodehk   | MIT        | 20              |       |
+| `@vitejs/plugin-vue`  | pwa                     | 6.0.8   | Compiles `.vue` single-file components inside Vite; the only supported way to build Vue SFCs with Vite.                                                              | 9.1M             | yyx990803       | MIT        | 62              |       |
+| `@vue/test-utils`     | pwa                     | 2.5.0   | Mounts Vue components in tests with a stable API for props, emits and DOM queries; hand-mounting components correctly across Vue internals is fragile.               | 4.8M             | lmiller1990     | MIT        | 43              |       |
+| `tsdown`              | daemon, relay, protocol | 0.22.14 | Single-file ESM output. (May be provided by `vp`; remove if so.)                                                                                                     | 4.9M             | yyx990803       | MIT        | 86              |       |
+| `@types/node`         | root                    | 26.4.0  | Type declarations for Node's built-in modules such as `node:sqlite` and `node:fs`; required for any typed Node code.                                                 | 430M             | DefinitelyTyped | MIT        | 1               |       |
+| `@types/ws`           | root                    | 8.18.1  | Type declarations for `ws`, which ships none of its own; required for the relay to compile under strict TypeScript.                                                  | 72M              | DefinitelyTyped | MIT        | 2               |       |
+
+## Rejected
+
+Listed in `engineering.md` § Dependencies with reasons, so they are not re-proposed.
+
+## Pending decisions
+
+- QR rendering in the daemon's terminal output: write a minimal QR encoder (~300 lines, well-specified) or take a dev-only dependency that pre-generates. Decide when built.
+- Web Push in the relay: VAPID signing is JWT + ECDSA P-256, all WebCrypto. Write it (~100 lines) rather than take `web-push` (which pulls in several deps). Confirm when built.

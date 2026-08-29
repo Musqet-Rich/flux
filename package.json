@@ -1,0 +1,35 @@
+{
+  "name": "flux",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "prepare": "git config core.hooksPath .githooks",
+    "check": "pnpm run fmt:check && pnpm run lint && pnpm run typecheck && pnpm run test:coverage",
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check",
+    "lint": "oxlint",
+    "typecheck": "tsc --noEmit -p . && pnpm -r --filter \"!@flux/pwa\" exec tsc --noEmit && pnpm --filter @flux/pwa exec vue-tsc --noEmit && pnpm --filter @flux/protocol exec tsc --noEmit false --emitDeclarationOnly --outDir node_modules/.tsc-dts",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "build": "pnpm --filter @flux/protocol exec tsdown src/index.ts --dts && pnpm -r --filter @flux/daemon --filter @flux/relay exec tsdown src/index.ts --deps.alwaysBundle @flux/protocol && pnpm --filter @flux/pwa run build"
+  },
+  "devDependencies": {
+    "@types/node": "26.4.0",
+    "@types/ws": "8.18.1",
+    "@vitejs/plugin-vue": "6.0.8",
+    "@vitest/coverage-v8": "4.1.11",
+    "@vue/test-utils": "2.5.0",
+    "oxfmt": "0.65.0",
+    "oxlint": "1.80.0",
+    "tsdown": "0.22.14",
+    "typescript": "5.9.3",
+    "vite": "8.2.2",
+    "vite-plus": "0.3.0",
+    "vitest": "4.1.11",
+    "vue-tsc": "3.3.11"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "pnpm@11.24.0"
+}

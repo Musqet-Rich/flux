@@ -1,0 +1,43 @@
+{
+  "name": "main",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": {
+    "ref_name": {
+      "include": ["~DEFAULT_BRANCH"],
+      "exclude": []
+    }
+  },
+  "rules": [
+    { "type": "deletion" },
+    { "type": "non_fast_forward" },
+    {
+      "type": "pull_request",
+      "parameters": {
+        "required_approving_review_count": 0,
+        "dismiss_stale_reviews_on_push": true,
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_review_thread_resolution": true,
+        "allowed_merge_methods": ["squash"]
+      }
+    },
+    {
+      "type": "required_status_checks",
+      "parameters": {
+        "strict_required_status_checks_policy": true,
+        "do_not_enforce_on_create": false,
+        "required_status_checks": [
+          { "context": "check (pinned deps, fmt, lint, typecheck, test)" },
+          { "context": "audit (prod deps, fail on high or critical)" },
+          { "context": "hooks (POSIX syntax, commit-msg good and bad messages)" },
+          {
+            "context": "diff (dependency changes are ledgered, no secret shapes, code style on added lines)"
+          },
+          { "context": "commits (PR title and every commit are Conventional Commits)" }
+        ]
+      }
+    }
+  ],
+  "bypass_actors": []
+}

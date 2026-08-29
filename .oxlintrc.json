@@ -1,0 +1,288 @@
+{
+  // Oxlint config. Rules mirror docs/engineering.md; change that file in the same PR as this one.
+  // Type-aware rules run through oxlint-tsgolint (hoisted by vite-plus) and need a tsconfig per package.
+  // Plugins: `eslint` and `oxc` are needed on top of the documented five because func-style,
+  // prefer-arrow-callback, max-lines, no-warning-comments, no-restricted-imports (eslint) and
+  // no-const-enum (oxc) live there, and `vitest` carries the § Testing bans (no .only/.skip, no
+  // snapshots, no mocking) for *.test.ts. `restriction`-category rules chosen: consistent-type-assertions,
+  // no-non-null-assertion, explicit-module-boundary-types, no-namespace, prefer-node-protocol,
+  // filename-case, no-default-export, no-commonjs, no-amd, func-style, max-lines, no-warning-comments,
+  // no-restricted-imports, no-restricted-properties, import/extensions, no-require-imports,
+  // no-const-enum, no-var, eqeqeq, no-eval.
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["eslint", "oxc", "typescript", "unicorn", "import", "promise", "vue", "vitest"],
+  "options": {
+    "typeAware": true
+  },
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "perf": "error",
+    "pedantic": "error"
+  },
+  // `builtin` is the latest ECMAScript globals (es2026 on this version); no narrower esNNNN needed.
+  "env": {
+    "builtin": true
+  },
+  "ignorePatterns": ["**/node_modules/**", "**/dist/**", "**/coverage/**", "**/fixtures/**"],
+  "rules": {
+    // TypeScript (engineering.md § TypeScript)
+    "typescript/no-explicit-any": "error",
+    "typescript/consistent-type-assertions": ["error", { "assertionStyle": "never" }],
+    "typescript/no-non-null-assertion": "error",
+    "typescript/explicit-module-boundary-types": "error",
+    "typescript/consistent-type-imports": [
+      "error",
+      {
+        "prefer": "type-imports",
+        "fixStyle": "separate-type-imports",
+        "disallowTypeAnnotations": true
+      }
+    ],
+    "typescript/no-import-type-side-effects": "error",
+    "typescript/consistent-type-exports": [
+      "error",
+      { "fixMixedExportsWithInlineTypeSpecifier": false }
+    ],
+    "typescript/consistent-type-definitions": ["error", "interface"],
+    "typescript/no-namespace": "error",
+    // Enums: oxlint 1.80 has no rule that bans an `enum` declaration and no no-restricted-syntax.
+    // The ban is tsconfig `erasableSyntaxOnly` (TS1294), which tsc applies to every .ts in a
+    // package program and vue-tsc applies to .vue script blocks. Lint catches the `const enum`
+    // subset and keeps any enum that slips past typecheck well-formed.
+    "oxc/no-const-enum": "error",
+    "typescript/no-mixed-enums": "error",
+    "typescript/no-duplicate-enum-values": "error",
+    "typescript/prefer-literal-enum-member": "error",
+    "typescript/no-require-imports": "error",
+    // Type-aware (tsgolint)
+    "typescript/no-floating-promises": "error",
+    "typescript/no-misused-promises": "error",
+    "typescript/await-thenable": "error",
+    "typescript/only-throw-error": "error",
+    "typescript/prefer-promise-reject-errors": "error",
+    "typescript/require-await": "error",
+    "typescript/return-await": ["error", "in-try-catch"],
+    "typescript/switch-exhaustiveness-check": "error",
+    "typescript/no-unsafe-assignment": "error",
+    "typescript/no-unsafe-member-access": "error",
+    "typescript/no-unsafe-call": "error",
+    "typescript/no-unsafe-return": "error",
+    "typescript/no-unsafe-argument": "error",
+    "typescript/no-unnecessary-type-assertion": "error",
+    // Pedantic rule that forbids every non-readonly object parameter; not an engineering.md rule.
+    "typescript/prefer-readonly-parameter-types": "off",
+    // Syntactic duplicates of the type-aware rules above; the type-aware versions are more accurate.
+    "eslint/require-await": "off",
+    "eslint/no-throw-literal": "off",
+    "eslint/prefer-promise-reject-errors": "off",
+    // Code style (engineering.md § Code style)
+    "eslint/func-style": ["error", "expression"],
+    "eslint/prefer-arrow-callback": "error",
+    "eslint/no-var": "error",
+    "eslint/prefer-const": "error",
+    "eslint/eqeqeq": "error",
+    "eslint/no-eval": "error",
+    "eslint/no-await-in-loop": "error",
+    "eslint/no-async-promise-executor": "error",
+    "eslint/no-promise-executor-return": "error",
+    // "over 500 lines is a review blocker". 300 is a smell, not a rule; oxlint cannot hold two
+    // thresholds for one rule and warnings do not fail `oxlint`, so only the blocker is enforced
+    // here; .github/scripts/check-added-lines.sh prints a warning at 300 for touched files.
+    "eslint/max-lines": ["error", { "max": 500, "skipBlankLines": false, "skipComments": false }],
+    // the task-marker rule. The rule has no regex, so such a marker is
+    // banned outright; a tracked item is written as `// #123: ...` (issue first, no marker word).
+    "eslint/no-warning-comments": [
+      "error",
+      { "terms": ["todo", "fixme", "xxx"], "location": "anywhere" }
+    ],
+    // Dependencies (engineering.md § Dependencies): the explicitly rejected list, plus `ws` is
+    // server-side only, so its client class is banned everywhere (the type is fine for typing
+    // server-side connections; `WebSocketServer` stays importable in daemon and relay).
+    "eslint/no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          { "name": "express", "message": "Rejected: Hono (engineering.md § Dependencies)." },
+          { "name": "fastify", "message": "Rejected: Hono (engineering.md § Dependencies)." },
+          { "name": "zod", "message": "Rejected: hand-written guards (ADR 0009)." },
+          { "name": "valibot", "message": "Rejected: hand-written guards (ADR 0009)." },
+          { "name": "@sinclair/typebox", "message": "Rejected: hand-written guards (ADR 0009)." },
+          { "name": "better-sqlite3", "message": "Rejected: node:sqlite is built in." },
+          { "name": "libsodium", "message": "Rejected: WebCrypto." },
+          { "name": "libsodium-wrappers", "message": "Rejected: WebCrypto." },
+          { "name": "tweetnacl", "message": "Rejected: WebCrypto." },
+          { "name": "monaco-editor", "message": "Rejected: CodeMirror 6 (ADR 0005)." },
+          { "name": "pinia", "message": "Rejected at P1; needs an ADR." },
+          { "name": "vue-router", "message": "Rejected at P1; needs an ADR." },
+          { "name": "dotenv", "message": "Rejected: node --env-file." },
+          { "name": "lodash", "message": "Rejected: platform has it." },
+          { "name": "lodash-es", "message": "Rejected: platform has it." },
+          { "name": "date-fns", "message": "Rejected: platform has it (Intl)." },
+          { "name": "uuid", "message": "Rejected: crypto.randomUUID()." },
+          {
+            "name": "ws",
+            "importNames": ["WebSocket", "default"],
+            "allowTypeImports": true,
+            "message": "`ws` is server side only; clients use the native WebSocket."
+          }
+        ],
+        "patterns": [
+          {
+            "group": ["lodash/*", "lodash.*", "date-fns/*"],
+            "message": "Rejected: platform has it (engineering.md § Dependencies)."
+          }
+        ]
+      }
+    ],
+    // Security (engineering.md § Security): all randomness from crypto.getRandomValues /
+    // crypto.randomBytes. oxlint 1.80 has no no-restricted-syntax, so the member access is banned.
+    "eslint/no-restricted-properties": [
+      "error",
+      {
+        "object": "Math",
+        "property": "random",
+        "message": "Use crypto.getRandomValues / crypto.randomBytes (engineering.md § Security)."
+      }
+    ],
+    // tsconfig `moduleResolution: bundler` accepts an extensionless relative import that Node type
+    // stripping cannot run; sources import './thing.ts' (allowImportingTsExtensions is on).
+    "import/extensions": [
+      "error",
+      "ignorePackages",
+      { "ts": "always", "mts": "always", "vue": "always", "css": "always", "json": "always" }
+    ],
+    "unicorn/prefer-node-protocol": "error",
+    "unicorn/filename-case": ["error", { "case": "kebabCase" }],
+    "unicorn/prefer-module": "error",
+    "unicorn/prefer-top-level-await": "error",
+    // Modules: ESM only, named exports only
+    "import/no-default-export": "error",
+    "import/no-anonymous-default-export": "error",
+    "import/no-commonjs": "error",
+    "import/no-amd": "error",
+    "import/no-cycle": "error",
+    "import/no-self-import": "error",
+    "import/no-duplicates": "error",
+    "import/no-mutable-exports": "error",
+    "import/no-empty-named-blocks": "error",
+    "import/no-absolute-path": "error",
+    "import/no-dynamic-require": "error",
+    "import/no-webpack-loader-syntax": "error",
+    "import/first": "error",
+    "import/export": "error",
+    // Promises
+    "promise/catch-or-return": "error",
+    "promise/always-return": "error",
+    "promise/no-return-wrap": "error",
+    "promise/param-names": "error",
+    "promise/no-nesting": "error",
+    "promise/no-promise-in-callback": "error",
+    "promise/no-callback-in-promise": "error",
+    "promise/no-new-statics": "error",
+    "promise/no-return-in-finally": "error",
+    "promise/no-multiple-resolved": "error",
+    "promise/valid-params": "error",
+    "promise/prefer-catch": "error",
+    "promise/spec-only": "error",
+    // Vue (engineering.md § Vue)
+    "vue/define-props-declaration": ["error", "type-based"],
+    "vue/define-emits-declaration": ["error", "type-based"],
+    "vue/require-typed-ref": "error",
+    "vue/no-export-in-script-setup": "error",
+    "vue/prefer-import-from-vue": "error",
+    "vue/no-required-prop-with-default": "error"
+  },
+  "overrides": [
+    {
+      // Composables are `src/composables/useThing.ts` (engineering.md § Vue): the one camelCase
+      // exception to kebab-case filenames. `use*` only, so a helper dropped in here stays kebab-case.
+      "files": ["apps/pwa/src/composables/use*.ts", "apps/pwa/src/composables/use*.test.ts"],
+      "rules": {
+        "unicorn/filename-case": ["error", { "case": "camelCase" }]
+      }
+    },
+    {
+      // Browser code and the zero-dependency protocol package: no Node built-ins. `ws` itself is
+      // absent from their package.json, so tsc and the bundler reject a bare `ws` import there.
+      "files": ["apps/pwa/**", "packages/protocol/**"],
+      "rules": {
+        "import/no-nodejs-modules": "error"
+      }
+    },
+    {
+      // SFCs are the one place a default export is the module contract; components are PascalCase.
+      "files": ["**/*.vue"],
+      "rules": {
+        "import/no-default-export": "off",
+        "unicorn/filename-case": ["error", { "case": "pascalCase" }]
+      }
+    },
+    {
+      // Tool config files (vite, vitest, tsdown) export a default by convention.
+      "files": ["**/*.config.ts", "**/*.config.mts", "**/*.config.js", "**/*.config.mjs"],
+      "rules": {
+        "import/no-default-export": "off",
+        "import/no-anonymous-default-export": "off"
+      }
+    },
+    {
+      // Tests may cast (engineering.md § TypeScript) and build loose fixtures.
+      // engineering.md § Testing: tests run as committed (no .only/.skip), no snapshot tests, no
+      // mocking of our own modules (vi.mock hides a module from the coverage gate), and tests are
+      // deterministic (no Math.random / Date.now; fake timers if time matters). Real timers
+      // (`setTimeout`) are the "sleep" the rules forbid; check-added-lines.sh also greps for them
+      // because a cast can bypass a globals rule.
+      "files": ["**/*.test.ts", "**/test/**"],
+      "rules": {
+        "typescript/consistent-type-assertions": "off",
+        "typescript/no-unsafe-type-assertion": "off",
+        "typescript/no-unsafe-assignment": "off",
+        "typescript/no-unsafe-member-access": "off",
+        "vitest/no-focused-tests": "error",
+        "vitest/no-disabled-tests": "error",
+        "vitest/no-restricted-matchers": [
+          "error",
+          {
+            "toMatchSnapshot": "No snapshot tests (engineering.md § Testing).",
+            "toMatchInlineSnapshot": "No snapshot tests (engineering.md § Testing).",
+            "toMatchFileSnapshot": "No snapshot tests (engineering.md § Testing).",
+            "toThrowErrorMatchingSnapshot": "No snapshot tests (engineering.md § Testing).",
+            "toThrowErrorMatchingInlineSnapshot": "No snapshot tests (engineering.md § Testing)."
+          }
+        ],
+        "vitest/no-restricted-vi-methods": [
+          "error",
+          {
+            "mock": "No mocking of our own modules; mock the process boundary with fixtures (engineering.md § Testing).",
+            "doMock": "No mocking of our own modules; mock the process boundary with fixtures (engineering.md § Testing)."
+          }
+        ],
+        "eslint/no-restricted-properties": [
+          "error",
+          {
+            "object": "Math",
+            "property": "random",
+            "message": "Tests are deterministic (engineering.md § Testing)."
+          },
+          {
+            "object": "Date",
+            "property": "now",
+            "message": "Tests are deterministic: use vi.useFakeTimers / vi.setSystemTime (engineering.md § Testing)."
+          }
+        ],
+        "eslint/no-restricted-globals": [
+          "error",
+          {
+            "name": "setTimeout",
+            "message": "No sleeps; await the thing (engineering.md § Testing)."
+          },
+          {
+            "name": "setInterval",
+            "message": "No sleeps; await the thing (engineering.md § Testing)."
+          }
+        ]
+      }
+    }
+  ]
+}

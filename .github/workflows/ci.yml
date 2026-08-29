@@ -1,0 +1,179 @@
+name: ci
+
+# Triggers and why:
+#   push          every branch (tags excluded). engineering.md § Git says each
+#                 commit passes the check, so a feature branch without an open
+#                 PR still gets CI.
+#   push + PR     the "diff" job compares the change against its base
+#                 (event.before, or the merge base with the default branch for a
+#                 new branch; base.sha..head.sha for a PR) and fails if a
+#                 dependency was added or re-pinned without a line in
+#                 docs/adr/0010-dependencies.md, if any added line has the
+#                 shape of a secret (engineering.md § Security), or if an added
+#                 line is a task marker without an issue reference or commented-out
+#                 code, or a touched source file is over 500 lines
+#                 (engineering.md § Code style).
+#   pull_request  adds the "commits" job (PR title and every commit subject run
+#                 through .githooks/commit-msg). PRs are squash-merged, so the PR
+#                 title becomes the commit on main; the local hook can be skipped
+#                 with --no-verify, so this is the gate that counts. The check,
+#                 audit and hooks jobs are skipped on a pull_request from a
+#                 branch in this repository (the push run on the same head SHA
+#                 already produced them; running twice per push is waste) and run
+#                 only for pull requests from forks, which get no push run here.
+#                 GitHub treats a skipped required check as satisfied, and the
+#                 push run reports against the same head SHA, so the rulesets in
+#                 .github/rulesets/main.json still require all five contexts.
+#
+# Actions are pinned to a full commit SHA (engineering.md § Security: "dependency
+# updates are reviewed diffs, not blind bumps"); the trailing comment is the tag
+# the SHA was resolved from. Dependabot (.github/dependabot.yml) proposes updates
+# to these pins as reviewable PRs and keeps the comment in sync.
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+permissions:
+  contents: read
+
+# A newer push to the same PR or feature branch cancels the stale run. A push to
+# the default branch never cancels the previous one: engineering.md § Git says
+# main is always green, which needs every main commit to get a completed check.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.ref != format('refs/heads/{0}', github.event.repository.default_branch) }}
+
+jobs:
+  check:
+    name: check (pinned deps, fmt, lint, typecheck, test)
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # corepack must be enabled before setup-node so its pnpm cache can find pnpm.
+      - name: Enable corepack
+        run: corepack enable
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: Dependencies are exact pinned versions
+        run: sh .github/scripts/check-pinned-deps.sh
+      # --frozen-lockfile fails if package.json and pnpm-lock.yaml disagree, so
+      # lockfile drift is caught here; no separate diff step is needed.
+      - run: corepack pnpm install --frozen-lockfile
+      - run: corepack pnpm run check
+
+  audit:
+    name: audit (prod deps, fail on high or critical)
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Enable corepack
+        run: corepack enable
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: corepack pnpm install --frozen-lockfile
+      # --audit-level high: exit non-zero only for high or critical advisories.
+      - run: corepack pnpm audit --prod --audit-level high
+
+  hooks:
+    name: hooks (POSIX syntax, commit-msg good and bad messages)
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Hooks are executable POSIX sh
+        run: |
+          for h in .githooks/pre-commit .githooks/commit-msg .github/scripts/*.sh; do
+            test -x "$h" || { echo "$h is not executable"; exit 1; }
+            sh -n "$h"
+          done
+      - name: commit-msg accepts valid messages and rejects invalid ones
+        run: sh .github/scripts/test-commit-msg.sh
+      - name: check-dep-ledger catches unledgered dependency and onlyBuiltDependencies changes
+        run: sh .github/scripts/test-dep-ledger.sh
+      - name: check-secrets catches secret shapes and high-entropy literals, allows fixtures and removals
+        run: sh .github/scripts/test-secrets.sh
+      - name: check-added-lines catches task marker without issue, commented-out code, files over 500 lines, syntax and file-shape rules
+        run: sh .github/scripts/test-added-lines.sh
+
+  diff:
+    name: diff (dependency changes are ledgered, no secret shapes, code style on added lines)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Enable corepack
+        run: corepack enable
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+      # No install: the scripts need only git, node and POSIX sh.
+      - name: Dependency changes are ledgered, no added line is secret-shaped, code style holds on added lines
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            base=$PR_BASE; head=$PR_HEAD
+          else
+            head=$GITHUB_SHA
+            # event.before is all zeros for a new branch and may be unreachable
+            # after a force push; fall back to the merge base with the default
+            # branch, then to the empty tree (everything counts as added).
+            if git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+              base=$BEFORE
+            elif base=$(git merge-base "origin/$DEFAULT_BRANCH" "$head" 2>/dev/null); then :
+            else
+              base=$(git hash-object -t tree /dev/null)
+            fi
+          fi
+          echo "comparing $base..$head"
+          status=0
+          sh .github/scripts/check-dep-ledger.sh "$base" "$head" || status=1
+          sh .github/scripts/check-secrets.sh "$base" "$head" || status=1
+          sh .github/scripts/check-added-lines.sh "$base" "$head" || status=1
+          exit $status
+
+  commits:
+    name: commits (PR title and every commit are Conventional Commits)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history so base..head resolves without a shallow-clone boundary.
+          fetch-depth: 0
+      # The title goes through an env var, never interpolated into the script,
+      # so a crafted title cannot become shell.
+      - name: PR title is a valid Conventional Commit (it becomes the squash commit)
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          printf '%s\n' "$PR_TITLE" > "$RUNNER_TEMP/pr-title.txt"
+          sh .githooks/commit-msg "$RUNNER_TEMP/pr-title.txt"
+      - name: Every commit subject in the PR is a valid Conventional Commit
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          status=0
+          for sha in $(git rev-list --no-merges "$BASE..$HEAD"); do
+            git log -1 --format=%B "$sha" > "$RUNNER_TEMP/msg.txt"
+            if sh .githooks/commit-msg "$RUNNER_TEMP/msg.txt"; then
+              echo "ok      $(git log -1 --format='%h %s' "$sha")"
+            else
+              echo "REFUSED $(git log -1 --format='%h %s' "$sha")"
+              status=1
+            fi
+          done
+          exit $status

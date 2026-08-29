@@ -1,0 +1,138 @@
+#!/bin/sh
+# Pre-commit: refuse the commit unless what is being committed is green.
+#   1. Node must be 24 (.node-version); fail fast before anything slow runs.
+#   2. Every dependency in every package.json must be an exact pinned version.
+#   3. Every dependency added or re-pinned in the staged package.json files is
+#      named in docs/adr/0010-dependencies.md (engineering.md § Dependencies).
+#   4. No added line looks like a secret (engineering.md § Security).
+#   5. No added task marker without an issue reference, no commented-out code,
+#      no touched source file over 500 lines, and the syntax and file-shape
+#      rules oxlint has no rule for: decorators, `function`, plain `Error`,
+#      timers in tests, one export named after the file, composable names,
+#      SFC script/style shape, colour literals, protocol test siblings
+#      (engineering.md § TypeScript, § Code style, § Vue, § Testing).
+#   6. If package.json, pnpm-workspace.yaml or pnpm-lock.yaml is staged, the
+#      lockfile must already match (`pnpm install --frozen-lockfile
+#      --lockfile-only --offline`), so CI does not fail at install.
+#   7. `pnpm run check` (fmt check + lint + typecheck + test) must pass.
+# The check runs against the STAGED INDEX, not the working tree: unstaged edits
+# to tracked files are saved as a patch and taken out of the worktree for the
+# duration, then restored whatever the outcome, so `git add -p` followed by
+# commit validates exactly the tree CI will see. Untracked files are left in
+# place; they can only make the local check stricter than CI, never laxer.
+# Do not bypass with --no-verify; see docs/engineering.md § Git.
+set -eu
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "pre-commit: node not found on PATH; Node 24 is required (.node-version)" >&2
+  exit 1
+fi
+
+major=$(node -p 'process.versions.node.split(".")[0]')
+if [ "$major" != "24" ]; then
+  echo "pre-commit: Node 24 required, found $(node --version)" >&2
+  exit 1
+fi
+
+if ! command -v corepack >/dev/null 2>&1; then
+  echo "pre-commit: corepack not found on PATH (ships with Node 24)" >&2
+  exit 1
+fi
+
+root=$(git rev-parse --show-toplevel)
+cd "$root"
+
+# Nothing staged: let git print its own "nothing to commit" message.
+if git diff --cached --quiet; then
+  exit 0
+fi
+
+# Set unstaged changes to tracked files aside, if any, so the check sees the
+# index. The index-to-worktree diff is saved as a patch inside $GIT_DIR, the
+# worktree is reset to the index, and the patch is re-applied afterwards. The
+# patch applies cleanly by construction (the tree it is applied to is the tree
+# it was taken against), which `git stash --keep-index` / `stash pop` cannot
+# promise for a file that is partly staged.
+git_dir=$(git rev-parse --git-dir)
+patch="$git_dir/pre-commit-unstaged.patch"
+saved=0
+if ! git diff --quiet; then
+  git diff --binary --no-color --no-ext-diff >"$patch"
+  git checkout -q -- .
+  saved=1
+fi
+
+restore() {
+  if [ "$saved" = 1 ]; then
+    saved=0
+    # The check is read-only on tracked files, so this checkout is normally a
+    # no-op; it guarantees the patch lands on the tree it was taken from.
+    git checkout -q -- . 2>/dev/null || true
+    if git apply --whitespace=nowarn "$patch"; then
+      rm -f "$patch"
+    else
+      echo "pre-commit: could not restore unstaged changes automatically." >&2
+      echo "pre-commit: they are preserved in $patch; run 'git apply $patch'." >&2
+    fi
+  fi
+}
+trap restore EXIT
+trap 'restore; trap - EXIT; exit 130' INT TERM HUP
+
+pins=.github/scripts/check-pinned-deps.sh
+if [ ! -r "$pins" ]; then
+  echo "pre-commit: $pins is missing; commit refused" >&2
+  exit 1
+fi
+# The script prints its own diagnosis (unpinned entries, or a node/JSON error);
+# this line only says which gate refused, not why.
+if ! sh "$pins"; then
+  echo "pre-commit: dependency pin check ($pins) failed, see above; commit refused" >&2
+  exit 1
+fi
+
+ledger=.github/scripts/check-dep-ledger.sh
+if [ ! -r "$ledger" ]; then
+  echo "pre-commit: $ledger is missing; commit refused" >&2
+  exit 1
+fi
+if ! sh "$ledger" --staged; then
+  echo "pre-commit: dependency ledger check ($ledger) failed, see above; commit refused" >&2
+  exit 1
+fi
+
+secrets=.github/scripts/check-secrets.sh
+if [ ! -r "$secrets" ]; then
+  echo "pre-commit: $secrets is missing; commit refused" >&2
+  exit 1
+fi
+if ! sh "$secrets" --staged; then
+  echo "pre-commit: secret scan ($secrets) failed, see above; commit refused" >&2
+  exit 1
+fi
+
+rules=.github/scripts/check-added-lines.sh
+if [ ! -r "$rules" ]; then
+  echo "pre-commit: $rules is missing; commit refused" >&2
+  exit 1
+fi
+if ! sh "$rules" --staged; then
+  echo "pre-commit: code style check ($rules) failed, see above; commit refused" >&2
+  exit 1
+fi
+
+# Lockfile drift: only when a manifest or the lockfile is staged. --lockfile-only
+# touches neither node_modules nor the network (--offline), never rewrites the
+# lockfile under --frozen-lockfile, and exits 1 when package.json and
+# pnpm-lock.yaml disagree; the same condition fails CI at install.
+if ! git diff --cached --quiet -- package.json '*/package.json' pnpm-workspace.yaml pnpm-lock.yaml; then
+  if ! corepack pnpm install --frozen-lockfile --lockfile-only --offline --ignore-scripts; then
+    echo "pre-commit: pnpm-lock.yaml does not match package.json; run 'corepack pnpm install' and stage the lockfile; commit refused" >&2
+    exit 1
+  fi
+fi
+
+if ! corepack pnpm run check; then
+  echo "pre-commit: 'pnpm run check' failed; commit refused" >&2
+  exit 1
+fi

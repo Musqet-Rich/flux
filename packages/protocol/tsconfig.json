@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  // Zero runtime deps and no ambient types: the base's `types: []` stands.
+  // isolatedDeclarations keeps every export's type explicit so tsdown can emit .d.ts
+  // without the type-checker (docs/engineering.md § TypeScript).
+  "compilerOptions": {
+    "declaration": true,
+    "isolatedDeclarations": true
+  },
+  "include": ["src/**/*.ts"]
+}

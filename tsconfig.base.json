@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  // Shared by every package. The first block is docs/engineering.md § TypeScript verbatim;
+  // changing any of it means changing engineering.md in the same PR.
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "target": "ES2024",
+    "erasableSyntaxOnly": true,
+
+    // tsc only checks; tsdown and Vite emit. noEmit is also what allowImportingTsExtensions
+    // needs so sources can import './thing.ts' and run under Node type stripping unchanged.
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    // Node-only lib; the pwa widens it with DOM. Ambient types opt in per package
+    // (protocol: none; daemon/relay: node; pwa: vite/client) so browser code never
+    // sees Node globals and no package sees test globals.
+    "lib": ["ES2024"],
+    "types": [],
+    "skipLibCheck": true
+  }
+}

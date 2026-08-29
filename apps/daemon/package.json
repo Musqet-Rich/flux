@@ -1,0 +1,16 @@
+{
+  "name": "@flux/daemon",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@flux/protocol": "workspace:*",
+    "ws": "8.21.3"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

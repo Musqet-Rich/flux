@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  // Browser project, checked with vue-tsc so .vue files are type-checked too.
+  // SFCs only (docs/engineering.md § Vue), so no jsx setting.
+  // vite.config.ts is deliberately not here: importing 'vite' pulls @types/node into the
+  // program, which would let browser code use `process` unnoticed. The root tsconfig.json
+  // checks it with Node types instead.
+  "compilerOptions": {
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "types": ["vite/client"]
+  },
+  "include": ["src/**/*.ts", "src/**/*.vue"]
+}

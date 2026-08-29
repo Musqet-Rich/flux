@@ -1,0 +1,12 @@
+# Keeps the SHA-pinned actions in .github/workflows/*.yml current as reviewable
+# PRs (engineering.md § Security: reviewed diffs, not blind bumps). npm packages
+# are deliberately not covered: every package change goes through the ledger
+# process in docs/adr/0010-dependencies.md by hand.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci

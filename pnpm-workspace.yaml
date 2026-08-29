@@ -1,0 +1,14 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Supply-chain posture (engineering.md § Toolchain, ADR 0001).
+# minimumReleaseAge is pnpm's default (1 day = 1440 minutes); stated explicitly so nobody lowers it by accident.
+minimumReleaseAge: 1440
+
+# Lifecycle scripts (preinstall/install/postinstall) of dependencies are blocked by default in pnpm 11.
+# Allow-list is deliberately empty; add a package here only with a reason in docs/adr/0010-dependencies.md.
+onlyBuiltDependencies: []
+
+strictPeerDependencies: true
+saveExact: true
