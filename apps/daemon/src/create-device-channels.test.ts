@@ -254,3 +254,71 @@ test('a device removing itself gets the answer before the notice', async () => {
   expect(await openWire(channel, last(h.out))).toEqual(revoked);
   expect(h.channels.peers()).toEqual([]);
 });
+
+const opensOn = async (channel: ReturnType<typeof createChannel>, frames: Bytes[]) => {
+  const opened = await Promise.all(frames.map((data) => channel.open(data).catch(() => null)));
+  return opened.filter((plain) => plain !== null).length;
+};
+
+// Two tabs of one browser profile share the device's static key and so its fingerprint, but
+// each handshake derives its own keys: the box keeps a channel per handshake and a frame
+// from one tab opens only on that tab's channel. Channels seal in parallel, so a pair of
+// frames is checked as a pair rather than by position.
+test('two tabs of one device each get their own channel and both stay connected', async () => {
+  const h = await setup(true);
+  const { channel: a } = await connectDevice(h);
+  const { channel: b } = await connectDevice(h);
+  expect(h.channels.peers()).toMatchObject([{ device: { deviceId: 'd1' } }]);
+  await h.channels.broadcast(assistant(1, 'hi'), h.send);
+  expect(h.out).toHaveLength(4);
+  expect(await opensOn(a, h.out.slice(-2))).toBe(1);
+  expect(await opensOn(b, h.out.slice(-2))).toBe(1);
+  expect(await h.channels.sendTo(firstFingerprint(h), assistant(2, 'yo'), h.send)).toBe(true);
+  expect(h.out).toHaveLength(6);
+  expect(await opensOn(a, h.out.slice(-2))).toBe(1);
+  expect(await opensOn(b, h.out.slice(-2))).toBe(1);
+  await h.channels.handleFrame(await rpcFrame(a), h.send);
+  await h.channels.handleFrame(await rpcFrame(b), h.send);
+  expect(h.seen).toHaveLength(2);
+  expect(await openWire(a, nth(h.out, -2))).toMatchObject({ kind: 'rpc.result', id: 'r2' });
+  expect(await openWire(b, last(h.out))).toMatchObject({ kind: 'rpc.result', id: 'r2' });
+  await expect(a.open(last(h.out))).rejects.toThrow(/authentication failed|already seen/u);
+  await expect(b.open(nth(h.out, -2))).rejects.toThrow(/authentication failed|already seen/u);
+});
+
+test('revoking a device cuts every tab; one tab going quiet leaves the other working', async () => {
+  const h = await setup(true);
+  const { channel: a } = await connectDevice(h);
+  const { channel: b } = await connectDevice(h);
+  await h.channels.handleFrame(await rpcFrame(b), h.send);
+  expect(await openWire(b, last(h.out))).toMatchObject({ kind: 'rpc.result', id: 'r2' });
+  await h.channels.revoke('d1', h.send);
+  expect(h.channels.peers()).toEqual([]);
+  expect(await openWire(a, nth(h.out, -2))).toEqual(revoked);
+  expect(await openWire(b, last(h.out))).toEqual(revoked);
+  const before = h.out.length;
+  await h.channels.handleFrame(await rpcFrame(a), h.send);
+  await h.channels.handleFrame(await rpcFrame(b), h.send);
+  expect(h.out).toHaveLength(before);
+});
+
+// The relay's guest cap (protocol.md § 2) bounds the channels the box keeps per device.
+const guestCap = 8;
+
+// The relay never tells the host that a guest left, so a closed tab's channel lingers until
+// the device handshakes past the relay's guest cap; then the channel heard from least recently
+// is dropped, which is never one that has spoken since the others arrived.
+test('past the per-device cap the quietest channel is dropped', async () => {
+  const h = await setup(true);
+  const { channel: first } = await connectDevice(h);
+  const { channel: second } = await connectDevice(h);
+  await h.channels.handleFrame(await rpcFrame(first), h.send);
+  const later = await Promise.all(Array.from({ length: guestCap - 1 }, () => connectDevice(h)));
+  await h.channels.broadcast(assistant(1, 'x'), h.send);
+  const frames = h.out.slice(-guestCap);
+  expect(await opensOn(first, frames)).toBe(1);
+  expect(await opensOn(second, frames)).toBe(0);
+  const forLater = await Promise.all(later.map((tab) => opensOn(tab.channel, frames)));
+  expect(forLater).toEqual(later.map(() => 1));
+  expect(h.channels.peers()).toHaveLength(1);
+});

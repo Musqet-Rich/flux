@@ -3,9 +3,11 @@ import { base64url, bytes, createChannel, frame, handshake, room, wire } from '@
 
 import type { BoxIdentity, Device } from './create-device-store.ts';
 
-// The box side of protocol.md § 3: one encrypted channel per connected device, keyed by the
-// device's fingerprint. The transport hands every binary frame from the relay in here and sends
-// whatever comes back out; this module never touches a socket.
+// The box side of protocol.md § 3: one encrypted channel per completed handshake, grouped by
+// the device's fingerprint. Every tab of one browser profile shares the device's static key, so
+// one device may hold several channels at once, each with its own session keys. The transport
+// hands every binary frame from the relay in here and sends whatever comes back out; this
+// module never touches a socket.
 
 export interface Peer {
   fingerprint: string;
@@ -16,11 +18,13 @@ export interface Peer {
 export interface DeviceChannels {
   handleFrame: (data: Bytes, send: (data: Bytes) => void) => Promise<void>;
   broadcast: (message: Wire, send: (data: Bytes) => void) => Promise<void>;
+  // Every channel of the device gets its own sealed copy; false when it has none.
   sendTo: (fingerprint: string, message: Wire, send: (data: Bytes) => void) => Promise<boolean>;
   // Revokes a device on every channel it holds: its trust is gone at once (frames already
   // in flight are dropped, a handler sees `device: null`), it is told, and it is forgotten. A
   // channel busy answering an rpc (the device removing itself) gets that answer first.
   revoke: (deviceId: string, send: (data: Bytes) => void) => Promise<void>;
+  // One entry per device, however many channels it holds.
   peers: () => Peer[];
   reset: () => void;
 }
@@ -33,18 +37,28 @@ export interface DeviceChannelsOptions {
   onMessage: (peer: Peer, message: Wire) => Promise<Wire | null>;
 }
 
+// The relay admits this many guests per room (protocol.md § 2), so a device cannot hold more
+// live connections than this. The relay tells the host nothing when a guest leaves, so a channel
+// whose tab is gone is only found out when the device handshakes past the cap: the channel
+// heard from least recently goes.
+const maxChannelsPerDevice = 8;
+
 interface Connected {
   peer: Peer;
   channel: Channel;
-  // Frames of this device being answered right now; the notice waits for them.
+  // Frames of this channel being answered right now; the notice waits for them.
   busy: number;
   // The device id this channel was revoked as, once it is.
   revoked: string | null;
+  // The tick of the last frame this channel opened, or of its handshake.
+  heard: number;
 }
 
 interface State {
   options: DeviceChannelsOptions;
-  connected: Map<string, Connected>;
+  // Channels by device fingerprint, in handshake order.
+  connected: Map<string, Connected[]>;
+  tick: number;
 }
 
 type Send = (data: Bytes) => void;
@@ -75,6 +89,24 @@ const parseHello = (payload: Bytes): DeviceHelloBytes | null => {
   };
 };
 
+const channelsOf = (state: State, fingerprint: string): Connected[] =>
+  state.connected.get(fingerprint) ?? [];
+
+const forget = (state: State, entry: Connected): void => {
+  const remaining = channelsOf(state, entry.peer.fingerprint).filter((c) => c !== entry);
+  if (remaining.length === 0) state.connected.delete(entry.peer.fingerprint);
+  else state.connected.set(entry.peer.fingerprint, remaining);
+};
+
+const admit = (state: State, entry: Connected): void => {
+  const entries = [...channelsOf(state, entry.peer.fingerprint), entry];
+  if (entries.length > maxChannelsPerDevice) {
+    const quietest = entries.reduce((a, b) => (b.heard < a.heard ? b : a));
+    entries.splice(entries.indexOf(quietest), 1);
+  }
+  state.connected.set(entry.peer.fingerprint, entries);
+};
+
 const accept = async (state: State, payload: Bytes, send: Send): Promise<void> => {
   const { options } = state;
   const hello = parseHello(payload);
@@ -98,7 +130,8 @@ const accept = async (state: State, payload: Bytes, send: Send): Promise<void> =
   const fingerprint = hex(fingerprintBytes);
   const channel = createChannel({ keys, fingerprint: fingerprintBytes });
   const peer = { fingerprint, publicKey: hello.devPub, device };
-  state.connected.set(fingerprint, { peer, channel, busy: 0, revoked: null });
+  state.tick += 1;
+  admit(state, { peer, channel, busy: 0, revoked: null, heard: state.tick });
   const reply = {
     v: 1,
     boxEph: base64url.encode(ephemeral.publicKey),
@@ -120,20 +153,39 @@ const openWire = async (entry: Connected, data: Bytes): Promise<Wire | null> => 
   }
 };
 
+interface Opened {
+  entry: Connected;
+  message: Wire;
+}
+
+// The wire fingerprint names the device, not the connection; each handshake derived its own
+// keys, so a frame opens on exactly one of the device's channels and fails on the rest. Trying
+// them all at once is cheap (at most `maxChannelsPerDevice`) and a failed open leaves a channel
+// as it was.
+const openOnDevice = async (entries: Connected[], data: Bytes): Promise<Opened | null> => {
+  const tried = await Promise.all(
+    entries.map(async (entry): Promise<Opened | null> => {
+      const message = await openWire(entry, data);
+      return message === null ? null : { entry, message };
+    }),
+  );
+  return tried.find((opened) => opened !== null) ?? null;
+};
+
 const notice = (deviceId: string): Wire => ({
   kind: 'ephemeral',
   data: { type: 'device.revoked', deviceId },
 });
 
 const disconnect = async (state: State, entry: Connected, send: Send): Promise<void> => {
-  state.connected.delete(entry.peer.fingerprint);
+  forget(state, entry);
   if (entry.revoked !== null) send(await entry.channel.seal(encode(notice(entry.revoked))));
 };
 
 const revoke = async (state: State, deviceId: string, send: Send): Promise<void> => {
-  const entries = [...state.connected.values()].filter(
-    (entry) => entry.peer.device?.deviceId === deviceId,
-  );
+  const entries = [...state.connected.values()]
+    .flat()
+    .filter((entry) => entry.peer.device?.deviceId === deviceId);
   for (const entry of entries) {
     entry.revoked = deviceId;
     // From here every handler, including one mid-call, sees a stranger.
@@ -144,10 +196,14 @@ const revoke = async (state: State, deviceId: string, send: Send): Promise<void>
   );
 };
 
-const deliver = async (state: State, entry: Connected, data: Bytes, send: Send): Promise<void> => {
-  const message = await openWire(entry, data);
+const deliver = async (state: State, entries: Connected[], data: Bytes, send: Send) => {
+  const opened = await openOnDevice(entries, data);
+  if (opened === null) return;
+  const { entry, message } = opened;
+  state.tick += 1;
+  entry.heard = state.tick;
   // A frame that was in flight when the device was revoked is dropped, not answered.
-  if (message === null || entry.revoked !== null) return;
+  if (entry.revoked !== null) return;
   entry.busy += 1;
   try {
     const reply = await state.options.onMessage(entry.peer, message);
@@ -169,30 +225,34 @@ const handleFrame = async (state: State, data: Bytes, send: Send): Promise<void>
     await accept(state, decoded.payload, send);
     return;
   }
-  const entry = state.connected.get(hex(new Uint8Array(decoded.fingerprint)));
-  if (entry !== undefined) await deliver(state, entry, data, send);
+  const entries = channelsOf(state, hex(new Uint8Array(decoded.fingerprint)));
+  if (entries.length > 0) await deliver(state, entries, data, send);
+};
+
+// Sealed and sent per channel, never sealed for all and then sent: a channel numbers its
+// frames as it seals them, and a reply sealed after this broadcast (an rpc.result behind
+// the event a handler appended) must not leave before it, or the device refuses the event.
+const sealToAll = async (entries: Connected[], message: Wire, send: Send): Promise<void> => {
+  const payload = encode(message);
+  await Promise.all(entries.map((entry) => entry.channel.seal(payload).then(send)));
 };
 
 export const createDeviceChannels = (options: DeviceChannelsOptions): DeviceChannels => {
-  const state: State = { options, connected: new Map() };
+  const state: State = { options, connected: new Map(), tick: 0 };
   return {
     handleFrame: (data, send) => handleFrame(state, data, send),
     sendTo: async (fingerprint, message, send) => {
-      const entry = state.connected.get(fingerprint);
-      if (entry === undefined) return false;
-      send(await entry.channel.seal(encode(message)));
+      const entries = channelsOf(state, fingerprint);
+      if (entries.length === 0) return false;
+      await sealToAll(entries, message, send);
       return true;
     },
     revoke: (deviceId, send) => revoke(state, deviceId, send),
-    // Sealed and sent per device, never sealed for all and then sent: a channel numbers its
-    // frames as it seals them, and a reply sealed after this broadcast (an rpc.result behind
-    // the event a handler appended) must not leave before it, or the device refuses the event.
-    broadcast: async (message, send) => {
-      const payload = encode(message);
-      const entries = [...state.connected.values()];
-      await Promise.all(entries.map((entry) => entry.channel.seal(payload).then(send)));
-    },
-    peers: () => [...state.connected.values()].map((entry) => entry.peer),
+    broadcast: (message, send) => sealToAll([...state.connected.values()].flat(), message, send),
+    peers: () =>
+      [...state.connected.values()].flatMap((entries) =>
+        entries.slice(0, 1).map((entry) => entry.peer),
+      ),
     reset: () => {
       state.connected.clear();
     },
