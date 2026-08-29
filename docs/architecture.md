@@ -106,6 +106,16 @@ Screens (P1): pair (camera via `BarcodeDetector`), sessions list / tabs, session
 
 State: one store per session holding `events[]`, `lastSeq`, `pendingComments[]`, `streaming` (current delta buffer). A connection store holds socket state and the RPC client.
 
+Layout of `apps/pwa/src`, as built:
+
+- `client/`: connection, RPC client, session log, sync, pairing, storage. No Vue; runs in Node against `test/fake-relay.ts`.
+- `store/`: one reactive store (`createStore`) over storage plus connection: boot, pair, open a session (cache first, then `events.sync`), send, answer, comments, session list, push subscription after `hello`. `app-store.ts` binds it to IndexedDB and the native WebSocket. Pending comments and the open ask are derived from the log (`pendingComments`, `openAsk`), never stored separately.
+- `router/`: a hand-rolled route switch (ADR 0004) over `history.pushState`: `/`, `/new`, `/s/<id>`, `/s/<id>/changes`, `/s/<id>/diff?path=…`. The URL fragment is reserved for pairing links.
+- `components/`: `Pair`, `Shell` (tabs, routed screen, status bar), `SessionTabs`, `SessionView` (timeline, streaming text, `AskCard`, `CommentTray`, composer), `ChangesView`, `DiffView`, `NewSessionView`, `StatusBar`, `EventItem`.
+- `editor/`: the CodeMirror unified diff (ADR 0005) and selection-to-line-range mapping. The editor is mounted inside a shadow root: CodeMirror injects its styles as a `<style>` element, which the relay's CSP (`default-src 'self'`, no `unsafe-inline`) blocks in the document, while in a shadow root it uses a constructed stylesheet, which CSP does not govern.
+- `sw.ts`: the service worker, built by Vite as a second entry to `/sw.js` so it is type-checked and linted like everything else. Push → notification; tap → open `/s/<id>`. No fetch caching at P1.
+- `styles/base.css`: the only global stylesheet, linked from `index.html`. Colours are custom properties.
+
 ## Sync model
 
 - Box is the only source of truth. No buffering on the relay. If the box is offline the PWA shows cached state and a disconnected banner.

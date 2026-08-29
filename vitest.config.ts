@@ -6,9 +6,9 @@ import { defineConfig } from 'vitest/config';
 // `extends: true` makes each one pick up `include` and `allowOnly` below, and the pwa extends
 // its own vite.config.ts (it needs the Vue plugin) with the same options restated.
 //
-// PWA component tests (@vue/test-utils `mount`, engineering.md § Testing) need a DOM environment
-// and therefore a `happy-dom` (or `jsdom`) dev dependency, which must go through the ADR 0010
-// ledger first. No DOM project is configured until it lands; see docs/scaffold-notes.md.
+// PWA component and editor tests (@vue/test-utils `mount`, engineering.md § Testing) need a DOM,
+// so they run in a second pwa project under happy-dom (ADR 0010 ledger); everything else in the
+// pwa (client, store, router) is plain TypeScript and runs in Node like the other packages.
 
 // Tests are `thing.test.ts` next to `thing.ts` (engineering.md § Testing), so `.spec.ts` and
 // files under `__tests__/` are not collected and cannot pass by accident. A `.only` left in a
@@ -17,6 +17,7 @@ const testRules = {
   include: ['{src,test}/**/*.test.ts'],
   allowOnly: false,
 };
+const pwaDom = ['src/components/**/*.test.ts', 'src/editor/**/*.test.ts'];
 
 export default defineConfig({
   test: {
@@ -27,7 +28,17 @@ export default defineConfig({
       { extends: true, test: { name: '@flux/relay', root: 'apps/relay' } },
       {
         extends: './apps/pwa/vite.config.ts',
-        test: { name: '@flux/pwa', root: 'apps/pwa', ...testRules },
+        test: { name: '@flux/pwa', root: 'apps/pwa', ...testRules, exclude: pwaDom },
+      },
+      {
+        extends: './apps/pwa/vite.config.ts',
+        test: {
+          name: '@flux/pwa-dom',
+          root: 'apps/pwa',
+          ...testRules,
+          include: pwaDom,
+          environment: 'happy-dom',
+        },
       },
     ],
     // Coverage is measured and enforced for packages/protocol only
