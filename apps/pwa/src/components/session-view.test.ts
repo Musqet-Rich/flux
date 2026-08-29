@@ -378,3 +378,34 @@ test('a long subagent chat shows its last 200 rows until asked for earlier ones'
   expect(el.scrollTop).toBe(0);
   store.stop();
 });
+
+test('reply from a bubble menu sends replyTo, shows the chip, and clears on send', async () => {
+  const box = await pairedStore([], { 'agent.send': () => ({ seq: 2 }) });
+  const { store, relay, event } = box;
+  const wrapper = mount(SessionView, { props: { store, session: 's1' } });
+  await until(() => store.state.logs['s1'] !== undefined);
+  await relay.emit(event(1, 'msg.assistant', { text: 'Two options:\n\nA or B' }));
+  await until(() => store.state.logs['s1']?.lastSeq === 1);
+  await flushPromises();
+  await wrapper.find('.assistant .trigger').trigger('click');
+  await wrapper.findAll('.assistant [role="menuitem"]')[1]?.trigger('click');
+  expect(wrapper.find('.composer .reply .who').text()).toBe('Replying to the agent');
+  expect(wrapper.find('.composer .reply .line').text()).toBe('Two options:');
+  await wrapper.find('textarea').setValue('B');
+  await wrapper.find('form.row').trigger('submit');
+  await until(() => box.calls('agent.send').length === 1);
+  expect(box.calls('agent.send')).toEqual([{ session: 's1', text: 'B', replyTo: 1 }]);
+  await until(() => Reflect.get(wrapper.findComponent(Composer).vm, 'sending') === false);
+  await flushPromises();
+  expect(wrapper.find('.composer .reply').exists()).toBe(false);
+  await relay.emit(event(2, 'msg.user', { text: 'B', replyTo: 1 }));
+  await until(() => store.state.logs['s1']?.lastSeq === 2);
+  await flushPromises();
+  expect(wrapper.find('.user .quote').text()).toBe('↩ Two options:');
+  await wrapper.find('.user .trigger').trigger('click');
+  await wrapper.findAll('.user [role="menuitem"]')[1]?.trigger('click');
+  expect(wrapper.find('.composer .reply .who').text()).toBe('Replying to you');
+  await wrapper.find('.composer .reply button').trigger('click');
+  expect(wrapper.find('.composer .reply').exists()).toBe(false);
+  store.stop();
+});

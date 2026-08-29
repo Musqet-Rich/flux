@@ -19,8 +19,8 @@ export interface DeleteOptions {
 export type DeleteOutcome = { ok: true } | { ok: false; dirty: string | null };
 
 export interface SessionActions {
-  // Sends a message carrying every pending comment.
-  send: (session: string, text: string) => Promise<boolean>;
+  // Sends a message carrying every pending comment; `replyTo` is the seq of the message it answers.
+  send: (session: string, text: string, replyTo?: number) => Promise<boolean>;
   clearSession: (session: string) => Promise<boolean>;
   // The new title reaches the tab through `session.renamed`, so no refresh is needed.
   renameSession: (session: string, title: string) => Promise<boolean>;
@@ -29,10 +29,20 @@ export interface SessionActions {
   deleteSession: (session: string, options: DeleteOptions) => Promise<DeleteOutcome>;
 }
 
-const send = (i: StoreInternals, session: string, text: string): Promise<boolean> => {
+const send = (
+  i: StoreInternals,
+  session: string,
+  text: string,
+  replyTo?: number,
+): Promise<boolean> => {
   const events = i.logs.get(session)?.events() ?? [];
   const commentIds = pendingComments(events).map((c) => c.commentId);
-  const params = commentIds.length > 0 ? { session, text, commentIds } : { session, text };
+  const params = {
+    session,
+    text,
+    ...(commentIds.length > 0 ? { commentIds } : {}),
+    ...(replyTo === undefined ? {} : { replyTo }),
+  };
   return boxLink.attempt(i, () => boxLink.call(i, 'agent.send', params));
 };
 
@@ -66,7 +76,7 @@ const remove = async (
 };
 
 export const sessionActions = (i: StoreInternals): SessionActions => ({
-  send: (session, text) => send(i, session, text),
+  send: (session, text, replyTo) => send(i, session, text, replyTo),
   clearSession: (session) =>
     boxLink.attempt(i, () => boxLink.call(i, 'sessions.clear', { session })),
   renameSession: (session, title) =>

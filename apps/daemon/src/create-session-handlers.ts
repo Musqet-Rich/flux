@@ -6,6 +6,7 @@ import type { Peer } from './create-device-channels.ts';
 import { DaemonError } from './daemon-error.ts';
 import type { HandlerContext } from './handler-context.ts';
 import { inside } from './inside.ts';
+import type { Reply } from './render-reply.ts';
 import { sessionLifecycle } from './session-lifecycle.ts';
 
 // Session, agent, comment and event methods of protocol.md § 7.
@@ -87,15 +88,26 @@ const createSession = async (
   return summary;
 };
 
+// The message a reply answers, read from the log so the quote the agent sees is the log's text.
+const quoted = (ctx: HandlerContext, session: string, seq: number): Reply => {
+  const event = ctx.log.read(session, seq - 1, 1).events.find((e) => e.seq === seq);
+  if (event !== undefined && fluxEvent.isKnown(event)) {
+    if (event.type === 'msg.user') return { seq, from: 'user', text: event.payload.text };
+    if (event.type === 'msg.assistant') return { seq, from: 'assistant', text: event.payload.text };
+  }
+  throw new DaemonError('bad_params', `replyTo ${seq} is not a message in this session`);
+};
+
 const sendMessage = async (
   ctx: HandlerContext,
-  params: { session: string; text: string; commentIds?: string[] },
+  params: { session: string; text: string; commentIds?: string[]; replyTo?: number },
 ): Promise<{ seq: number }> => {
   const record = ctx.sessions.get(params.session);
   const commentIds = params.commentIds ?? [];
   const comments = ctx.comments.get(params.session, commentIds);
   const refs: CodeRef[] = comments.map((c) => c.ref);
-  const seq = await ctx.supervisor(record).send(params.text, refs, commentIds);
+  const reply = params.replyTo === undefined ? null : quoted(ctx, params.session, params.replyTo);
+  const seq = await ctx.supervisor(record).send(params.text, refs, commentIds, reply);
   if (commentIds.length > 0) {
     ctx.comments.markSent(commentIds, seq);
     ctx.log.append(params.session, { type: 'comment.sent', payload: { commentIds, msgSeq: seq } });

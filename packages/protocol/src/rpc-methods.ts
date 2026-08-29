@@ -115,7 +115,7 @@ export interface RpcMethods {
   // Gives the session a new title, logged as `session.renamed`; `bad_params` on a blank one.
   'sessions.rename': { params: { session: string; title: string }; result: Record<string, never> };
   'agent.send': {
-    params: { session: string; text: string; commentIds?: string[] };
+    params: { session: string; text: string; commentIds?: string[]; replyTo?: number };
     result: { seq: number };
   };
   'agent.answer': {
@@ -223,7 +223,8 @@ export const rpcMethods: ParamGuards = {
   'agent.send': (v): v is RpcMethods['agent.send']['params'] =>
     withSession(v) &&
     isString(v['text']) &&
-    isOptional(v['commentIds'], (c): c is string[] => isArrayOf(c, isString)),
+    isOptional(v['commentIds'], (c): c is string[] => isArrayOf(c, isString)) &&
+    isOptional(v['replyTo'], (n): n is number => isInteger(n, 1)),
   'agent.answer': (v): v is RpcMethods['agent.answer']['params'] =>
     withSession(v) && isString(v['askId']) && isString(v['answer']),
   'agent.interrupt': withSession,

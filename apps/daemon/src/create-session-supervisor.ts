@@ -6,6 +6,8 @@ import type { EventInput, EventLog } from './create-event-log.ts';
 import type { GitService } from './create-git-service.ts';
 import type { SessionRecord, SessionStore } from './create-session-store.ts';
 import { renderRefs } from './render-refs.ts';
+import type { Reply } from './render-reply.ts';
+import { renderReply } from './render-reply.ts';
 
 // One session = one agent process + one worktree + one event stream (architecture.md § Daemon).
 // The supervisor owns the process lifecycle and is the only writer to this session's log. Which
@@ -42,7 +44,13 @@ export interface AgentAdapter {
 }
 
 export interface SessionSupervisor {
-  send: (text: string, refs?: CodeRef[], commentIds?: string[]) => Promise<number>;
+  // `reply` is the message this one answers, already read from the log by the caller.
+  send: (
+    text: string,
+    refs?: CodeRef[],
+    commentIds?: string[],
+    reply?: Reply | null,
+  ) => Promise<number>;
   // A flux_ask in flight: waiting_user while true, back to running when answered.
   waiting: (on: boolean) => void;
   interrupt: () => void;
@@ -169,15 +177,17 @@ const send = async (
   text: string,
   refs: CodeRef[],
   commentIds: string[],
+  reply: Reply | null,
 ): Promise<number> => {
   const contents = await Promise.all(refs.map((ref) => fileContent(ctx, ref)));
   const payload = {
     text,
     ...(refs.length === 0 ? {} : { refs }),
     ...(commentIds.length === 0 ? {} : { commentIds }),
+    ...(reply === null ? {} : { replyTo: reply.seq }),
   };
   const event = append(ctx, { type: 'msg.user', payload });
-  ensureAgent(ctx).send(renderRefs(text, refs, contents));
+  ensureAgent(ctx).send(renderReply(renderRefs(text, refs, contents), reply));
   setState(ctx, 'running');
   return event.seq;
 };
@@ -194,7 +204,8 @@ export const createSessionSupervisor = (options: SupervisorOptions): SessionSupe
     queue: Promise.resolve(),
   };
   return {
-    send: (text, refs = [], commentIds = []) => send(ctx, text, refs, commentIds),
+    send: (text, refs = [], commentIds = [], reply = null) =>
+      send(ctx, text, refs, commentIds, reply),
     // An answer that lands after close (the ask's connection dropping with the agent) must not
     // put a closed session back to running.
     waiting: (on) => {
