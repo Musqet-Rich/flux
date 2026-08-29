@@ -3,6 +3,7 @@ import { pairing } from '@flux/protocol';
 import { computed, ref } from 'vue';
 
 import { useScanner } from '../composables/useScanner.ts';
+import { requestPushPermission } from '../push/request-push-permission.ts';
 import type { StorePhase } from '../store/store-state.ts';
 
 // The first screen: scan the QR that `flux pair` prints, or paste the link it encodes.
@@ -26,11 +27,14 @@ const submit = (value: string): void => {
     return;
   }
   invalid.value = false;
+  // The tap that pairs is the gesture the notification permission dialog needs; the
+  // subscription itself follows once the box has said hello.
+  requestPushPermission();
   emit('pair', url.origin, url.hash);
 };
 
 // Destructured so the template can bind `ref="video"` to the composable's element ref.
-const { supported, active, video, start, stop } = useScanner(submit);
+const { supported, active, error: camera, video, start, stop } = useScanner(submit);
 const busy = computed(() => props.phase === 'booting' || props.phase === 'pairing');
 const heading = computed(() => {
   if (props.phase === 'booting') return 'Loading…';
@@ -39,7 +43,7 @@ const heading = computed(() => {
 });
 const message = computed(() => {
   if (invalid.value) return 'That is not a pairing link.';
-  return props.error;
+  return props.error ?? camera.value;
 });
 </script>
 

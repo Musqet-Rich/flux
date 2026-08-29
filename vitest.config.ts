@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 
 // One Vitest run for the whole workspace, one project per package, each named after its
 // package.json so `vitest --project @flux/<name>` works uniformly. Projects are defined inline
@@ -28,7 +28,12 @@ export default defineConfig({
       { extends: true, test: { name: '@flux/relay', root: 'apps/relay' } },
       {
         extends: './apps/pwa/vite.config.ts',
-        test: { name: '@flux/pwa', root: 'apps/pwa', ...testRules, exclude: pwaDom },
+        test: {
+          name: '@flux/pwa',
+          root: 'apps/pwa',
+          ...testRules,
+          exclude: [...configDefaults.exclude, ...pwaDom],
+        },
       },
       {
         extends: './apps/pwa/vite.config.ts',

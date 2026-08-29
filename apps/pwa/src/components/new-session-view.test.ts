@@ -1,7 +1,8 @@
-import { mount } from '@vue/test-utils';
-import { expect, test, vi } from 'vitest';
+import { flushPromises, mount } from '@vue/test-utils';
+import { expect, test } from 'vitest';
 
 import { pairedStore } from '../../test/paired-store.ts';
+import { until } from '../../test/until.ts';
 import NewSessionView from './NewSessionView.vue';
 
 test('lists repos, creates the session, sends the first prompt and emits created', async () => {
@@ -25,9 +26,9 @@ test('lists repos, creates the session, sends the first prompt and emits created
     'agent.send': () => ({ seq: 1 }),
   });
   const wrapper = mount(NewSessionView, { props: { store: box.store } });
-  await vi.waitFor(() => {
-    expect(wrapper.findAll('option').length).toBe(2);
-  });
+  await until(() => Reflect.get(wrapper.vm, 'repos').length === 2);
+  await flushPromises();
+  expect(wrapper.findAll('option').length).toBe(2);
   expect(wrapper.find('button[type=submit]').attributes('disabled')).toBeDefined();
   await wrapper.find('select').setValue('/repos/b');
   await wrapper.find('#new-branch').setValue('feat/x');
@@ -35,9 +36,9 @@ test('lists repos, creates the session, sends the first prompt and emits created
   await wrapper.find('#new-prompt').setValue('Build it');
   expect(wrapper.find('button[type=submit]').attributes('disabled')).toBeUndefined();
   await wrapper.find('form').trigger('submit');
-  await vi.waitFor(() => {
-    expect(wrapper.emitted('created')).toEqual([['s9']]);
-  });
+  await until(() => box.store.state.sessions.length === 2);
+  await until(() => Reflect.get(wrapper.vm, 'busy') === false);
+  expect(wrapper.emitted('created')).toEqual([['s9']]);
   expect(box.calls('sessions.create')).toEqual([
     { repo: '/repos/b', branch: 'feat/x', agent: 'claude', title: 'Title' },
   ]);
@@ -51,14 +52,13 @@ test('shows the box error when creation fails', async () => {
     'repos.list': () => ({ repos: [{ path: '/repos/a', name: 'a', branches: [] }] }),
   });
   const wrapper = mount(NewSessionView, { props: { store: box.store } });
-  await vi.waitFor(() => {
-    expect(wrapper.findAll('option').length).toBe(1);
-  });
+  await until(() => Reflect.get(wrapper.vm, 'repos').length === 1);
+  await flushPromises();
   await wrapper.find('#new-prompt').setValue('go');
   await wrapper.find('form').trigger('submit');
-  await vi.waitFor(() => {
-    expect(wrapper.find('.error').text()).toBe('no sessions.create');
-  });
+  await until(() => Reflect.get(wrapper.vm, 'failure') === 'no sessions.create');
+  await flushPromises();
+  expect(wrapper.find('.error').text()).toBe('no sessions.create');
   expect(wrapper.emitted('created')).toBeUndefined();
   box.store.stop();
 });

@@ -104,12 +104,12 @@ Vue 3 (Composition API, `<script setup lang="ts">`), Vite, CodeMirror 6 with `@c
 
 Screens (P1): pair (camera via `BarcodeDetector`), sessions list / tabs, session view (chat + tool timeline), changes (file list → diff view with line comments and a comment tray), new session. Settings is P2.
 
-State: one store per session holding `events[]`, `lastSeq`, `pendingComments[]`, `streaming` (current delta buffer). A connection store holds socket state and the RPC client.
+State: one reactive store for the app. It holds the connection (status, daemon name, last error, push state, rate-limit windows), the session list, and one log view per opened session with `events[]`, `lastSeq` and `streaming` (current delta buffer). Pending comments and the open ask are derived from the events, not stored.
 
 Layout of `apps/pwa/src`, as built:
 
 - `client/`: connection, RPC client, session log, sync, pairing, storage. No Vue; runs in Node against `test/fake-relay.ts`.
-- `store/`: one reactive store (`createStore`) over storage plus connection: boot, pair, open a session (cache first, then `events.sync`), send, answer, comments, session list, push subscription after `hello`. `app-store.ts` binds it to IndexedDB and the native WebSocket. Pending comments and the open ask are derived from the log (`pendingComments`, `openAsk`), never stored separately.
+- `store/`: one reactive store (`createStore`) over storage plus connection: boot, pair, open a session (cache first, then `events.sync`), send, answer, comments, session list, push subscription. Actions a view fires resolve to a boolean and put their failure in `state.error` for the status bar. The push subscription is stored on the box after `hello` if permission is already granted (the Pair tap asks for it), otherwise the status bar offers "Enable notifications" so the permission dialog runs under a gesture. The cache is append-only, in chunks of 256 events per storage key. `app-store.ts` binds it to IndexedDB and the native WebSocket. Pending comments and the open ask are derived from the log (`pendingComments`, `openAsk`), never stored separately.
 - `router/`: a hand-rolled route switch (ADR 0004) over `history.pushState`: `/`, `/new`, `/s/<id>`, `/s/<id>/changes`, `/s/<id>/diff?path=…`. The URL fragment is reserved for pairing links.
 - `components/`: `Pair`, `Shell` (tabs, routed screen, status bar), `SessionTabs`, `SessionView` (timeline, streaming text, `AskCard`, `CommentTray`, composer), `ChangesView`, `DiffView`, `NewSessionView`, `StatusBar`, `EventItem`.
 - `editor/`: the CodeMirror unified diff (ADR 0005) and selection-to-line-range mapping. The editor is mounted inside a shadow root: CodeMirror injects its styles as a `<style>` element, which the relay's CSP (`default-src 'self'`, no `unsafe-inline`) blocks in the document, while in a shadow root it uses a constructed stylesheet, which CSP does not govern.

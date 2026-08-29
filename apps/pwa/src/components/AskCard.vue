@@ -2,23 +2,31 @@
 import type { EventPayloads } from '@flux/protocol';
 import { ref } from 'vue';
 
-// The agent's open question (flux_ask): tap an option or type an answer.
+// The agent's open question (flux_ask): tap an option or type an answer. One answer per card;
+// the card is replaced (keyed by askId) if the agent asks again.
 
 defineProps<{ ask: EventPayloads['ask'] }>();
 const emit = defineEmits<{ answer: [text: string] }>();
 
 const custom = ref('');
+const answered = ref(false);
+
+const reply = (text: string): void => {
+  if (answered.value) return;
+  answered.value = true;
+  emit('answer', text);
+};
 
 const submit = (): void => {
   const text = custom.value.trim();
   if (text === '') return;
-  emit('answer', text);
+  reply(text);
   custom.value = '';
 };
 </script>
 
 <template>
-  <section class="ask">
+  <section class="ask" :class="{ answered }">
     <p class="question">{{ ask.question }}</p>
     <div v-if="ask.options !== undefined" class="options">
       <button
@@ -26,14 +34,20 @@ const submit = (): void => {
         :key="option"
         type="button"
         class="secondary"
-        @click="$emit('answer', option)"
+        :disabled="answered"
+        @click="reply(option)"
       >
         {{ option }}
       </button>
     </div>
     <form class="custom" @submit.prevent="submit">
-      <input v-model="custom" type="text" placeholder="Or answer in your own words" />
-      <button type="submit" :disabled="custom.trim() === ''">Answer</button>
+      <input
+        v-model="custom"
+        type="text"
+        placeholder="Or answer in your own words"
+        :disabled="answered"
+      />
+      <button type="submit" :disabled="answered || custom.trim() === ''">Answer</button>
     </form>
   </section>
 </template>
@@ -47,6 +61,10 @@ const submit = (): void => {
   flex-direction: column;
   gap: 0.6rem;
   background: var(--panel);
+}
+
+.ask.answered {
+  opacity: 0.6;
 }
 
 .question {

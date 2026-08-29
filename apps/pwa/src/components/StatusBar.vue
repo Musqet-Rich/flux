@@ -3,15 +3,19 @@ import type { RateWindow } from '@flux/protocol';
 import { computed } from 'vue';
 
 import type { ConnectionStatus } from '../client/create-connection.ts';
+import type { PushState } from '../store/store-state.ts';
 
-// Connection state and the agent's rate-limit windows, always visible at the bottom.
+// Connection state, the agent's rate-limit windows and the way to turn notifications on,
+// always visible at the bottom.
 
 const props = defineProps<{
   status: ConnectionStatus;
   daemon: string | null;
   error: string | null;
+  push: PushState;
   rateWindows: RateWindow[];
 }>();
+defineEmits<{ enablePush: [] }>();
 
 const labels: Record<ConnectionStatus, string> = {
   stopped: 'Offline',
@@ -41,6 +45,9 @@ const windows = computed(() =>
     <span v-for="w in windows" :key="w.name" class="window" :class="{ high: w.high }">
       {{ w.name }} {{ w.percent }}
     </span>
+    <button v-if="push === 'off'" type="button" class="secondary push" @click="$emit('enablePush')">
+      Enable notifications
+    </button>
     <span v-if="error !== null" class="error">{{ error }}</span>
   </footer>
 </template>
@@ -71,6 +78,11 @@ const windows = computed(() =>
 
 .window.high {
   color: var(--warn);
+}
+
+.push {
+  padding: 0.2rem 0.6rem;
+  font-size: 0.8rem;
 }
 
 .error {

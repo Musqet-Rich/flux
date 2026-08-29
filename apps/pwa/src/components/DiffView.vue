@@ -2,6 +2,7 @@
 import type { LineRange } from '@flux/protocol';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 
+import { ClientError } from '../client/client-error.ts';
 import type { DiffEditor } from '../editor/create-diff-editor.ts';
 import { createDiffEditor } from '../editor/create-diff-editor.ts';
 import type { Store } from '../store/create-store.ts';
@@ -9,10 +10,10 @@ import { pendingComments } from '../store/pending-comments.ts';
 import CommentTray from './CommentTray.vue';
 
 // One file as a unified diff from the branch base to the worktree, with line comments. The
-// original comes from `git.show` at the base recorded in `session.created`; a file the base
-// does not have is an addition and diffs against nothing.
+// original comes from `git.show` at the base recorded in `session.created`, under the file's
+// old name for a rename; a file the base does not have is an addition and diffs against nothing.
 
-const props = defineProps<{ store: Store; session: string; path: string }>();
+const props = defineProps<{ store: Store; session: string; path: string; from: string | null }>();
 defineEmits<{ back: [] }>();
 
 const host = ref<HTMLElement | null>(null);
@@ -40,17 +41,30 @@ const baseRev = (): string | null => {
   return created?.type === 'session.created' ? created.payload.base : null;
 };
 
+// Only "the base has no such file" is an addition; any other failure is shown as one.
+const missing = (error: unknown): boolean =>
+  error instanceof ClientError && (error.code === 'git_error' || error.code === 'not_found');
+
 const original = async (rev: string): Promise<string> => {
+  const path = props.from ?? props.path;
   try {
-    const shown = await props.store.call('git.show', {
-      session: props.session,
-      path: props.path,
-      rev,
-    });
+    const shown = await props.store.call('git.show', { session: props.session, path, rev });
     return shown.binary ? '' : shown.content;
-  } catch {
-    return '';
+  } catch (error) {
+    if (missing(error)) return '';
+    throw error;
   }
+};
+
+const mount = (parent: HTMLElement, before: string, current: string): void => {
+  editor = createDiffEditor({
+    parent,
+    original: before,
+    current,
+    onSelection: (range) => {
+      selection.value = range;
+    },
+  });
 };
 
 const load = async (): Promise<void> => {
@@ -68,16 +82,7 @@ const load = async (): Promise<void> => {
       props.store.call('fs.read', { session: props.session, path: props.path }),
     ]);
     if (current.binary) failure.value = 'Binary file.';
-    else {
-      editor = createDiffEditor({
-        parent,
-        original: before,
-        current: current.content,
-        onSelection: (range) => {
-          selection.value = range;
-        },
-      });
-    }
+    else mount(parent, before, current.content);
   } catch (error) {
     failure.value = error instanceof Error ? error.message : String(error);
   } finally {
@@ -90,13 +95,12 @@ const comment = async (): Promise<void> => {
   const body = text.value.trim();
   if (range === null || body === '' || posting.value) return;
   posting.value = true;
-  try {
-    await props.store.addComment(props.session, { path: props.path, rev: 'worktree', range }, body);
-    text.value = '';
-    editor?.clearSelection();
-  } finally {
-    posting.value = false;
-  }
+  const codeRef = { path: props.path, rev: 'worktree', range };
+  const ok = await props.store.addComment(props.session, codeRef, body);
+  posting.value = false;
+  if (!ok) return;
+  text.value = '';
+  editor?.clearSelection();
 };
 
 const remove = (commentId: string): void => {

@@ -2,18 +2,20 @@ import type { CodeRef, RpcMethods, SessionSummary } from '@flux/protocol';
 
 import { createConnection } from '../client/create-connection.ts';
 import type { RpcCall } from '../client/create-rpc-client.ts';
-import { createSessionLog } from '../client/create-session-log.ts';
 import { pairDevice } from '../client/pair-device.ts';
 import { pairedBox } from '../client/paired-box.ts';
 import { boxLink } from './box-link.ts';
-import { logCache } from './log-cache.ts';
 import { pendingComments } from './pending-comments.ts';
+import { sessionLogs } from './session-logs.ts';
 import type { StoreInternals, StoreOptions, StoreState } from './store-state.ts';
 import { storeState } from './store-state.ts';
 
 // The app's one store (architecture.md § PWA): storage plus connection behind a reactive state
 // object and a handful of actions. Built with injected storage and sockets so it runs in Node
 // against the fake relay; the browser wires IndexedDB and WebSocket in app-store.ts.
+//
+// Actions a view fires resolve to whether they succeeded; the failure itself is in
+// `state.error` for the status bar, so views never handle rejections.
 
 export interface Store {
   state: StoreState;
@@ -24,10 +26,13 @@ export interface Store {
   // Makes a session's log available in `state.logs`: cache first, then a sync.
   open: (session: string) => Promise<void>;
   // Sends a message carrying every pending comment.
-  send: (session: string, text: string) => Promise<void>;
-  answer: (session: string, askId: string, answer: string) => Promise<void>;
-  addComment: (session: string, ref: CodeRef, text: string) => Promise<void>;
-  removeComment: (session: string, commentId: string) => Promise<void>;
+  send: (session: string, text: string) => Promise<boolean>;
+  answer: (session: string, askId: string, answer: string) => Promise<boolean>;
+  interrupt: (session: string) => Promise<boolean>;
+  addComment: (session: string, ref: CodeRef, text: string) => Promise<boolean>;
+  removeComment: (session: string, commentId: string) => Promise<boolean>;
+  // Asks the browser for a push subscription under a user gesture and stores it on the box.
+  enablePush: () => Promise<boolean>;
   createSession: (params: RpcMethods['sessions.create']['params']) => Promise<SessionSummary>;
   refreshSessions: () => Promise<void>;
   call: RpcCall;
@@ -67,23 +72,11 @@ const pair = async (i: StoreInternals, relayUrl: string, fragment: string): Prom
   }
 };
 
-const open = async (i: StoreInternals, session: string): Promise<void> => {
-  const existing = i.logs.get(session);
-  if (existing !== undefined) return boxLink.syncLog(i, existing);
-  const log = createSessionLog(session, await logCache.load(i, session));
-  // Two views can open the same session before the cache read settles; the first one wins.
-  const raced = i.logs.get(session);
-  if (raced !== undefined) return boxLink.syncLog(i, raced);
-  i.logs.set(session, log);
-  logCache.publish(i, log);
-  return boxLink.syncLog(i, log);
-};
-
-const send = async (i: StoreInternals, session: string, text: string): Promise<void> => {
+const send = (i: StoreInternals, session: string, text: string): Promise<boolean> => {
   const events = i.logs.get(session)?.events() ?? [];
   const commentIds = pendingComments(events).map((c) => c.commentId);
   const params = commentIds.length > 0 ? { session, text, commentIds } : { session, text };
-  await boxLink.call(i, 'agent.send', params);
+  return boxLink.attempt(i, () => boxLink.call(i, 'agent.send', params));
 };
 
 const createSession = async (
@@ -104,23 +97,33 @@ export const createStore = (options: StoreOptions): Store => {
     logs: new Map(),
     connection: null,
     sync: null,
-    pushDone: false,
+    vapidPublicKey: null,
     refreshing: null,
   };
   return {
     state: i.state,
     boot: () => boot(i),
     pair: (relayUrl, fragment) => pair(i, relayUrl, fragment),
-    open: (session) => open(i, session),
+    // Views fire this from onMounted and cannot handle a rejection; a failed sync is reported.
+    open: async (session) => {
+      await boxLink.attempt(i, () => sessionLogs.open(i, session));
+    },
     send: (session, text) => send(i, session, text),
-    answer: async (session, askId, answer) => {
-      await boxLink.call(i, 'agent.answer', { session, askId, answer });
-    },
-    addComment: async (session, ref, text) => {
-      await boxLink.call(i, 'comments.add', { session, ref, text });
-    },
-    removeComment: async (session, commentId) => {
-      await boxLink.call(i, 'comments.remove', { session, commentId });
+    answer: (session, askId, answer) =>
+      boxLink.attempt(i, () => boxLink.call(i, 'agent.answer', { session, askId, answer })),
+    interrupt: (session) =>
+      boxLink.attempt(i, () => boxLink.call(i, 'agent.interrupt', { session })),
+    addComment: (session, ref, text) =>
+      boxLink.attempt(i, () => boxLink.call(i, 'comments.add', { session, ref, text })),
+    removeComment: (session, commentId) =>
+      boxLink.attempt(i, () => boxLink.call(i, 'comments.remove', { session, commentId })),
+    enablePush: async () => {
+      try {
+        return await boxLink.enablePush(i, true);
+      } catch (error) {
+        boxLink.reportError(i, error);
+        return false;
+      }
     },
     createSession: (params) => createSession(i, params),
     refreshSessions: () => boxLink.refreshSessions(i),

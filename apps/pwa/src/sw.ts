@@ -81,7 +81,9 @@ const install = (scope: WorkerScope): void => {
       return;
     }
     await existing.focus();
-    await existing.navigate(url);
+    // navigate() is refused for a window the worker does not control (e.g. a cross-origin
+    // page in the same tab group); a fresh window is the fallback.
+    await existing.navigate(url).catch(() => scope.clients.openWindow(url));
   };
 
   scope.addEventListener('notificationclick', (event) => {

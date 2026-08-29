@@ -53,8 +53,14 @@ const boxHandlers = (): Handlers => ({
   'sessions.create': (p) => summary('s3', { branch: p.branch }),
 });
 
-// A box that does not know how to pair answers pair.request with not_found.
-const setup = async (pairable = true) => {
+interface Options {
+  // A box that does not know how to pair answers pair.request with not_found.
+  pairable?: boolean;
+  // A browser that has not granted notification permission: only a prompted subscribe works.
+  silentPush?: boolean;
+}
+
+const setup = async ({ pairable = true, silentPush = false }: Options = {}) => {
   const handlers = boxHandlers();
   if (!pairable) delete handlers['pair.request'];
   const relay = await createFakeRelay(handlers);
@@ -64,9 +70,10 @@ const setup = async (pairable = true) => {
     createStore({
       storage,
       socket: relay.socket,
-      subscribePush: (key) => {
-        pushes.push(key);
-        return Promise.resolve({ endpoint: 'https://push.example/x' });
+      subscribePush: (key, prompt) => {
+        pushes.push(`${key}:${prompt ? 'prompt' : 'silent'}`);
+        const granted = prompt || !silentPush;
+        return Promise.resolve(granted ? { endpoint: 'https://push.example/x' } : null);
       },
       minBackoffMs: 1,
       maxBackoffMs: 5,
@@ -76,25 +83,27 @@ const setup = async (pairable = true) => {
     return new URL(pairing.url('https://relay.example', { boxPub: relay.boxPub, secret })).hash;
   };
   const called = (method: string) => relay.calls.filter((c) => c.method === method);
-  return { relay, store: another(), another, pushes, storage, link, called };
+  return { relay, handlers, store: another(), another, pushes, storage, link, called };
 };
 
-test('boots to the pair screen without a stored box, and calls are refused', async () => {
+test('boots to the pair screen without a stored box, and actions are refused', async () => {
   const { store } = await setup();
   await store.boot();
   expect(store.state.phase).toBe('unpaired');
   await expect(store.call('sessions.list', {})).rejects.toMatchObject({ code: 'offline' });
-  await expect(store.send('s1', 'x')).rejects.toMatchObject({ code: 'offline' });
+  expect(await store.send('s1', 'x')).toBe(false);
+  expect(store.state.error).toBe('not paired');
 });
 
-test('pairs from a link, says hello, subscribes to push and remembers the box', async () => {
+test('pairs from a link, says hello, subscribes to push silently and remembers the box', async () => {
   const { store, storage, link, pushes, called } = await setup();
   await store.pair('https://relay.example', link());
   expect(store.state.phase).toBe('paired');
   expect(store.state.status).toBe('connected');
   expect(store.state.daemon).toBe('box');
   expect(store.state.sessions).toEqual([summary('s1')]);
-  expect(pushes).toEqual(['a2V5']);
+  expect(pushes).toEqual(['a2V5:silent']);
+  expect(store.state.push).toBe('on');
   expect(called('push.subscribe')[0]?.params).toEqual({
     subscription: { endpoint: 'https://push.example/x' },
   });
@@ -103,8 +112,24 @@ test('pairs from a link, says hello, subscribes to push and remembers the box', 
   expect(store.state.status).toBe('stopped');
 });
 
+test('push stays off until a prompted subscribe reaches the box, and retries after a refusal', async () => {
+  const { store, link, pushes, handlers } = await setup({ silentPush: true });
+  delete handlers['push.subscribe'];
+  await store.pair('https://relay.example', link());
+  expect(store.state.push).toBe('off');
+  expect(pushes).toEqual(['a2V5:silent']);
+  expect(await store.enablePush()).toBe(false);
+  expect(store.state).toMatchObject({ push: 'off', error: 'no push.subscribe' });
+  handlers['push.subscribe'] = () => ({});
+  expect(await store.enablePush()).toBe(true);
+  expect(store.state.push).toBe('on');
+  expect(pushes).toEqual(['a2V5:silent', 'a2V5:prompt', 'a2V5:prompt']);
+  expect(await store.enablePush()).toBe(false);
+  store.stop();
+});
+
 test('a bad link or a refused pairing lands back on the pair screen with the reason', async () => {
-  const { store, link, relay } = await setup(false);
+  const { store, link, relay } = await setup({ pairable: false });
   await store.pair('https://relay.example', '#nope');
   expect(store.state).toMatchObject({ phase: 'unpaired', error: 'not a pairing link' });
   await store.pair('https://relay.example', link());
@@ -115,8 +140,8 @@ test('a bad link or a refused pairing lands back on the pair screen with the rea
 
 test('opens a session from the cache, syncs it, then applies live events and deltas', async () => {
   const { store, storage, link, relay } = await setup();
-  await storage.set('log:s1', [boxLog[0]]);
-  await storage.set('log:s2', 'garbage');
+  await storage.set('log:s1:0', [boxLog[0]]);
+  await storage.set('log:s2:0', 'garbage');
   await store.pair('https://relay.example', link());
   await store.open('s1');
   await store.open('s2');
@@ -128,20 +153,36 @@ test('opens a session from the cache, syncs it, then applies live events and del
   await relay.emit(reply);
   await until(() => store.state.logs['s1']?.lastSeq === 3);
   expect(store.state.logs['s1']).toMatchObject({ streaming: '', events: [...boxLog, reply] });
-  expect(await storage.get('log:s1')).toEqual([...boxLog, reply]);
+  expect(await storage.get('log:s1:0')).toEqual([...boxLog, reply]);
   expect(store.state.sessions[0]).toMatchObject({ lastSeq: 3 });
 });
 
-test('a gap in seq triggers a sync instead of applying the event', async () => {
+test('a gap in seq triggers a sync that brings in the missed events and the late one', async () => {
   const { store, link, relay, called } = await setup();
   await store.pair('https://relay.example', link());
   await store.open('s1');
   const syncsBefore = called('events.sync').length;
-  boxLog.push(ev(3, 'msg.assistant', { text: 'late' }));
+  boxLog.push(ev(3, 'msg.assistant', { text: 'late' }), ev(4, 'session.state', { state: 'idle' }));
   await relay.emit(ev(4, 'session.state', { state: 'idle' }));
-  await until(() => store.state.logs['s1']?.lastSeq === 3);
+  await until(() => store.state.logs['s1']?.lastSeq === 4);
   expect(called('events.sync').length).toBe(syncsBefore + 1);
-  boxLog.pop();
+  boxLog.splice(2);
+});
+
+// The box logs 3 and 4 while a sync for 3 is on the wire; 4 arrives live as a gap during that
+// sync. The coalesced sync must pull again so 4 is not lost until the next event.
+test('a gap during an in-flight sync still ends with the log caught up', async () => {
+  const { store, link, relay } = await setup();
+  await store.pair('https://relay.example', link());
+  await store.open('s1');
+  boxLog.push(ev(3, 'msg.assistant', { text: 'three' }));
+  const syncing = store.open('s1');
+  boxLog.push(ev(4, 'msg.assistant', { text: 'four' }));
+  await relay.emit(ev(4, 'msg.assistant', { text: 'four' }));
+  await syncing;
+  await until(() => store.state.logs['s1']?.lastSeq === 4);
+  expect(store.state.logs['s1']?.events.map((e) => e.seq)).toEqual([1, 2, 3, 4]);
+  boxLog.splice(2);
 });
 
 test('sends messages with pending comments, answers asks, adds and removes comments', async () => {
@@ -149,13 +190,13 @@ test('sends messages with pending comments, answers asks, adds and removes comme
   await store.pair('https://relay.example', link());
   await store.open('s1');
   const ref = { path: 'a.ts', rev: 'worktree', range: { startLine: 1, endLine: 2 } };
-  await store.addComment('s1', ref, 'fix');
+  expect(await store.addComment('s1', ref, 'fix')).toBe(true);
   expect(called('comments.add')[0]?.params).toEqual({ session: 's1', ref, text: 'fix' });
   await relay.emit(ev(3, 'comment.added', { commentId: 'c1', ref, text: 'fix' }));
   await relay.emit(ev(4, 'comment.added', { commentId: 'c2', ref, text: 'gone' }));
   await relay.emit(ev(5, 'comment.removed', { commentId: 'c2' }));
   await until(() => store.state.logs['s1']?.lastSeq === 5);
-  await store.send('s1', 'please');
+  expect(await store.send('s1', 'please')).toBe(true);
   expect(called('agent.send')[0]?.params).toEqual({
     session: 's1',
     text: 'please',
@@ -165,14 +206,16 @@ test('sends messages with pending comments, answers asks, adds and removes comme
   await until(() => store.state.logs['s1']?.lastSeq === 6);
   await store.send('s1', 'again');
   expect(called('agent.send')[1]?.params).toEqual({ session: 's1', text: 'again' });
-  await store.answer('s1', 'ask-1', 'yes');
+  expect(await store.answer('s1', 'ask-1', 'yes')).toBe(true);
   expect(called('agent.answer')[0]?.params).toEqual({
     session: 's1',
     askId: 'ask-1',
     answer: 'yes',
   });
-  await store.removeComment('s1', 'c1');
+  expect(await store.removeComment('s1', 'c1')).toBe(true);
   expect(called('comments.remove')[0]?.params).toEqual({ session: 's1', commentId: 'c1' });
+  expect(await store.interrupt('s1')).toBe(false);
+  expect(store.state.error).toBe('no agent.interrupt');
 });
 
 test('tracks sessions: state patches, unknown sessions refresh the list, creation adds', async () => {
@@ -209,8 +252,7 @@ test('boots from the stored box, renders the cache, and re-syncs after a reconne
   await until(() => store.state.daemon === 'box');
   expect(called('hello').length).toBe(2);
   // The box logs something while the device is away; the reconnect's sync must pick it up.
-  const missed = ev(3, 'msg.assistant', { text: 'while you were out' });
-  boxLog.push(missed);
+  boxLog.push(ev(3, 'msg.assistant', { text: 'while you were out' }));
   relay.dropGuests();
   await until(() => store.state.status !== 'connected');
   await until(() => store.state.logs['s1']?.lastSeq === 3);

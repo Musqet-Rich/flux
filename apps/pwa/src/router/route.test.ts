@@ -9,6 +9,11 @@ const cases: [string, string, Route][] = [
   ['/s/abc', '', { name: 'session', session: 'abc' }],
   ['/s/abc/changes', '', { name: 'changes', session: 'abc' }],
   ['/s/a%2Fb/diff', '?path=src%2Fx.ts', { name: 'diff', session: 'a/b', path: 'src/x.ts' }],
+  [
+    '/s/abc/diff',
+    '?path=new.ts&from=old.ts',
+    { name: 'diff', session: 'abc', path: 'new.ts', from: 'old.ts' },
+  ],
 ];
 
 test('paths round-trip through parse and path', () => {

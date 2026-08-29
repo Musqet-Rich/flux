@@ -50,3 +50,14 @@ test('reads the initial route, pushes and replaces, and follows back navigation'
   back();
   expect(router.current.route).toEqual({ name: 'changes', session: 'one' });
 });
+
+test('an unknown path is replaced by its fallback, and going nowhere new pushes nothing', () => {
+  const { history, stack } = fakeHistory('/s/one/nope?x=1');
+  const router = createRouter(history);
+  expect(router.current.route).toEqual({ name: 'session', session: 'one' });
+  expect(stack).toEqual(['/s/one']);
+  router.go({ name: 'session', session: 'one' });
+  expect(stack).toEqual(['/s/one']);
+  router.go({ name: 'sessions' });
+  expect(stack).toEqual(['/s/one', '/']);
+});

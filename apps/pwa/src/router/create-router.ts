@@ -5,7 +5,8 @@ import { route } from './route.ts';
 
 // Route state as a reactive object, driven by a History-shaped port so tests run without a
 // browser: `location` reads the current path, `push`/`replace` write it, `listen` reports
-// back/forward navigation.
+// back/forward navigation. A path the app does not know is replaced by the screen it fell
+// back to, so the address bar never shows a route that would not survive a reload.
 
 export interface RouterHistory {
   location: () => { pathname: string; search: string };
@@ -23,7 +24,9 @@ export interface Router {
 export const createRouter = (history: RouterHistory): Router => {
   const read = (): Route => {
     const { pathname, search } = history.location();
-    return route.parse(pathname, search);
+    const parsed = route.parse(pathname, search);
+    if (route.path(parsed) !== `${pathname}${search}`) history.replace(route.path(parsed));
+    return parsed;
   };
   const state = reactive<{ route: Route }>({ route: read() });
   history.listen(() => {
@@ -32,6 +35,8 @@ export const createRouter = (history: RouterHistory): Router => {
   return {
     current: readonly(state),
     go: (to) => {
+      // Tapping the tab already shown must not grow the history.
+      if (route.path(to) === route.path(state.route)) return;
       history.push(route.path(to));
       state.route = to;
     },

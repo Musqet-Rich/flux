@@ -9,7 +9,8 @@ import CommentTray from './CommentTray.vue';
 import EventItem from './EventItem.vue';
 
 // One session: its timeline, the streaming reply, the agent's open question, the comments
-// waiting to go and the composer. The store owns the data; this only renders and dispatches.
+// waiting to go and the composer. The store owns the data and reports failures; this only
+// renders and dispatches.
 
 const props = defineProps<{ store: Store; session: string }>();
 defineEmits<{ changes: [] }>();
@@ -36,12 +37,9 @@ const send = async (): Promise<void> => {
   const text = draft.value.trim();
   if (text === '' || sending.value) return;
   sending.value = true;
-  try {
-    await props.store.send(props.session, text);
-    draft.value = '';
-  } finally {
-    sending.value = false;
-  }
+  const ok = await props.store.send(props.session, text);
+  sending.value = false;
+  if (ok) draft.value = '';
 };
 
 const answer = (text: string): void => {
@@ -53,7 +51,7 @@ const remove = (commentId: string): void => {
 };
 
 const interrupt = (): void => {
-  void props.store.call('agent.interrupt', { session: props.session });
+  void props.store.interrupt(props.session);
 };
 
 onMounted(() => {
@@ -82,7 +80,7 @@ watch([() => events.value.length, streaming], () => {
       <article v-if="streaming !== ''" class="streaming">
         <pre>{{ streaming }}</pre>
       </article>
-      <AskCard v-if="ask !== null" :ask="ask" @answer="answer" />
+      <AskCard v-if="ask !== null" :key="ask.askId" :ask="ask" @answer="answer" />
     </div>
     <div class="composer">
       <CommentTray :comments="pending" @remove="remove" />

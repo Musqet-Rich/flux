@@ -27,6 +27,18 @@ const call = <M extends keyof RpcMethods>(
     ? Promise.reject(new ClientError('offline', 'not paired'))
     : i.connection.call(method, params);
 
+// Runs an action for a view: a failure lands in `state.error` for the status bar and the view
+// gets false, never a rejection to handle.
+const attempt = async (i: StoreInternals, action: () => Promise<unknown>): Promise<boolean> => {
+  try {
+    await action();
+    return true;
+  } catch (error) {
+    reportError(i, error);
+    return false;
+  }
+};
+
 // Pulls a log up to date; a no-op while offline because reconnecting syncs every open log.
 const syncLog = async (i: StoreInternals, log: SessionLog): Promise<void> => {
   if (i.sync === null || i.connection?.status() !== 'connected') return;
@@ -49,13 +61,19 @@ const refreshSessions = (i: StoreInternals): Promise<void> => {
   return i.refreshing;
 };
 
-const subscribePush = async (i: StoreInternals, key: string | undefined): Promise<void> => {
-  const { subscribePush: subscribe } = i.options;
-  if (i.pushDone || key === undefined || subscribe === undefined) return;
-  i.pushDone = true;
-  const subscription = await subscribe(key);
-  if (!guards.isRecord(subscription)) return;
+// Stores this device's push subscription on the box. Without `prompt` the browser is only asked
+// for a subscription it can give silently (permission already granted); a tap on "Enable
+// notifications" calls this with `prompt` so the permission dialog has a gesture behind it.
+// `state.push` becomes `on` only once the box has the subscription, so a refusal is retried.
+const enablePush = async (i: StoreInternals, prompt: boolean): Promise<boolean> => {
+  const { subscribePush } = i.options;
+  const key = i.vapidPublicKey;
+  if (i.state.push === 'on' || key === null || subscribePush === undefined) return false;
+  const subscription = await subscribePush(key, prompt);
+  if (!guards.isRecord(subscription)) return false;
   await call(i, 'push.subscribe', { subscription });
+  i.state.push = 'on';
+  return true;
 };
 
 const afterConnect = async (i: StoreInternals): Promise<void> => {
@@ -63,8 +81,10 @@ const afterConnect = async (i: StoreInternals): Promise<void> => {
   i.state.daemon = hello.daemon;
   i.state.sessions = hello.sessions;
   i.state.error = null;
+  i.vapidPublicKey = hello.vapidPublicKey ?? null;
+  if (i.state.push === 'unavailable' && i.vapidPublicKey !== null) i.state.push = 'off';
   await Promise.all([...i.logs.values()].map((log) => syncLog(i, log)));
-  await subscribePush(i, hello.vapidPublicKey);
+  await enablePush(i, false);
 };
 
 const patchSummary = (i: StoreInternals, event: FluxEvent): void => {
@@ -80,6 +100,9 @@ const patchSummary = (i: StoreInternals, event: FluxEvent): void => {
 };
 
 const onEvent = (i: StoreInternals, event: FluxEvent): void => {
+  // Before the connection is adopted (mid-pairing) nothing can be asked back; hello will bring
+  // the session list and every open log syncs after it.
+  if (i.connection === null) return;
   if (event.type === 'rate_limit') i.state.rateWindows = event.payload.windows;
   patchSummary(i, event);
   const log = i.logs.get(event.session);
@@ -141,6 +164,18 @@ export const boxLink: {
   afterConnect: typeof afterConnect;
   syncLog: typeof syncLog;
   refreshSessions: typeof refreshSessions;
+  enablePush: typeof enablePush;
   reportError: typeof reportError;
+  attempt: typeof attempt;
   call: typeof call;
-} = { options, adopt, afterConnect, syncLog, refreshSessions, reportError, call };
+} = {
+  options,
+  adopt,
+  afterConnect,
+  syncLog,
+  refreshSessions,
+  enablePush,
+  reportError,
+  attempt,
+  call,
+};

@@ -12,6 +12,10 @@ import type { SyncSession } from '../client/sync-session.ts';
 
 export type StorePhase = 'booting' | 'unpaired' | 'pairing' | 'paired';
 
+// `unavailable` until the box offers a VAPID key, `off` until this device's subscription is
+// stored on the box, `on` after that.
+export type PushState = 'unavailable' | 'off' | 'on';
+
 export interface LogView {
   events: FluxEvent[];
   streaming: string;
@@ -23,6 +27,7 @@ export interface StoreState {
   status: ConnectionStatus;
   daemon: string | null;
   error: string | null;
+  push: PushState;
   sessions: SessionSummary[];
   rateWindows: RateWindow[];
   logs: Record<string, LogView>;
@@ -31,8 +36,9 @@ export interface StoreState {
 export interface StoreOptions {
   storage: Storage;
   socket: SocketFactory;
-  // Resolves to the browser's PushSubscription JSON, or null when push is unavailable.
-  subscribePush?: (vapidPublicKey: string) => Promise<unknown>;
+  // Resolves to the browser's PushSubscription JSON, or null when push is unavailable. With
+  // `prompt` false it must not ask the user for permission (there is no gesture to ask under).
+  subscribePush?: (vapidPublicKey: string, prompt: boolean) => Promise<unknown>;
   minBackoffMs?: number;
   maxBackoffMs?: number;
 }
@@ -44,7 +50,7 @@ export interface StoreInternals {
   logs: Map<string, SessionLog>;
   connection: Connection | null;
   sync: SyncSession | null;
-  pushDone: boolean;
+  vapidPublicKey: string | null;
   refreshing: Promise<void> | null;
 }
 
@@ -55,6 +61,7 @@ export const storeState = (): StoreState =>
     status: 'stopped',
     daemon: null,
     error: null,
+    push: 'unavailable',
     sessions: [],
     rateWindows: [],
     logs: {},

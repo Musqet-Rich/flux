@@ -25,8 +25,13 @@ const go = (to: Route): void => {
 const openSession = (session: string): void => {
   go({ name: 'session', session });
 };
-const openDiff = (session: string, path: string): void => {
-  go({ name: 'diff', session, path });
+// From the changes screen, so the active session is the one being diffed.
+const openDiff = (path: string, from: string | null): void => {
+  const session = active.value ?? '';
+  go(from === null ? { name: 'diff', session, path } : { name: 'diff', session, path, from });
+};
+const enablePush = (): void => {
+  void props.store.enablePush();
 };
 </script>
 
@@ -56,7 +61,7 @@ const openDiff = (session: string, path: string): void => {
       v-else-if="route.name === 'changes'"
       :store="store"
       :session="route.session"
-      @open="openDiff(route.session, $event)"
+      @open="openDiff"
       @back="openSession(route.session)"
     />
     <DiffView
@@ -64,6 +69,7 @@ const openDiff = (session: string, path: string): void => {
       :store="store"
       :session="route.session"
       :path="route.path"
+      :from="route.from ?? null"
       @back="go({ name: 'changes', session: route.session })"
     />
   </main>
@@ -71,7 +77,9 @@ const openDiff = (session: string, path: string): void => {
     :status="state.status"
     :daemon="state.daemon"
     :error="state.error"
+    :push="state.push"
     :rate-windows="state.rateWindows"
+    @enable-push="enablePush"
   />
 </template>
 

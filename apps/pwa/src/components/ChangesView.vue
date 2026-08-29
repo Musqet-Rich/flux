@@ -5,10 +5,11 @@ import { computed, onMounted, ref } from 'vue';
 import type { Store } from '../store/create-store.ts';
 
 // The worktree's changed files. The last `files.changed` event renders at once; `git.status`
-// refreshes it, since that event only follows an agent write.
+// refreshes it, since that event only follows an agent write. A rename opens with its old
+// path too, which is the one the base revision knows.
 
 const props = defineProps<{ store: Store; session: string }>();
-defineEmits<{ open: [path: string]; back: [] }>();
+const emit = defineEmits<{ open: [path: string, from: string | null]; back: [] }>();
 
 const fresh = ref<FileStatus[] | null>(null);
 const loading = ref(false);
@@ -32,6 +33,10 @@ const refresh = async (): Promise<void> => {
   }
 };
 
+const open = (file: FileStatus): void => {
+  emit('open', file.path, file.status === 'R' ? (file.from ?? null) : null);
+};
+
 onMounted(() => {
   void props.store.open(props.session);
   void refresh();
@@ -48,14 +53,10 @@ onMounted(() => {
     <p v-if="files.length === 0" class="empty">No changes in the worktree.</p>
     <ul v-else class="list">
       <li v-for="f in files" :key="f.path">
-        <button
-          type="button"
-          class="file"
-          :disabled="f.status === 'D'"
-          @click="$emit('open', f.path)"
-        >
+        <button type="button" class="file" :disabled="f.status === 'D'" @click="open(f)">
           <span class="status" :class="f.status">{{ f.status }}</span>
           <span class="path">{{ f.path }}</span>
+          <span v-if="f.from !== undefined" class="from">← {{ f.from }}</span>
         </button>
       </li>
     </ul>
@@ -100,6 +101,7 @@ onMounted(() => {
 .file {
   width: 100%;
   display: flex;
+  flex-wrap: wrap;
   gap: 0.6rem;
   align-items: center;
   background: transparent;
@@ -126,13 +128,22 @@ onMounted(() => {
   color: var(--warn);
 }
 
+.status.R {
+  color: var(--accent);
+}
+
 .status.D {
   color: var(--danger);
 }
 
-.path {
+.path,
+.from {
   overflow-wrap: anywhere;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.85rem;
+}
+
+.from {
+  color: var(--muted);
 }
 </style>
