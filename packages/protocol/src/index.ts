@@ -1,2 +1,50 @@
-// Placeholder until the wire types land (docs/protocol.md). Kept trivially testable.
-export const protocolName = (): string => 'flux-protocol';
+// Public surface of @flux/protocol. Everything crossing the wire is defined in the modules
+// below and nowhere else (docs/protocol.md).
+export { base64url } from './base64url.ts';
+export type { Bytes } from './bytes.ts';
+export { bytes } from './bytes.ts';
+export { compress } from './compress.ts';
+export type { Channel, ChannelOptions } from './create-channel.ts';
+export { createChannel } from './create-channel.ts';
+export type { Ephemeral } from './ephemeral.ts';
+export { ephemeral } from './ephemeral.ts';
+export type {
+  AgentKind,
+  ChangedFile,
+  CodeRef,
+  EventPayloads,
+  EventType,
+  LineRange,
+  RateWindow,
+  SessionState,
+  TokenUsage,
+} from './event-payloads.ts';
+export { eventPayloads } from './event-payloads.ts';
+export type { Envelope, FluxEvent } from './flux-event.ts';
+export { fluxEvent } from './flux-event.ts';
+export type { DataFrame, DataFrameKind, Frame, FrameKind, HandshakeFrame } from './frame.ts';
+export { frame } from './frame.ts';
+export { guards } from './guards.ts';
+export type { BoxHello, DeriveInput, DeviceHello, DirectionKeys, KeyPair } from './handshake.ts';
+export { handshake } from './handshake.ts';
+export type { PairingPayload } from './pairing.ts';
+export { pairing } from './pairing.ts';
+export type { ProtocolErrorCode } from './protocol-error.ts';
+export { ProtocolError } from './protocol-error.ts';
+export { protocolVersion } from './protocol-version.ts';
+export type { RelayControl, RelayJoin, RelayJoinError, RelayJoinReply } from './relay-message.ts';
+export { relayMessage } from './relay-message.ts';
+export { room } from './room.ts';
+export type {
+  Commit,
+  DirEntry,
+  FileStatus,
+  Repo,
+  RpcErrorCode,
+  RpcMethod,
+  RpcMethods,
+  SessionSummary,
+} from './rpc-methods.ts';
+export { rpcMethods } from './rpc-methods.ts';
+export type { RpcError, Wire } from './wire.ts';
+export { wire } from './wire.ts';

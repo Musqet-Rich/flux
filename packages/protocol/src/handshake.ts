@@ -45,8 +45,14 @@ const keyLength = 32;
 const helloNonceLength = 16;
 const x25519 = { name: 'X25519' } as const;
 
-// TypeScript's lib has no X25519 overload for generateKey, so the result is a union.
-const isKeyPair = (key: CryptoKey | CryptoKeyPair): key is CryptoKeyPair => 'publicKey' in key;
+// TypeScript's lib has no X25519 overload for generateKey, so the result is a union. Structural
+// rather than the lib's CryptoKeyPair, which @types/node does not expose as a global.
+interface RawKeyPair {
+  publicKey: CryptoKey;
+  privateKey: CryptoKey;
+}
+
+const isKeyPair = (key: CryptoKey | RawKeyPair): key is RawKeyPair => 'publicKey' in key;
 
 // Static keys are extractable so the daemon and PWA can persist them; ephemerals never are.
 const generateKeyPair = async (extractable = false): Promise<KeyPair> => {
