@@ -22,6 +22,13 @@ export interface LogView {
   lastSeq: number;
 }
 
+// Unsaved editor text, kept across navigation so leaving the editor loses nothing. Keyed by
+// `session\0path`; `hash` is the file version the draft was typed over.
+export interface Draft {
+  hash: string;
+  text: string;
+}
+
 export interface StoreState {
   phase: StorePhase;
   status: ConnectionStatus;
@@ -31,6 +38,7 @@ export interface StoreState {
   sessions: SessionSummary[];
   rateWindows: RateWindow[];
   logs: Record<string, LogView>;
+  drafts: Record<string, Draft>;
 }
 
 export interface StoreOptions {
@@ -65,4 +73,5 @@ export const storeState = (): StoreState =>
     sessions: [],
     rateWindows: [],
     logs: {},
+    drafts: {},
   });

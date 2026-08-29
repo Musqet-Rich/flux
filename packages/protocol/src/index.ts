@@ -39,6 +39,7 @@ export { room } from './room.ts';
 export type {
   Commit,
   DirEntry,
+  FileContent,
   FileStatus,
   Repo,
   RpcErrorCode,

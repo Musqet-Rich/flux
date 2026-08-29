@@ -15,7 +15,7 @@ import CommentTray from './CommentTray.vue';
 // old name for a rename; a file the base does not have is an addition and diffs against nothing.
 
 const props = defineProps<{ store: Store; session: string; path: string; from: string | null }>();
-defineEmits<{ back: [] }>();
+defineEmits<{ back: []; edit: [] }>();
 
 const host = ref<HTMLElement | null>(null);
 const loading = ref(true);
@@ -123,6 +123,7 @@ onUnmounted(() => {
     <div class="toolbar">
       <button type="button" class="secondary" @click="$emit('back')">‹ Changes</button>
       <code class="path">{{ path }}</code>
+      <button type="button" class="secondary edit" @click="$emit('edit')">Edit</button>
     </div>
     <p v-if="loading" class="notice">Loading…</p>
     <p v-else-if="failure !== null" class="notice">{{ failure }}</p>
@@ -157,6 +158,7 @@ onUnmounted(() => {
 }
 
 .path {
+  flex: 1;
   overflow-wrap: anywhere;
   color: var(--muted);
 }

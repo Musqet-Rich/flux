@@ -47,6 +47,7 @@ const handlers: RpcHandlers = {
   'git.push': unimplemented,
   'git.pr': unimplemented,
   'fs.read': unimplemented,
+  'fs.write': unimplemented,
   'fs.list': unimplemented,
   'repos.list': unimplemented,
   'pair.request': (_params, peer) => Promise.resolve({ deviceId: `new-${peer.fingerprint}` }),

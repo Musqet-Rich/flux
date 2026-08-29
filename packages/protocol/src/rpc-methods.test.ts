@@ -70,6 +70,13 @@ const cases: [RpcMethod, unknown, boolean][] = [
   ['git.pr', s, false],
   ['fs.read', { ...s, path: 'a' }, true],
   ['fs.read', s, false],
+  ['fs.write', { ...s, path: 'a', content: 'x' }, true],
+  ['fs.write', { ...s, path: 'a', content: 'x', ifMatch: 'abc' }, true],
+  ['fs.write', { ...s, path: 'a', content: 'x', ifMatch: 1 }, false],
+  ['fs.write', { ...s, path: 'a', content: 'x', ifMatch: null }, false],
+  ['fs.write', { ...s, path: 'a', content: 1 }, false],
+  ['fs.write', { ...s, path: 'a' }, false],
+  ['fs.write', { ...s, content: 'x' }, false],
   ['fs.list', { ...s, path: '.' }, true],
   ['fs.list', { ...s, path: 1 }, false],
   ['repos.list', {}, true],
@@ -84,5 +91,5 @@ test.each(cases)('%s params %j accepted=%s', (method, value, expected) => {
 });
 
 test('covers every method in protocol.md § 7 that is in P1', () => {
-  expect(Object.keys(rpcMethods)).toHaveLength(24);
+  expect(Object.keys(rpcMethods)).toHaveLength(25);
 });

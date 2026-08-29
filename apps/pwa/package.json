@@ -9,6 +9,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@codemirror/commands": "6.11.0",
     "@codemirror/language": "6.12.4",
     "@codemirror/merge": "6.12.2",
     "@codemirror/state": "6.7.1",

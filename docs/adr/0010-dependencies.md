@@ -18,6 +18,7 @@ Columns follow `engineering.md` § Dependencies step 2; the pre-commit check req
 | `@codemirror/view`     | pwa           | 6.43.9  | Editor view. See 0005.                                                                                                                                                                                      | 14M              | marijn     | MIT     | 5               |          |
 | `@codemirror/merge`    | pwa           | 6.12.2  | Diff view. See 0005.                                                                                                                                                                                        | 1.8M             | marijn     | MIT     | 10              |          |
 | `@codemirror/language` | pwa           | 6.12.4  | Language support base; language packs added per need, one line each. See 0005.                                                                                                                              | 12M              | marijn     | MIT     | 9               |          |
+| `@codemirror/commands` | pwa           | 6.11.0  | Undo history and the default keymap for the file editor (P2): Enter, Tab, Backspace, undo/redo, line moves. Reimplementing the undo tree and ~60 key bindings is far more than 50 lines. See 0005.          | 13M              | marijn     | MIT     | 10              |          |
 
 ## Dev
 

@@ -5,6 +5,7 @@ import { expect, test } from 'vitest';
 import type { Handlers } from '../../test/fake-relay.ts';
 import { createFakeRelay } from '../../test/fake-relay.ts';
 import { until } from '../../test/until.ts';
+import { ClientError } from '../client/client-error.ts';
 import { createMemoryStorage } from '../client/create-memory-storage.ts';
 import { pairedBox } from '../client/paired-box.ts';
 import { createStore } from './create-store.ts';
@@ -58,6 +59,33 @@ const boxHandlers = (): Handlers => ({
   'sessions.create': (p) => summary('s3', { branch: p.branch }),
   'git.commit': (p) => ({ sha: `sha-${p.paths?.length ?? 'all'}` }),
   'git.push': () => ({ remote: 'origin', branch: 'main' }),
+  'fs.write': (p) => {
+    if (p.ifMatch === 'stale') throw new ClientError('conflict', 'changed');
+    return { hash: `h(${p.content})` };
+  },
+});
+
+// A conflict is the editor's to handle, so it does not reach the status bar; anything else does.
+test('saves a file with the hash it was read with, and tells a conflict from a failure', async () => {
+  const { store, link, handlers, called } = await setup();
+  await store.pair('https://relay.example', link());
+  expect(await store.saveFile('s1', 'a.ts', 'new', 'h1')).toEqual({ ok: true, hash: 'h(new)' });
+  expect(called('fs.write')[0]?.params).toEqual({
+    session: 's1',
+    path: 'a.ts',
+    content: 'new',
+    ifMatch: 'h1',
+  });
+  expect(await store.saveFile('s1', 'a.ts', 'new', 'stale')).toEqual({
+    ok: false,
+    conflict: true,
+  });
+  expect(store.state.error).toBeNull();
+  expect(await store.saveFile('s1', 'a.ts', 'force', null)).toEqual({ ok: true, hash: 'h(force)' });
+  expect(called('fs.write')[2]?.params).toEqual({ session: 's1', path: 'a.ts', content: 'force' });
+  delete handlers['fs.write'];
+  expect(await store.saveFile('s1', 'a.ts', 'new', 'h1')).toEqual({ ok: false, conflict: false });
+  expect(store.state.error).toBe('no fs.write');
 });
 
 test('git actions resolve to their result, or null with the failure reported', async () => {

@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 
-import type { Router } from '../router/create-router.ts';
-import type { Route } from '../router/route.ts';
+import type { Route, Router } from '../router/create-router.ts';
 import type { Store } from '../store/create-store.ts';
 import ChangesView from './ChangesView.vue';
 import DiffView from './DiffView.vue';
+import EditView from './EditView.vue';
 import NewSessionView from './NewSessionView.vue';
 import SessionTabs from './SessionTabs.vue';
 import SessionView from './SessionView.vue';
@@ -29,6 +29,9 @@ const openSession = (session: string): void => {
 const openDiff = (path: string, from: string | null): void => {
   const session = active.value ?? '';
   go(from === null ? { name: 'diff', session, path } : { name: 'diff', session, path, from });
+};
+const openEdit = (path: string): void => {
+  go({ name: 'edit', session: active.value ?? '', path });
 };
 const enablePush = (): void => {
   void props.store.enablePush();
@@ -62,7 +65,15 @@ const enablePush = (): void => {
       :store="store"
       :session="route.session"
       @open="openDiff"
+      @edit="openEdit"
       @back="openSession(route.session)"
+    />
+    <EditView
+      v-else-if="route.name === 'edit'"
+      :store="store"
+      :session="route.session"
+      :path="route.path"
+      @back="go({ name: 'changes', session: route.session })"
     />
     <DiffView
       v-else
@@ -70,6 +81,7 @@ const enablePush = (): void => {
       :session="route.session"
       :path="route.path"
       :from="route.from ?? null"
+      @edit="openEdit(route.path)"
       @back="go({ name: 'changes', session: route.session })"
     />
   </main>

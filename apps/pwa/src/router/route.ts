@@ -1,19 +1,22 @@
 // The PWA's screens as URL paths (ADR 0004: a hand-rolled route switch, no vue-router). The
 // fragment is reserved for pairing links (protocol.md § 1), so routes live in the path and query.
 // A renamed file's diff carries its old path as `from`, which is what the base revision has.
+// The editor takes the same `path` query and saves to the worktree.
 
 export type Route =
   | { name: 'sessions' }
   | { name: 'new' }
   | { name: 'session'; session: string }
   | { name: 'changes'; session: string }
-  | { name: 'diff'; session: string; path: string; from?: string };
+  | { name: 'diff'; session: string; path: string; from?: string }
+  | { name: 'edit'; session: string; path: string };
 
-const diff = (session: string, search: string): Route | null => {
+const file = (tail: string, session: string, search: string): Route | null => {
   const query = new URLSearchParams(search);
   const path = query.get('path');
   const from = query.get('from');
   if (path === null) return null;
+  if (tail === 'edit') return { name: 'edit', session, path };
   return from === null ? { name: 'diff', session, path } : { name: 'diff', session, path, from };
 };
 
@@ -27,7 +30,8 @@ const parse = (pathname: string, search = ''): Route => {
   const id = decodeURIComponent(session);
   if (parts.length === 2) return { name: 'session', session: id };
   if (tail === 'changes' && parts.length === 3) return { name: 'changes', session: id };
-  const target = tail === 'diff' && parts.length === 3 ? diff(id, search) : null;
+  const isFile = (tail === 'diff' || tail === 'edit') && parts.length === 3;
+  const target = isFile ? file(tail, id, search) : null;
   return target ?? { name: 'session', session: id };
 };
 
@@ -38,6 +42,7 @@ const path = (r: Route): string => {
   if (r.name === 'session') return base;
   if (r.name === 'changes') return `${base}/changes`;
   const query = new URLSearchParams({ path: r.path });
+  if (r.name === 'edit') return `${base}/edit?${query.toString()}`;
   if (r.from !== undefined) query.set('from', r.from);
   return `${base}/diff?${query.toString()}`;
 };

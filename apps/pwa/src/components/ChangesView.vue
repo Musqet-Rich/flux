@@ -11,7 +11,11 @@ import GitActions from './GitActions.vue';
 // path too, which is the one the base revision knows. Ticked files narrow a commit to them.
 
 const props = defineProps<{ store: Store; session: string }>();
-const emit = defineEmits<{ open: [path: string, from: string | null]; back: [] }>();
+const emit = defineEmits<{
+  open: [path: string, from: string | null];
+  edit: [path: string];
+  back: [];
+}>();
 
 const fresh = ref<FileStatus[] | null>(null);
 const loading = ref(false);
@@ -77,6 +81,14 @@ onMounted(() => {
           <span class="path">{{ f.path }}</span>
           <span v-if="f.from !== undefined" class="from">← {{ f.from }}</span>
         </button>
+        <button
+          type="button"
+          class="secondary edit"
+          :disabled="f.status === 'D'"
+          @click="$emit('edit', f.path)"
+        >
+          Edit
+        </button>
       </li>
     </ul>
     <GitActions :store="store" :session="session" :selected="selectedFiles" @done="acted" />
@@ -124,6 +136,13 @@ onMounted(() => {
   display: flex;
   align-items: center;
   border-bottom: 1px solid var(--border);
+}
+
+.edit {
+  flex: none;
+  margin-right: 0.75rem;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.85rem;
 }
 
 .pick {
