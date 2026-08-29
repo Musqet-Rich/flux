@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import type { RpcErrorCode } from '@flux/protocol';
-import { guards } from '@flux/protocol';
+import { ProtocolError, guards } from '@flux/protocol';
 import { connect } from 'node:net';
 import { hostname } from 'node:os';
 import { join } from 'node:path';
@@ -180,6 +180,11 @@ const startDaemon = async (): Promise<void> => {
       );
     }
   } catch (error) {
+    // A plaintext relay off loopback is refused here (protocol.md § 2), like a missing URL.
+    if (error instanceof ProtocolError && error.code === 'insecure_transport') {
+      console.error(`FLUX_RELAY_URL: ${error.message}`);
+      process.exit(2);
+    }
     if (!(error instanceof DaemonError) || error.code !== 'conflict') throw error;
     console.error(error.message);
     process.exit(3);

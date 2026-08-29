@@ -24,3 +24,4 @@ Format: Context, Decision, Consequences. Keep each under a page.
 | 0016 | pi adapter: RPC mode, shared session id, Flux tools as a pi extension  | accepted |
 | 0017 | Daemon lifecycle: bounded shutdown, one daemon per data dir, orphans   | accepted |
 | 0018 | Session lifecycle: clear, archive with worktree removal, unarchive     | accepted |
+| 0019 | Handshake transcript bound into key derivation; TLS-only transport     | accepted |

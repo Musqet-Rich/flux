@@ -19,6 +19,7 @@ test('exports every runtime module', () => {
     'isCodeRef',
     'pairing',
     'protocolVersion',
+    'relayEndpoint',
     'relayMessage',
     'room',
     'rpcMethods',

@@ -1,5 +1,14 @@
-import type { Bytes, Channel, Wire } from '@flux/protocol';
-import { base64url, bytes, createChannel, frame, handshake, room, wire } from '@flux/protocol';
+import type { Bytes, Channel, HandshakeTranscript, Wire } from '@flux/protocol';
+import {
+  base64url,
+  bytes,
+  createChannel,
+  frame,
+  handshake,
+  protocolVersion,
+  room,
+  wire,
+} from '@flux/protocol';
 
 import type { BoxIdentity, Device } from './create-device-store.ts';
 
@@ -31,7 +40,6 @@ export interface DeviceChannels {
 
 export interface DeviceChannelsOptions {
   identity: BoxIdentity;
-  roomId: string;
   deviceByKey: (publicKey: Bytes) => Device | null;
   pairingOpen: () => boolean;
   onMessage: (peer: Peer, message: Wire) => Promise<Wire | null>;
@@ -46,6 +54,9 @@ const maxChannelsPerDevice = 8;
 interface Connected {
   peer: Peer;
   channel: Channel;
+  // Whether a frame has opened on this channel yet. The device's first data frame is its key
+  // confirmation (protocol.md § 3): until it opens, the handshake is not known to have worked.
+  confirmed: boolean;
   // Frames of this channel being answered right now; the notice waits for them.
   busy: number;
   // The device id this channel was revoked as, once it is.
@@ -69,6 +80,7 @@ const hex = (data: Bytes): string =>
 const encode = (message: Wire): Bytes => bytes.fromUtf8(JSON.stringify(message));
 
 interface DeviceHelloBytes {
+  v: number;
   devPub: Bytes;
   devEph: Bytes;
   nonceD: Bytes;
@@ -83,6 +95,7 @@ const parseHello = (payload: Bytes): DeviceHelloBytes | null => {
   }
   if (!handshake.isDeviceHello(parsed)) return null;
   return {
+    v: parsed.v,
     devPub: base64url.decode(parsed.devPub),
     devEph: base64url.decode(parsed.devEph),
     nonceD: base64url.decode(parsed.nonceD),
@@ -107,6 +120,36 @@ const admit = (state: State, entry: Connected): void => {
   state.connected.set(entry.peer.fingerprint, entries);
 };
 
+interface Agreement {
+  hello: DeviceHelloBytes;
+  device: Device | null;
+  fingerprintBytes: Bytes;
+  ephemeralPrivate: CryptoKey;
+  nonceB: Bytes;
+  transcript: HandshakeTranscript;
+}
+
+const admitChannel = async (state: State, a: Agreement): Promise<void> => {
+  const keys = await handshake.derive({
+    role: 'box',
+    staticPrivate: state.options.identity.privateKey,
+    staticPeerPublic: a.hello.devPub,
+    ephemeralPrivate: a.ephemeralPrivate,
+    ephemeralPeerPublic: a.hello.devEph,
+    nonceD: a.hello.nonceD,
+    nonceB: a.nonceB,
+    transcript: a.transcript,
+  });
+  const channel = createChannel({ keys, fingerprint: a.fingerprintBytes });
+  const peer = {
+    fingerprint: hex(a.fingerprintBytes),
+    publicKey: a.hello.devPub,
+    device: a.device,
+  };
+  state.tick += 1;
+  admit(state, { peer, channel, confirmed: false, busy: 0, revoked: null, heard: state.tick });
+};
+
 const accept = async (state: State, payload: Bytes, send: Send): Promise<void> => {
   const { options } = state;
   const hello = parseHello(payload);
@@ -117,28 +160,26 @@ const accept = async (state: State, payload: Bytes, send: Send): Promise<void> =
   const fingerprintBytes = await room.fingerprint(hello.devPub);
   const ephemeral = await handshake.generateKeyPair();
   const nonceB = handshake.nonce();
-  const keys = await handshake.derive({
-    role: 'box',
-    staticPrivate: options.identity.privateKey,
-    staticPeerPublic: hello.devPub,
-    ephemeralPrivate: ephemeral.privateKey,
-    ephemeralPeerPublic: hello.devEph,
-    nonceD: hello.nonceD,
-    nonceB,
-    roomId: options.roomId,
-  });
-  const fingerprint = hex(fingerprintBytes);
-  const channel = createChannel({ keys, fingerprint: fingerprintBytes });
-  const peer = { fingerprint, publicKey: hello.devPub, device };
-  state.tick += 1;
-  admit(state, { peer, channel, busy: 0, revoked: null, heard: state.tick });
   const reply = {
-    v: 1,
+    v: protocolVersion,
     boxEph: base64url.encode(ephemeral.publicKey),
     nonceB: base64url.encode(nonceB),
     to: base64url.encode(fingerprintBytes),
   };
   const payloadOut = bytes.fromUtf8(JSON.stringify(reply));
+  // The keys are derived from both hellos exactly as sent (protocol.md § 3). A device on
+  // another protocol version is answered, so it can tell its operator which side to update,
+  // but gets no channel: its derivation differs from ours by construction.
+  if (hello.v === protocolVersion) {
+    await admitChannel(state, {
+      hello,
+      device,
+      fingerprintBytes,
+      ephemeralPrivate: ephemeral.privateKey,
+      nonceB,
+      transcript: { helloD: payload, helloB: payloadOut },
+    });
+  }
   send(frame.encode({ kind: frame.kind.handshake, payload: payloadOut }));
 };
 
@@ -196,10 +237,28 @@ const revoke = async (state: State, deviceId: string, send: Send): Promise<void>
   );
 };
 
-const deliver = async (state: State, entries: Connected[], data: Bytes, send: Send) => {
+// A channel's first data frame carries nonce 0. One that opens on none of the device's channels
+// was the key confirmation of a channel whose handshake did not agree (a tampered hello, a peer
+// on other keys), so every channel still waiting for its first frame goes: the device gets
+// nothing back and starts over, rather than the box keeping a channel that never decrypts.
+const dropUnconfirmed = (state: State, entries: Connected[]): void => {
+  for (const entry of entries) if (!entry.confirmed) forget(state, entry);
+};
+
+const deliver = async (
+  state: State,
+  entries: Connected[],
+  decoded: { nonce: Bytes },
+  data: Bytes,
+  send: Send,
+): Promise<void> => {
   const opened = await openOnDevice(entries, data);
-  if (opened === null) return;
+  if (opened === null) {
+    if (frame.counterOf(decoded.nonce) === 0) dropUnconfirmed(state, entries);
+    return;
+  }
   const { entry, message } = opened;
+  entry.confirmed = true;
   state.tick += 1;
   entry.heard = state.tick;
   // A frame that was in flight when the device was revoked is dropped, not answered.
@@ -226,7 +285,7 @@ const handleFrame = async (state: State, data: Bytes, send: Send): Promise<void>
     return;
   }
   const entries = channelsOf(state, hex(new Uint8Array(decoded.fingerprint)));
-  if (entries.length > 0) await deliver(state, entries, data, send);
+  if (entries.length > 0) await deliver(state, entries, decoded, data, send);
 };
 
 // Sealed and sent per channel, never sealed for all and then sent: a channel numbers its

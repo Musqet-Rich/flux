@@ -1,6 +1,6 @@
 # Flux: protocol
 
-Status: draft v1, 2026-08-28. Protocol version `1`. Breaking changes bump the version; both ends refuse to talk across versions.
+Status: draft v2, 2026-08-29. Protocol version `2` (version 1 derived channel keys without the handshake transcript; see § 3 and `adr/0019`). Breaking changes bump the version; both ends refuse to talk across versions.
 
 All types here are the contract implemented in `packages/protocol`. That package contains the TypeScript types, hand-written type guards (no schema library, see `adr/0009`), binary framing, and crypto helpers. All three apps import from it and nothing else defines wire shapes.
 
@@ -36,13 +36,13 @@ Subsequent connections skip this; the handshake alone authenticates a trusted `d
 
 ## 2. Relay
 
-WebSocket at `wss://<relay-host>/ws/<roomId>`.
+WebSocket at `wss://<relay-host>/ws/<roomId>`, derived from the relay origin the operator configured (`FLUX_RELAY_URL` on the box, the pairing link's origin on the device) by `relayEndpoint.websocket`. The transport must be TLS: a party refuses to open `ws://` (or an `http://` origin) unless the host is `localhost`, `127.0.0.1` or `::1`, with the error code `insecure_transport`, before any socket is opened. Frames are end-to-end encrypted regardless, but a plaintext path still sees room ids and both handshake hellos and can drop or replay handshakes; the loopback exception is for development, where the relay and the box are the same machine.
 
 First message from a connecting party, plaintext JSON:
 
 ```ts
-{ v: 1, role: 'host', token: string }   // box
-{ v: 1, role: 'guest' }                 // device
+{ v: 2, role: 'host', token: string }   // box
+{ v: 2, role: 'guest' }                 // device
 ```
 
 Relay replies `{ ok: true }` or `{ ok: false, error: 'bad_version' | 'bad_token' | 'host_present' | 'room_full' }` and closes on error.
@@ -75,23 +75,27 @@ bytes 13..    : AES-256-GCM ciphertext + 16-byte tag
 
 Device initiates. Each side has a static keypair and generates an ephemeral X25519 keypair per connection. A connection is one handshake, not one device: every tab of a browser profile holds the same static key, so one device may have several channels open at once, each with its own keys and nonce counters. The box keeps them all and answers each on the channel its frame opened on; a data frame carries the device's fingerprint (below), not a connection id, so the box tries the device's channels and exactly one decrypts. The relay broadcasts everything the box sends, so a device also sees the box hellos and the data frames of every other connection, its own other tabs included; a frame that is not for a channel (another fingerprint, a handshake frame, or one that does not decrypt) is dropped, never a reason to reconnect. The relay does not tell the host when a guest leaves, so the box caps channels per device at the relay's guest limit and, past it, drops the channel it heard from least recently; a device that wants to keep a channel keeps talking on it (the PWA calls `hello` once a minute).
 
-1. Device → box (kind `0x01`, plaintext payload):
-   `{ v: 1, devPub, devEph, nonceD }` where `nonceD` is 16 random bytes.
-2. Box → device (kind `0x01`, plaintext payload):
-   `{ v: 1, boxEph, nonceB, to }` where `to` is the device's fingerprint (below), so the other guests in the room, who also receive this broadcast, can ignore it.
+1. Device → box (kind `0x01`, plaintext payload `helloD`):
+   `{ v: 2, devPub, devEph, nonceD }` where `nonceD` is 16 random bytes.
+2. Box → device (kind `0x01`, plaintext payload `helloB`):
+   `{ v: 2, boxEph, nonceB, to }` where `to` is the device's fingerprint (below), so the other guests in the room, who also receive this broadcast, can ignore it.
 3. Both compute:
    ```
    ss = X25519(static_self, static_peer)
    es = X25519(eph_self,    eph_peer)
    ikm = es || ss
    salt = nonceD || nonceB
-   keys = HKDF-SHA256(ikm, salt, info = "flux-v1-" || roomId, 64 bytes)
+   info = "flux-v2" || SHA-256(helloD || helloB)
+   keys = HKDF-SHA256(ikm, salt, info, 64 bytes)
    k_d2b = keys[0..32]    // device → box
    k_b2d = keys[32..64]   // box → device
    ```
-4. The device sends the first data frame: the `hello` RPC (§ 7). If `devPub` is not trusted and no pairing secret is live, the box does not answer the handshake at all. A device that can decrypt the `hello` result knows the box holds `boxPriv`; a box that receives a validly encrypted frame knows the device holds `devPriv`. An untrusted device may only call `pair.request` until it is paired (`not_paired` otherwise). A paired device that gets `not_paired` has been revoked (§ 6) and must forget its keys.
+   `info` is 39 bytes: the 7 ASCII bytes `66 6c 75 78 2d 76 32` followed by the 32-byte digest. `helloD` and `helloB` are the handshake payloads exactly as they went over the wire, the bytes after the frame kind, concatenated with nothing between them. Neither side re-serialises: the sender hashes the bytes it sent, the receiver the bytes it received, so the two sides agree only if the transcript was not touched. The whole of both hellos is thereby authenticated, including the fields the DH does not cover: `v` on both sides and `to`. Any change to either hello on the path (a downgraded `v`, a redirected `to`, so much as a byte of whitespace) yields different keys on the two sides, and the connection fails at step 4 rather than carrying on with an altered handshake. (`roomId`, which version 1 put in `info`, is a hash of `boxPub`, already bound through `ss`.)
+4. Key confirmation, without an extra round trip: the device sends the first data frame, the `hello` RPC (§ 7), with nonce 0. If `devPub` is not trusted and no pairing secret is live, the box does not answer the handshake at all. A device that can decrypt the `hello` result knows the box holds `boxPriv` and derived the same transcript; a box that opens the frame knows the same of the device and marks the channel confirmed. A data frame with nonce 0 for a device's fingerprint that opens on none of that device's channels is a failed confirmation: the box drops every channel of that device still waiting for its first frame (there is at most one in the common case; with several tabs handshaking at once it cannot tell which one failed, and they all reconnect), and never keeps a channel it has not been able to decrypt. A failed frame with a later nonce drops nothing, so a corrupt or stray frame cannot cut a working channel. (Any guest in the room can send a junk nonce-0 frame under a device's fingerprint and so evict that device's unconfirmed channels, at most a handshake's worth; the same guest can already fill the room or flood handshakes, so this is accepted, `adr/0019`.) The drop is silent, so the device's side of the confirmation is the timeout: a `hello` call that goes unanswered, the first one or a later keepalive, closes the socket and the device handshakes afresh, never keeping a channel that does not decrypt. Only `hello` does this; other methods may take as long as they take. An untrusted device may only call `pair.request` until it is paired (`not_paired` otherwise). A paired device that gets `not_paired` has been revoked (§ 6) and must forget its keys.
 
-Properties: mutual authentication via `ss`, forward secrecy via `es`. Replay across connections is impossible because `es` and `salt` are fresh. Nonces are counters per direction starting at 0; a receiver rejects any nonce ≤ the last seen. Senders must therefore emit frames in counter order even though encryption is asynchronous (the reference implementation queues seals per channel).
+Both guards accept any positive integer `v`, so a peer on another version still parses. A box that receives a device hello with `v ≠ 2` answers with its own hello (`v: 2`, a fresh `boxEph` and `nonceB`) but derives nothing and keeps no channel; a device that receives a box hello for its fingerprint with `v ≠ 2` stops, tells the operator which side to update (`bad_version`: "Box is on protocol 1; update it"), and retries at the full backoff in case the box is updated meanwhile. A box on version 1 does not reach this point: the relay refuses its join (§ 2), and its console says so.
+
+Properties: mutual authentication via `ss`, forward secrecy via `es`, transcript authentication and downgrade resistance via `info`. Replay across connections is impossible because `es` and `salt` are fresh. Nonces are counters per direction starting at 0; a receiver rejects any nonce ≤ the last seen. Senders must therefore emit frames in counter order even though encryption is asynchronous (the reference implementation queues seals per channel).
 
 Because the box broadcasts to all guests via the relay, each data frame carries the device's `devPub` fingerprint (first 8 bytes of `sha256(devPub)`) in the plaintext associated data so a guest can discard frames not meant for it without attempting decryption. Concretely: AAD = `kind || fingerprint`, and the fingerprint is prepended to the frame on the wire between `kind` and `nonce`. Final layout:
 
@@ -295,7 +299,7 @@ Device → box. Params are validated by type guards on the box (`rpcMethods`), r
 
 | method               | params                                                                             | result                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | -------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `hello`              | `{ protocol: 1; client: string }`                                                  | `{ protocol: 1; daemon: string; sessions: SessionSummary[]; vapidPublicKey?: string; agents?: ('claude' \| 'pi')[] }` (`agents`: the agent binaries the box found at start; absent means claude only)                                                                                                                                                                                                                                                                                                                                                                 |
+| `hello`              | `{ protocol: 2; client: string }`                                                  | `{ protocol: 2; daemon: string; sessions: SessionSummary[]; vapidPublicKey?: string; agents?: ('claude' \| 'pi')[] }` (`agents`: the agent binaries the box found at start; absent means claude only)                                                                                                                                                                                                                                                                                                                                                                 |
 | `events.sync`        | `{ session; since: number }`                                                       | `{ events: FluxEvent[]; complete: boolean }` (paged, 500 per call)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `sessions.list`      | `{}`                                                                               | `SessionSummary[]`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `sessions.cost`      | `{ session }`                                                                      | `{ costUsd: number; usage: TokenUsage; turns: number }` (aggregated from `turn.ended`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
@@ -401,6 +405,6 @@ Error codes: `bad_params`, `not_found`, `not_paired`, `agent_unavailable`, `git_
 
 ## 8. Versioning
 
-`protocol: 1` is exchanged in `hello` and in the relay's first message. Additive changes (new event types, new optional fields, new RPC methods) do not bump the version. Removing or changing the meaning of anything bumps the version.
+`protocol: 2` is exchanged in `hello`, in both handshake hellos (`v`) and in the relay's first message. Additive changes (new event types, new optional fields, new RPC methods) do not bump the version. Removing or changing the meaning of anything bumps the version. Version 2 (2026-08-29) changed key derivation to bind the handshake transcript (§ 3, `adr/0019`), so version 1 and 2 peers derive different keys: the relay refuses a version 1 join with `bad_version`, a box answers a version 1 device hello with its own version and no channel, and a device shown a box hello with another version reports `bad_version` rather than waiting on a channel that cannot decrypt.
 
 Unknown event types are version skew, not corruption. A receiver accepts any envelope whose `type` is a string it does not know, with whatever `payload` it carries, both as a live `event` message and inside an `events.sync` page; dropping it would leave a gap in `seq` and force a sync that can never complete. The event is kept in the log and rendered like `raw`: the type name and the payload as opaque JSON. A known type whose payload fails its guard is still rejected.

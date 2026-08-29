@@ -23,7 +23,6 @@ export const connectRelay = async (options: ConnectRelayOptions): Promise<HostTr
   const token = await room.token(options.identity.publicKey);
   const channels = createDeviceChannels({
     identity: options.identity,
-    roomId,
     deviceByKey: options.deviceByKey,
     pairingOpen: options.pairingOpen,
     onMessage: createRpcRouter(options.handlers),

@@ -1,5 +1,13 @@
 import type { Bytes, Wire } from '@flux/protocol';
-import { base64url, bytes, createChannel, frame, handshake, room } from '@flux/protocol';
+import {
+  base64url,
+  bytes,
+  createChannel,
+  frame,
+  handshake,
+  protocolVersion,
+  room,
+} from '@flux/protocol';
 import { expect, test } from 'vitest';
 
 import type { Peer } from './create-device-channels.ts';
@@ -7,8 +15,6 @@ import { createDeviceChannels } from './create-device-channels.ts';
 import type { Device } from './create-device-store.ts';
 
 // The test plays the device side of protocol.md § 3 with the protocol primitives.
-
-const roomId = 'AAAAAAAAAAAAAAAAAAAAAA';
 
 const setup = async (trusted: boolean, pairingOpen = false) => {
   const box = await handshake.generateKeyPair(true);
@@ -29,7 +35,6 @@ const setup = async (trusted: boolean, pairingOpen = false) => {
   const hooks = { beforeReply: (): Promise<void> => Promise.resolve() };
   const channels = createDeviceChannels({
     identity: { publicKey: box.publicKey, privateKey: box.privateKey },
-    roomId,
     deviceByKey: (key) => (trusted && bytes.equals(key, dev.publicKey) ? device : null),
     pairingOpen: () => pairingOpen,
     onMessage: async (peer, message) => {
@@ -44,11 +49,17 @@ const setup = async (trusted: boolean, pairingOpen = false) => {
 };
 
 // Runs the device side of the handshake against `channels` and returns the device's channel.
-const connectDevice = async (h: Awaited<ReturnType<typeof setup>>) => {
+// `v` is the version the device claims; `tamper` rewrites the box hello before the device
+// derives from it, as a relay in the middle could.
+const connectDevice = async (
+  h: Awaited<ReturnType<typeof setup>>,
+  v = protocolVersion,
+  tamper = (helloB: Bytes): Bytes => helloB,
+) => {
   const eph = await handshake.generateKeyPair();
   const nonceD = handshake.nonce();
   const hello = {
-    v: 1,
+    v,
     devPub: base64url.encode(h.dev.publicKey),
     devEph: base64url.encode(eph.publicKey),
     nonceD: base64url.encode(nonceD),
@@ -58,7 +69,8 @@ const connectDevice = async (h: Awaited<ReturnType<typeof setup>>) => {
   const replyFrame = frame.decode(h.out.at(-1) ?? new Uint8Array());
   const replyPayload =
     replyFrame.kind === frame.kind.handshake ? replyFrame.payload : new Uint8Array();
-  const reply: unknown = JSON.parse(bytes.toUtf8(new Uint8Array(replyPayload)));
+  const helloB = tamper(new Uint8Array(replyPayload));
+  const reply: unknown = JSON.parse(bytes.toUtf8(helloB));
   if (!handshake.isBoxHello(reply)) throw new Error('no box hello');
   const keys = await handshake.derive({
     role: 'device',
@@ -68,7 +80,7 @@ const connectDevice = async (h: Awaited<ReturnType<typeof setup>>) => {
     ephemeralPeerPublic: base64url.decode(reply.boxEph),
     nonceD,
     nonceB: base64url.decode(reply.nonceB),
-    roomId,
+    transcript: { helloD: payload, helloB },
   });
   const fingerprint = await room.fingerprint(h.dev.publicKey);
   return { channel: createChannel({ keys, fingerprint }), reply };
@@ -93,7 +105,7 @@ const flipLast = (data: Bytes): Bytes => {
 test('a trusted device handshakes, sends an rpc and gets the reply', async () => {
   const h = await setup(true);
   const { channel, reply } = await connectDevice(h);
-  expect(reply).toMatchObject({ v: 1, to: expect.any(String) });
+  expect(reply).toMatchObject({ v: protocolVersion, to: expect.any(String) });
   expect(h.channels.peers()).toMatchObject([{ device: { deviceId: 'd1' } }]);
   const rpc: Wire = { kind: 'rpc', id: 'r1', method: 'sessions.list', params: {} };
   await h.channels.handleFrame(await channel.seal(bytes.fromUtf8(JSON.stringify(rpc))), h.send);
@@ -138,7 +150,7 @@ test('garbage, bad frames and unknown senders are dropped silently', async () =>
     h.send,
   );
   await h.channels.handleFrame(
-    frame.encode({ kind: frame.kind.handshake, payload: bytes.fromUtf8('{"v":1}') }),
+    frame.encode({ kind: frame.kind.handshake, payload: bytes.fromUtf8('{"v":2}') }),
     h.send,
   );
   const stray = frame.encode({
@@ -159,6 +171,66 @@ test('garbage, bad frames and unknown senders are dropped silently', async () =>
   expect(h.seen).toEqual([]);
   h.channels.reset();
   expect(h.channels.peers()).toEqual([]);
+});
+
+// The device on another protocol version is answered with the box's version, so it can say
+// which side to update, but is given no channel: its first frame is dropped unanswered.
+test('a device on another protocol version gets the box hello and no channel', async () => {
+  const h = await setup(true);
+  const { channel, reply } = await connectDevice(h, 1);
+  expect(reply).toMatchObject({ v: protocolVersion });
+  expect(h.channels.peers()).toEqual([]);
+  await h.channels.handleFrame(await rpcFrame(channel), h.send);
+  expect(h.out).toHaveLength(1);
+  expect(h.seen).toEqual([]);
+});
+
+// A box hello with a space added after `v`: it parses the same, its bytes differ.
+const respace = (helloB: Bytes): Bytes => {
+  const text = bytes.toUtf8(helloB);
+  expect(text).toContain('{"v":2,');
+  return bytes.fromUtf8(text.replace('{"v":2,', '{"v":2, '));
+};
+
+// Key confirmation (protocol.md § 3): the device's first data frame must open, or the channel
+// its handshake made is dropped. A relay that rewrote the box hello on the way (here only its
+// whitespace: the fields parse the same, the bytes differ) gives the two sides different keys;
+// the box must not keep that channel around, and must not drop the device's other, working
+// channel over it.
+test('a first frame that fails to open drops the unconfirmed channel only', async () => {
+  const h = await setup(true);
+  const { channel: good } = await connectDevice(h);
+  await h.channels.handleFrame(await rpcFrame(good), h.send);
+  const { channel: bad } = await connectDevice(h, protocolVersion, respace);
+  const before = h.out.length;
+  await h.channels.handleFrame(await rpcFrame(bad), h.send);
+  expect(h.out).toHaveLength(before);
+  // Once dropped, even the device's own later frames on that channel are never tried.
+  await h.channels.handleFrame(await rpcFrame(bad), h.send);
+  await h.channels.handleFrame(await rpcFrame(good), h.send);
+  expect(h.seen).toHaveLength(2);
+  expect(await openWire(good, last(h.out))).toMatchObject({ kind: 'rpc.result', id: 'r2' });
+  await h.channels.broadcast(assistant(1, 'x'), h.send);
+  // One sealed copy: the good channel is the device's only channel now.
+  expect(h.out).toHaveLength(before + 2);
+});
+
+// A confirmed channel is never dropped by a failed frame: a stray frame with nonce 0 for the
+// device's fingerprint (a corrupted one, or a stranger's guess) costs the device nothing.
+test('a stray first frame does not drop a confirmed channel', async () => {
+  const h = await setup(true);
+  const { channel } = await connectDevice(h);
+  await h.channels.handleFrame(await rpcFrame(channel), h.send);
+  const stray = frame.encode({
+    kind: frame.kind.data,
+    fingerprint: await room.fingerprint(h.dev.publicKey),
+    nonce: frame.nonce(0),
+    ciphertext: new Uint8Array(20),
+  });
+  await h.channels.handleFrame(stray, h.send);
+  expect(h.channels.peers()).toHaveLength(1);
+  await h.channels.handleFrame(await rpcFrame(channel), h.send);
+  expect(h.seen).toHaveLength(2);
 });
 
 const assistant = (seq: number, text: string): Wire => ({

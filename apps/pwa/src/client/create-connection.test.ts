@@ -1,9 +1,10 @@
 import type { Ephemeral, FluxEvent, KeyPair } from '@flux/protocol';
-import { handshake } from '@flux/protocol';
+import { handshake, protocolVersion } from '@flux/protocol';
 import { expect, test } from 'vitest';
 
 import type { FakeRelay } from '../../test/fake-relay.ts';
 import { createFakeRelay } from '../../test/fake-relay.ts';
+import type { ClientError } from './client-error.ts';
 import type { ConnectionStatus } from './create-connection.ts';
 import { createConnection } from './create-connection.ts';
 
@@ -24,14 +25,19 @@ const createSignals = () => {
   const events: FluxEvent[] = [];
   const ephemerals: Ephemeral[] = [];
   const statuses: ConnectionStatus[] = [];
+  const errors: ClientError[] = [];
   const waiting: { status: ConnectionStatus; resolve: () => void }[] = [];
   let onEphemeral: (() => void) | null = null;
   return {
     events,
     ephemerals,
     statuses,
+    errors,
     onEvent: (e: FluxEvent) => {
       events.push(e);
+    },
+    onError: (e: ClientError) => {
+      errors.push(e);
     },
     onEphemeral: (d: Ephemeral) => {
       ephemerals.push(d);
@@ -63,32 +69,39 @@ const createRelay = () =>
 
 // A connection to `relay` as the device holding `keys`; a second one with the same keys is
 // another tab of the same browser profile.
-const setup = async (relay?: FakeRelay, keys?: KeyPair) => {
+const setup = async (
+  relay?: FakeRelay,
+  keys?: KeyPair,
+  relayUrl = 'https://relay.example',
+  rpcTimeoutMs?: number,
+) => {
   relay ??= await createRelay();
   const signals = createSignals();
   const connection = await createConnection({
-    relayUrl: 'https://relay.example',
+    relayUrl,
     keys: keys ?? (await handshake.generateKeyPair()),
     boxPub: relay.boxPub,
     socket: relay.socket,
     onEvent: signals.onEvent,
     onEphemeral: signals.onEphemeral,
     onStatus: signals.onStatus,
+    onError: signals.onError,
     minBackoffMs: 1,
     maxBackoffMs: 5,
     keepaliveMs: 2,
+    ...(rpcTimeoutMs === undefined ? {} : { rpcTimeoutMs }),
   });
   return { relay, signals, connection };
 };
 
 test('joins, handshakes, calls, and receives events and ephemerals', async () => {
   const { relay, signals, connection } = await setup();
-  await expect(connection.call('hello', { protocol: 1 })).rejects.toMatchObject({
+  await expect(connection.call('hello', { protocol: protocolVersion })).rejects.toMatchObject({
     code: 'offline',
   });
   connection.start();
   await connection.connected();
-  expect(await connection.call('hello', { protocol: 1 })).toEqual({
+  expect(await connection.call('hello', { protocol: protocolVersion })).toEqual({
     protocol: 1,
     daemon: 'box',
     sessions: [summary],
@@ -133,7 +146,7 @@ test('reconnects after the socket drops and fails the calls in flight', async ()
   const { relay, connection } = await setup();
   connection.start();
   await connection.connected();
-  const inFlight = connection.call('hello', { protocol: 1 });
+  const inFlight = connection.call('hello', { protocol: protocolVersion });
   relay.dropGuests();
   await expect(inFlight).rejects.toMatchObject({ code: 'offline' });
   expect(connection.status()).toBe('connecting');
@@ -142,6 +155,41 @@ test('reconnects after the socket drops and fails the calls in flight', async ()
   expect(relay.guests()).toBe(1);
   connection.stop();
   expect(relay.guests()).toBe(0);
+});
+
+// A box on another protocol version answers the handshake with its version and no keys
+// (protocol.md § 8). The device says which side to update, keeps retrying in case the box is
+// updated meanwhile, and never reports a channel that cannot decrypt as connected.
+test('a box on another protocol version is reported, and retried once updated', async () => {
+  const { relay, signals, connection } = await setup();
+  relay.boxVersion(1);
+  connection.start();
+  await expect.poll(() => signals.errors.length).toBeGreaterThanOrEqual(1);
+  expect(signals.errors[0]).toMatchObject({
+    code: 'bad_version',
+    message: 'Box is on protocol 1; update it',
+  });
+  expect(signals.statuses).not.toContain('connected');
+  relay.boxVersion(3);
+  await expect
+    .poll(() => signals.errors.at(-1)?.message)
+    .toBe('Box is on protocol 3; update this app');
+  relay.boxVersion(2);
+  await connection.connected();
+  connection.stop();
+});
+
+// A plaintext relay is only ever the developer's own machine (protocol.md § 2).
+test('refuses a plaintext relay off loopback before opening a socket', async () => {
+  const relay = await createRelay();
+  await expect(setup(relay, undefined, 'http://relay.example')).rejects.toMatchObject({
+    code: 'insecure_transport',
+  });
+  expect(relay.guests()).toBe(0);
+  const { connection } = await setup(relay, undefined, 'http://localhost:5173');
+  connection.start();
+  await connection.connected();
+  connection.stop();
 });
 
 test('a refused join backs off and retries', async () => {
@@ -188,7 +236,9 @@ test('two tabs of one device coexist, each on its own channel', async () => {
   expect(await a.connection.call('agent.send', { session: 's1', text: 'from a' })).toEqual({
     seq: 7,
   });
-  expect(await b.connection.call('hello', { protocol: 1 })).toMatchObject({ daemon: 'box' });
+  expect(await b.connection.call('hello', { protocol: protocolVersion })).toMatchObject({
+    daemon: 'box',
+  });
   expect(a.signals.statuses).toEqual(['connecting', 'connected']);
   expect(b.signals.statuses).toEqual(['connecting', 'connected']);
   expect(relay.guests()).toBe(2);
@@ -200,6 +250,31 @@ test('two tabs of one device coexist, each on its own channel', async () => {
   expect(b.connection.status()).toBe('connected');
   expect(relay.guests()).toBe(1);
   b.connection.stop();
+});
+
+// Key confirmation on the device (protocol.md § 3): a box that derived other keys drops the
+// channel and answers nothing, so the first `hello` times out. That closes the socket for a
+// fresh handshake, rather than leaving a channel up that never decrypts. Here the keepalive
+// hello is the one that times out.
+test('a hello that times out drops the channel and redoes the handshake', async () => {
+  const relay = await createRelay();
+  relay.mute(true);
+  const { signals, connection } = await setup(relay, undefined, undefined, 10);
+  connection.start();
+  await connection.connected();
+  const ups = (): number => signals.statuses.filter((s) => s === 'connected').length;
+  await expect.poll(ups).toBeGreaterThanOrEqual(2);
+  expect(relay.calls).toEqual([]);
+  relay.mute(false);
+  // A hello from before the box answered again may still time out and cut this socket once
+  // more; the next channel answers.
+  const daemon = (): Promise<string | null> =>
+    connection.call('hello', { protocol: protocolVersion }).then(
+      (reply) => reply.daemon,
+      () => null,
+    );
+  await expect.poll(daemon).toBe('box');
+  connection.stop();
 });
 
 test('a connected tab keeps saying hello so the box knows it is alive', async () => {

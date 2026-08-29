@@ -69,16 +69,19 @@ const boot = async (i: StoreInternals): Promise<void> => {
     i.state.phase = 'unpaired';
     return;
   }
-  const connection = await createConnection({
-    ...boxLink.options(i),
-    relayUrl: box.record.relayUrl,
-    keys: box.keys,
-    boxPub: box.boxPub,
-  });
-  boxLink.adopt(i, connection);
-  i.deviceId = box.record.deviceId;
-  i.state.phase = 'paired';
-  connection.start();
+  const options = { ...boxLink.options(i), relayUrl: box.record.relayUrl };
+  try {
+    const connection = await createConnection({ ...options, keys: box.keys, boxPub: box.boxPub });
+    boxLink.adopt(i, connection);
+    i.deviceId = box.record.deviceId;
+    i.state.phase = 'paired';
+    connection.start();
+  } catch (error) {
+    // A stored relay the connection refuses (plaintext off loopback) needs a new pairing link;
+    // the pair screen with the reason is where that starts.
+    boxLink.reportError(i, error, 'connection');
+    i.state.phase = 'unpaired';
+  }
 };
 
 const pair = async (i: StoreInternals, relayUrl: string, fragment: string): Promise<void> => {

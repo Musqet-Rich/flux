@@ -4,7 +4,7 @@ import { protocolVersion } from './protocol-version.ts';
 // The only plaintext the relay understands (protocol.md § 2): the first message from a
 // connecting party, its reply, and the three control frames the relay originates.
 
-export type RelayJoin = { v: 1; role: 'host'; token: string } | { v: 1; role: 'guest' };
+export type RelayJoin = { v: 2; role: 'host'; token: string } | { v: 2; role: 'guest' };
 
 export type RelayJoinError = 'bad_version' | 'bad_token' | 'host_present' | 'room_full';
 

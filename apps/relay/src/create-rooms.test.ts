@@ -28,8 +28,8 @@ const must = (result: JoinResult): Membership => {
   throw new Error(result.error);
 };
 
-const host = { v: 1, role: 'host', token: 't1' } as const;
-const guest = { v: 1, role: 'guest' } as const;
+const host = { v: 2, role: 'host', token: 't1' } as const;
+const guest = { v: 2, role: 'guest' } as const;
 const frame = new Uint8Array([2, 3, 4]);
 
 test('host frames fan out to every guest, guest frames go to the host', () => {

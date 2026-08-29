@@ -1,5 +1,5 @@
 import type { CodeRef, RpcMethods, SessionSummary, TokenUsage } from '@flux/protocol';
-import { fluxEvent } from '@flux/protocol';
+import { fluxEvent, protocolVersion } from '@flux/protocol';
 import { join } from 'node:path';
 
 import type { Peer } from './create-device-channels.ts';
@@ -107,7 +107,7 @@ export const createSessionHandlers = (ctx: HandlerContext): SessionHandlers => (
   hello: (_p, peer) => {
     if (peer.device !== null) ctx.devices.touch(peer.device.deviceId);
     return Promise.resolve({
-      protocol: 1,
+      protocol: protocolVersion,
       daemon: ctx.daemonName,
       sessions: ctx.sessions.list(),
       vapidPublicKey: ctx.vapidPublicKey,

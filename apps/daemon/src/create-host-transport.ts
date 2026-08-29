@@ -1,5 +1,5 @@
 import type { Bytes, Wire } from '@flux/protocol';
-import { protocolVersion, relayMessage } from '@flux/protocol';
+import { protocolVersion, relayEndpoint, relayMessage } from '@flux/protocol';
 
 import type { DeviceChannels } from './create-device-channels.ts';
 
@@ -10,6 +10,7 @@ import type { DeviceChannels } from './create-device-channels.ts';
 export type TransportStatus = 'stopped' | 'connecting' | 'connected';
 
 export interface HostTransport {
+  // Throws `insecure_transport` (ProtocolError) for a plaintext relay off loopback.
   start: () => void;
   stop: () => void;
   status: () => TransportStatus;
@@ -31,6 +32,10 @@ export interface HostTransportOptions {
 
 interface State {
   options: HostTransportOptions;
+  // The room's WebSocket URL, resolved at `start` (protocol.md § 2: plaintext only to loopback),
+  // so a bad `FLUX_RELAY_URL` fails the daemon's start rather than every reconnect, and a
+  // command that never connects (`flux devices`) needs no URL at all.
+  url: string | null;
   socket: WebSocket | null;
   status: TransportStatus;
   stopped: boolean;
@@ -39,14 +44,6 @@ interface State {
   // Incoming frames are handled one at a time so each channel's nonce counters stay ordered.
   queue: Promise<void>;
 }
-
-const wsUrl = (relayUrl: string, roomId: string): string => {
-  const url = new URL(relayUrl);
-  url.protocol =
-    url.protocol === 'http:' ? 'ws:' : url.protocol === 'https:' ? 'wss:' : url.protocol;
-  url.pathname = `/ws/${roomId}`;
-  return url.toString();
-};
 
 const setStatus = (state: State, status: TransportStatus): void => {
   if (state.status === status) return;
@@ -80,7 +77,15 @@ const onText = (state: State, text: string): void => {
       state.backoffMs = state.options.minBackoffMs ?? 1000;
       setStatus(state, 'connected');
     } else {
-      // A refused join is not transient; wait the full backoff before trying again.
+      // A refused join is not transient; wait the full backoff before trying again. Said on
+      // the console because nothing else can show it: no device can reach a box the relay
+      // turned away, and `bad_version` means one side of the deployment is behind.
+      console.error(
+        `flux daemon: relay refused join: ${parsed.error}` +
+          (parsed.error === 'bad_version'
+            ? ` (this daemon speaks protocol ${protocolVersion}; update the relay or the daemon)`
+            : ''),
+      );
       state.backoffMs = state.options.maxBackoffMs ?? 30_000;
     }
   }
@@ -104,7 +109,8 @@ const onMessage = (state: State, data: unknown): void => {
 const connect = (state: State): void => {
   if (state.stopped) return;
   setStatus(state, 'connecting');
-  const socket = new WebSocket(wsUrl(state.options.relayUrl, state.options.roomId));
+  if (state.url === null) return;
+  const socket = new WebSocket(state.url);
   socket.binaryType = 'arraybuffer';
   state.socket = socket;
   socket.addEventListener('open', () => {
@@ -127,6 +133,7 @@ const connect = (state: State): void => {
 export const createHostTransport = (options: HostTransportOptions): HostTransport => {
   const state: State = {
     options,
+    url: null,
     socket: null,
     status: 'stopped',
     stopped: true,
@@ -140,6 +147,7 @@ export const createHostTransport = (options: HostTransportOptions): HostTranspor
   return {
     start: () => {
       if (!state.stopped) return;
+      state.url = relayEndpoint.websocket(options.relayUrl, options.roomId);
       state.stopped = false;
       connect(state);
     },

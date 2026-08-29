@@ -101,7 +101,6 @@ const setup = async () => {
   const received: Wire[] = [];
   const channels = createDeviceChannels({
     identity: { publicKey: box.publicKey, privateKey: box.privateKey },
-    roomId,
     deviceByKey: () => ({
       deviceId: 'd1',
       publicKey: dev.publicKey,
@@ -139,12 +138,11 @@ test('joins as host, completes a device handshake and answers an rpc', async () 
   transport.start();
   const host = await untilHosts(1);
   await untilStatus(statuses, 'connected');
-  expect(joins[0]).toBe('{"v":1,"role":"host","token":"tok"}');
+  expect(joins[0]).toBe('{"v":2,"role":"host","token":"tok"}');
   const next = frames(host);
   const channel = await deviceHandshake({
     keys: dev,
     boxPub: box.publicKey,
-    roomId,
     send: (data) => {
       host.send(data);
     },
@@ -167,6 +165,28 @@ test('joins as host, completes a device handshake and answers an rpc', async () 
   expect(await plain(channel, await next())).toEqual(event);
   transport.stop();
   expect(transport.status()).toBe('stopped');
+});
+
+// A plaintext relay off loopback is refused before any socket opens (protocol.md § 2).
+test('refuses a plaintext relay URL that is not loopback', async () => {
+  const { box } = await setup();
+  const channels = createDeviceChannels({
+    identity: { publicKey: box.publicKey, privateKey: box.privateKey },
+    deviceByKey: () => null,
+    pairingOpen: () => false,
+    onMessage: () => Promise.resolve(null),
+  });
+  const transport = createHostTransport({
+    relayUrl: 'http://box.example:8787',
+    roomId,
+    token: 'tok',
+    channels,
+  });
+  expect(() => {
+    transport.start();
+  }).toThrow(expect.objectContaining({ code: 'insecure_transport' }));
+  expect(transport.status()).toBe('stopped');
+  expect(hosts).toEqual([]);
 });
 
 test('reconnects after the relay drops the connection', async () => {

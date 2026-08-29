@@ -72,7 +72,6 @@ const device =
     const channel = await deviceHandshake({
       keys: own,
       boxPub: payload.boxPub,
-      roomId: await room.id(payload.boxPub),
       send: context.relay().send,
       next,
     });
