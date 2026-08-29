@@ -1,6 +1,7 @@
 import type { AgentKind, CodeRef, SessionState, TokenUsage } from './event-payloads.ts';
 import type { FluxEvent } from './flux-event.ts';
 import { guards } from './guards.ts';
+import { isCodeRef } from './is-code-ref.ts';
 
 // RPC methods (protocol.md § 7): params are validated on the box with the guards below; results
 // are typed only, the box constructs them. Settings and devices are P2 and not listed yet.
@@ -116,15 +117,6 @@ const isEmpty = (v: unknown): v is Record<string, never> =>
 
 const withSession = (v: unknown): v is Record<string, unknown> & { session: string } =>
   isRecord(v) && isString(v['session']);
-
-const isLineRange = (v: unknown): v is { startLine: number; endLine: number } =>
-  isRecord(v) &&
-  isInteger(v['startLine'], 1) &&
-  isInteger(v['endLine'], 1) &&
-  v['endLine'] >= v['startLine'];
-
-const isCodeRef = (v: unknown): v is CodeRef =>
-  isRecord(v) && isString(v['path']) && isString(v['rev']) && isOptional(v['range'], isLineRange);
 
 export const rpcMethods: ParamGuards = {
   hello: (v): v is RpcMethods['hello']['params'] => isRecord(v) && isInteger(v['protocol'], 1),

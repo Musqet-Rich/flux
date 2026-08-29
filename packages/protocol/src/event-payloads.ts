@@ -1,4 +1,5 @@
 import { guards } from './guards.ts';
+import { isCodeRef } from './is-code-ref.ts';
 
 // Payload shapes and guards for every event type (protocol.md § 5). One guard per type, looked up
 // by the envelope guard in flux-event.ts. Adding an event means a type, a guard and a test here.
@@ -96,15 +97,6 @@ const isRateWindow = (v: unknown): v is RateWindow =>
   v['utilisation'] >= 0 &&
   v['utilisation'] <= 1 &&
   isString(v['resetsAt']);
-
-const isLineRange = (v: unknown): v is LineRange =>
-  isRecord(v) &&
-  isInteger(v['startLine'], 1) &&
-  isInteger(v['endLine'], 1) &&
-  v['endLine'] >= v['startLine'];
-
-const isCodeRef = (v: unknown): v is CodeRef =>
-  isRecord(v) && isString(v['path']) && isString(v['rev']) && isOptional(v['range'], isLineRange);
 
 const isChangedFile = (v: unknown): v is ChangedFile =>
   isRecord(v) &&

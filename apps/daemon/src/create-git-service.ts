@@ -26,7 +26,8 @@ export interface GitService {
   log: (worktree: string, limit: number) => Promise<Commit[]>;
   branches: (repo: string) => Promise<string[]>;
   revParse: (repo: string, rev: string) => Promise<string>;
-  addWorktree: (repo: string, path: string, branch: string, base: string) => Promise<void>;
+  // `base` null checks out an existing branch instead of creating one.
+  addWorktree: (repo: string, path: string, branch: string, base: string | null) => Promise<void>;
   removeWorktree: (repo: string, path: string) => Promise<void>;
   listRepos: (root: string) => Promise<Repo[]>;
 }
@@ -119,7 +120,8 @@ export const createGitService = (): GitService => ({
       .filter((line) => line !== ''),
   revParse: async (repo, rev) => (await git(repo, ['rev-parse', '--verify', rev])).trim(),
   addWorktree: async (repo, path, branch, base) => {
-    await git(repo, ['worktree', 'add', '-b', branch, path, base]);
+    const args = base === null ? [path, branch] : ['-b', branch, path, base];
+    await git(repo, ['worktree', 'add', ...args]);
   },
   removeWorktree: async (repo, path) => {
     await git(repo, ['worktree', 'remove', '--force', path]);

@@ -27,6 +27,7 @@ export { frame } from './frame.ts';
 export { guards } from './guards.ts';
 export type { BoxHello, DeriveInput, DeviceHello, DirectionKeys, KeyPair } from './handshake.ts';
 export { handshake } from './handshake.ts';
+export { isCodeRef } from './is-code-ref.ts';
 export type { PairingPayload } from './pairing.ts';
 export { pairing } from './pairing.ts';
 export type { ProtocolErrorCode } from './protocol-error.ts';
