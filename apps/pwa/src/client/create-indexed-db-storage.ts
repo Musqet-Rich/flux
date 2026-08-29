@@ -41,5 +41,10 @@ export const createIndexedDbStorage = (): Storage => {
     remove: async (key) => {
       await run('readwrite', (store) => store.delete(key));
     },
+    // Keys are strings, so every key with the prefix sorts between it and prefix + U+FFFF.
+    clear: async (prefix) => {
+      const range = IDBKeyRange.bound(prefix, `${prefix}\uFFFF`);
+      await run('readwrite', (store) => store.delete(range));
+    },
   };
 };

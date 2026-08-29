@@ -8,7 +8,7 @@ import type { SessionSupervisor } from './create-session-supervisor.ts';
 
 // What the control socket does with each request (ADR 0008): `ask` logs the question, parks
 // the session in waiting_user until an answer or the timeout, then logs the answer; `notify`
-// logs; `pair` mints a pairing URL.
+// logs; `pair` mints a pairing URL; `devices.rm` revokes a device.
 
 export interface ControlHandlerOptions {
   log: EventLog;
@@ -17,6 +17,7 @@ export interface ControlHandlerOptions {
   supervisor: (record: SessionRecord) => SessionSupervisor;
   emit: (event: FluxEvent) => void;
   pairingUrl: () => string;
+  revokeDevice: (deviceId: string) => Promise<void>;
   askTimeoutMs?: number;
 }
 
@@ -30,6 +31,10 @@ export const createControlHandler = (
   };
   return async (request) => {
     if (request.type === 'pair') return { url: options.pairingUrl() };
+    if (request.type === 'devices.rm') {
+      await options.revokeDevice(request.deviceId);
+      return {};
+    }
     const record = options.sessions.get(request.session);
     if (request.type === 'notify') {
       append(record.session, {

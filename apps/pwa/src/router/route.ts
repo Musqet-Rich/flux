@@ -6,6 +6,7 @@
 export type Route =
   | { name: 'sessions' }
   | { name: 'new' }
+  | { name: 'settings' }
   | { name: 'session'; session: string }
   | { name: 'changes'; session: string }
   | { name: 'diff'; session: string; path: string; from?: string }
@@ -24,6 +25,7 @@ const parse = (pathname: string, search = ''): Route => {
   const parts = pathname.split('/').filter((p) => p !== '');
   if (parts.length === 0) return { name: 'sessions' };
   if (parts[0] === 'new' && parts.length === 1) return { name: 'new' };
+  if (parts[0] === 'settings' && parts.length === 1) return { name: 'settings' };
   const session = parts[1];
   if (parts[0] !== 's' || session === undefined) return { name: 'sessions' };
   const tail = parts[2];
@@ -38,6 +40,7 @@ const parse = (pathname: string, search = ''): Route => {
 const path = (r: Route): string => {
   if (r.name === 'sessions') return '/';
   if (r.name === 'new') return '/new';
+  if (r.name === 'settings') return '/settings';
   const base = `/s/${encodeURIComponent(r.session)}`;
   if (r.name === 'session') return base;
   if (r.name === 'changes') return `${base}/changes`;

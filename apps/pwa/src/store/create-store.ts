@@ -1,13 +1,15 @@
 import type { CodeRef, RpcMethods, SessionSummary } from '@flux/protocol';
 
 import { ClientError } from '../client/client-error.ts';
+import type { Connection } from '../client/create-connection.ts';
 import { createConnection } from '../client/create-connection.ts';
-import type { RpcCall } from '../client/create-rpc-client.ts';
 import { pairDevice } from '../client/pair-device.ts';
 import { pairedBox } from '../client/paired-box.ts';
 import { boxLink } from './box-link.ts';
 import { pendingComments } from './pending-comments.ts';
 import { sessionLogs } from './session-logs.ts';
+import type { SettingsActions } from './settings-actions.ts';
+import { settingsActions } from './settings-actions.ts';
 import type { StoreInternals, StoreOptions, StoreState } from './store-state.ts';
 import { storeState } from './store-state.ts';
 
@@ -24,7 +26,7 @@ export type PrParams = Omit<RpcMethods['git.pr']['params'], 'session'>;
 // not put in `state.error` like other failures.
 export type SaveOutcome = { ok: true; hash: string } | { ok: false; conflict: boolean };
 
-export interface Store {
+export interface Store extends SettingsActions {
   state: StoreState;
   // Loads the paired box from storage and connects, or lands on the pair screen.
   boot: () => Promise<void>;
@@ -54,7 +56,7 @@ export interface Store {
   commit: (session: string, message: string, paths?: string[]) => Promise<string | null>;
   push: (session: string) => Promise<{ remote: string; branch: string } | null>;
   openPr: (session: string, pr: PrParams) => Promise<string | null>;
-  call: RpcCall;
+  call: Connection['call'];
   stop: () => void;
 }
 
@@ -72,6 +74,7 @@ const boot = async (i: StoreInternals): Promise<void> => {
     boxPub: box.boxPub,
   });
   boxLink.adopt(i, connection);
+  i.deviceId = box.record.deviceId;
   i.state.phase = 'paired';
   connection.start();
 };
@@ -83,6 +86,7 @@ const pair = async (i: StoreInternals, relayUrl: string, fragment: string): Prom
     const { box, connection } = await pairDevice({ ...boxLink.options(i), relayUrl, fragment });
     await i.options.storage.set(pairedBox.storageKey, box.record);
     boxLink.adopt(i, connection);
+    i.deviceId = box.record.deviceId;
     i.state.phase = 'paired';
     await boxLink.afterConnect(i);
   } catch (error) {
@@ -160,8 +164,10 @@ export const createStore = (options: StoreOptions): Store => {
     sync: null,
     vapidPublicKey: null,
     refreshing: null,
+    deviceId: null,
   };
   return {
+    ...settingsActions(i),
     state: i.state,
     boot: () => boot(i),
     pair: (relayUrl, fragment) => pair(i, relayUrl, fragment),

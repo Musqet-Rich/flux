@@ -72,7 +72,11 @@ sudo journalctl -u flux-daemon -n 5  # "flux daemon: relay https://YOUR.DOMAIN"
 sudo -u flux -i flux pair
 ```
 
-That prints a QR code and the link it encodes, valid for ten minutes. On the phone, open `https://YOUR.DOMAIN`, tap **Scan QR code** (or paste the link), and accept the notification prompt when asked. Add the page to the home screen for a full-screen app. Pairing is per device; list or revoke with `sudo -u flux -i flux devices ls` and `flux devices rm <id>`. Under systemd the daemon never prints a pairing link to the journal; it only does so when started on a terminal.
+That prints a QR code and the link it encodes, valid for ten minutes. On the phone, open `https://YOUR.DOMAIN`, tap **Scan QR code** (or paste the link), and accept the notification prompt when asked. Add the page to the home screen for a full-screen app. Pairing is per device: run `flux pair` again for each one. The gear in the app's header opens **Settings**, which lists paired devices and revokes them (a revoked device is cut off at once and must pair again); the box can do the same with `sudo -u flux -i flux devices ls` and `flux devices rm <id>` (which asks the running daemon, so the device is cut off at once; with no daemon running it edits the database and says so). Under systemd the daemon never prints a pairing link to the journal; it only does so when started on a terminal.
+
+### Settings
+
+The same screen edits what the box lets you change while it runs: the repositories directory, the default agent, and which events send a push (questions, idle, done/blocked). Values that only the environment sets (relay URL, data dir, push subject, `claude` binary) are shown read-only. Below that are the agent's global `CLAUDE.md` and `settings.json` from the flux user's `~/.claude`, edited as text; `settings.json` is refused unless it is a JSON object.
 
 ### Notifications
 

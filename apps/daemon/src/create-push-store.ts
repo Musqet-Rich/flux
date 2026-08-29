@@ -17,6 +17,8 @@ export interface PushStore {
   put: (deviceId: string, subscription: unknown) => PushSubscription;
   all: () => PushSubscription[];
   remove: (endpoint: string) => void;
+  // Drops every subscription a device stored; part of revoking it.
+  removeDevice: (deviceId: string) => void;
   // The VAPID P-256 key, generated on first use and kept in box_keys next to the identity.
   vapid: () => Promise<VapidKeys>;
 }
@@ -70,6 +72,7 @@ export const createPushStore = (db: DatabaseSync): PushStore => {
   );
   const selectAll = db.prepare('SELECT subscription FROM push_subscriptions');
   const del = db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?');
+  const delDevice = db.prepare('DELETE FROM push_subscriptions WHERE device_id = ?');
   return {
     put: (deviceId, subscription) => {
       const clean = normalise(subscription);
@@ -84,6 +87,9 @@ export const createPushStore = (db: DatabaseSync): PushStore => {
         .filter((s): s is PushSubscription => s !== null),
     remove: (endpoint) => {
       del.run(endpoint);
+    },
+    removeDevice: (deviceId) => {
+      delDevice.run(deviceId);
     },
     vapid: () => loadOrCreateVapid(db),
   };

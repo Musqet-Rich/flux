@@ -38,6 +38,7 @@ export { relayMessage } from './relay-message.ts';
 export { room } from './room.ts';
 export type {
   Commit,
+  Device,
   DirEntry,
   FileContent,
   FileStatus,
@@ -49,5 +50,13 @@ export type {
 } from './rpc-methods.ts';
 export { rpcMethods } from './rpc-methods.ts';
 export { rpcResults } from './rpc-results.ts';
+export type {
+  AgentConfig,
+  EnvSettings,
+  FluxSettings,
+  Settings,
+  SettingsPatch,
+} from './settings.ts';
+export { settings } from './settings.ts';
 export type { RpcError, Wire } from './wire.ts';
 export { wire } from './wire.ts';

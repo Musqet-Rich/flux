@@ -13,27 +13,34 @@ const roomId = 'AAAAAAAAAAAAAAAAAAAAAA';
 const setup = async (trusted: boolean, pairingOpen = false) => {
   const box = await handshake.generateKeyPair(true);
   const dev = await handshake.generateKeyPair(true);
-  const device: Device = { deviceId: 'd1', publicKey: dev.publicKey, name: 'phone', pairedAt: 't' };
+  const device: Device = {
+    deviceId: 'd1',
+    publicKey: dev.publicKey,
+    name: 'phone',
+    pairedAt: 't',
+    lastSeenAt: null,
+  };
   const seen: { peer: Peer; message: Wire }[] = [];
   const out: Bytes[] = [];
   const send = (data: Bytes): void => {
     out.push(data);
   };
+  // What a handler does before answering; a test swaps it to revoke mid-call.
+  const hooks = { beforeReply: (): Promise<void> => Promise.resolve() };
   const channels = createDeviceChannels({
     identity: { publicKey: box.publicKey, privateKey: box.privateKey },
     roomId,
     deviceByKey: (key) => (trusted && bytes.equals(key, dev.publicKey) ? device : null),
     pairingOpen: () => pairingOpen,
-    onMessage: (peer, message) => {
+    onMessage: async (peer, message) => {
       seen.push({ peer, message });
-      return Promise.resolve(
-        message.kind === 'rpc'
-          ? { kind: 'rpc.result', id: message.id, ok: true, result: 42 }
-          : null,
-      );
+      await hooks.beforeReply();
+      return message.kind === 'rpc'
+        ? { kind: 'rpc.result', id: message.id, ok: true, result: 42 }
+        : null;
     },
   });
-  return { box, dev, device, channels, seen, out, send };
+  return { box, dev, device, channels, seen, out, send, hooks };
 };
 
 // Runs the device side of the handshake against `channels` and returns the device's channel.
@@ -71,6 +78,7 @@ const openWire = async (channel: ReturnType<typeof createChannel>, data: Bytes):
   JSON.parse(bytes.toUtf8((await channel.open(data)) ?? new Uint8Array()));
 
 const last = (out: Bytes[]): Bytes => out.at(-1) ?? new Uint8Array();
+const nth = (out: Bytes[], n: number): Bytes => out.at(n) ?? new Uint8Array();
 
 const firstFingerprint = (h: Awaited<ReturnType<typeof setup>>): string =>
   h.channels.peers()[0]?.fingerprint ?? '';
@@ -185,4 +193,64 @@ test('a reply sealed behind a broadcast never overtakes it on its device', async
     .filter((plain) => plain !== null)
     .map((plain): unknown => JSON.parse(bytes.toUtf8(plain)));
   expect(seen).toEqual([assistant(2, 'event'), result]);
+});
+
+const revoked: Wire = { kind: 'ephemeral', data: { type: 'device.revoked', deviceId: 'd1' } };
+const rpcFrame = (channel: ReturnType<typeof createChannel>): Promise<Bytes> =>
+  channel.seal(
+    bytes.fromUtf8(JSON.stringify({ kind: 'rpc', id: 'r2', method: 'sessions.list', params: {} })),
+  );
+
+test('a revoked device is told once, then ignored; unknown ids are a no-op', async () => {
+  const h = await setup(true);
+  const { channel } = await connectDevice(h);
+  await h.channels.revoke('nobody', h.send);
+  expect(h.channels.peers()).toHaveLength(1);
+  await h.channels.revoke('d1', h.send);
+  expect(await openWire(channel, last(h.out))).toEqual(revoked);
+  expect(h.channels.peers()).toEqual([]);
+  const before = h.out.length;
+  await h.channels.handleFrame(await rpcFrame(channel), h.send);
+  expect(h.out).toHaveLength(before);
+  expect(h.seen).toEqual([]);
+});
+
+test('revocation while an rpc is in flight drops later frames and strips the device', async () => {
+  const h = await setup(true);
+  const { channel } = await connectDevice(h);
+  const gate = Promise.withResolvers<void>();
+  const entered = Promise.withResolvers<void>();
+  h.hooks.beforeReply = () => {
+    entered.resolve();
+    return gate.promise;
+  };
+  const inFlight = h.channels.handleFrame(await rpcFrame(channel), h.send);
+  await entered.promise;
+  await h.channels.revoke('d1', h.send);
+  // Still connected until the answer is out, but already a stranger to every handler.
+  expect(h.channels.peers()).toMatchObject([{ device: null }]);
+  expect(h.seen[0]?.peer.device).toBeNull();
+  const before = h.out.length;
+  await h.channels.handleFrame(await rpcFrame(channel), h.send);
+  expect(h.out).toHaveLength(before);
+  expect(h.seen).toHaveLength(1);
+  gate.resolve();
+  await inFlight;
+  expect(h.channels.peers()).toEqual([]);
+  expect(await openWire(channel, nth(h.out, -2))).toMatchObject({ kind: 'rpc.result', id: 'r2' });
+  expect(await openWire(channel, last(h.out))).toEqual(revoked);
+});
+
+test('a device removing itself gets the answer before the notice', async () => {
+  const h = await setup(true);
+  const { channel } = await connectDevice(h);
+  h.hooks.beforeReply = () => h.channels.revoke('d1', h.send);
+  await h.channels.handleFrame(await rpcFrame(channel), h.send);
+  expect(await openWire(channel, nth(h.out, -2))).toMatchObject({
+    kind: 'rpc.result',
+    id: 'r2',
+    ok: true,
+  });
+  expect(await openWire(channel, last(h.out))).toEqual(revoked);
+  expect(h.channels.peers()).toEqual([]);
 });

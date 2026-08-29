@@ -3,12 +3,10 @@ import { computed } from 'vue';
 
 import type { Route, Router } from '../router/create-router.ts';
 import type { Store } from '../store/create-store.ts';
-import ChangesView from './ChangesView.vue';
-import DiffView from './DiffView.vue';
-import EditView from './EditView.vue';
 import NewSessionView from './NewSessionView.vue';
+import SessionScreens from './SessionScreens.vue';
 import SessionTabs from './SessionTabs.vue';
-import SessionView from './SessionView.vue';
+import SettingsView from './SettingsView.vue';
 import StatusBar from './StatusBar.vue';
 
 // The paired app: tabs on top, the routed screen in the middle, status at the bottom.
@@ -25,14 +23,6 @@ const go = (to: Route): void => {
 const openSession = (session: string): void => {
   go({ name: 'session', session });
 };
-// From the changes screen, so the active session is the one being diffed.
-const openDiff = (path: string, from: string | null): void => {
-  const session = active.value ?? '';
-  go(from === null ? { name: 'diff', session, path } : { name: 'diff', session, path, from });
-};
-const openEdit = (path: string): void => {
-  go({ name: 'edit', session: active.value ?? '', path });
-};
 const enablePush = (): void => {
   void props.store.enablePush();
 };
@@ -46,6 +36,16 @@ const enablePush = (): void => {
       @select="openSession"
       @create="go({ name: 'new' })"
     />
+    <button
+      type="button"
+      class="gear"
+      :class="{ active: route.name === 'settings' }"
+      aria-label="Settings"
+      title="Settings"
+      @click="go({ name: 'settings' })"
+    >
+      ⚙
+    </button>
   </header>
   <main class="body">
     <section v-if="route.name === 'sessions'" class="empty">
@@ -54,36 +54,12 @@ const enablePush = (): void => {
       <button type="button" @click="go({ name: 'new' })">New session</button>
     </section>
     <NewSessionView v-else-if="route.name === 'new'" :store="store" @created="openSession" />
-    <SessionView
-      v-else-if="route.name === 'session'"
+    <SettingsView
+      v-else-if="route.name === 'settings'"
       :store="store"
-      :session="route.session"
-      @changes="go({ name: 'changes', session: route.session })"
+      @back="go({ name: 'sessions' })"
     />
-    <ChangesView
-      v-else-if="route.name === 'changes'"
-      :store="store"
-      :session="route.session"
-      @open="openDiff"
-      @edit="openEdit"
-      @back="openSession(route.session)"
-    />
-    <EditView
-      v-else-if="route.name === 'edit'"
-      :store="store"
-      :session="route.session"
-      :path="route.path"
-      @back="go({ name: 'changes', session: route.session })"
-    />
-    <DiffView
-      v-else
-      :store="store"
-      :session="route.session"
-      :path="route.path"
-      :from="route.from ?? null"
-      @edit="openEdit(route.path)"
-      @back="go({ name: 'changes', session: route.session })"
-    />
+    <SessionScreens v-else :store="store" :route="route" @go="go" />
   </main>
   <StatusBar
     :status="state.status"
@@ -98,9 +74,30 @@ const enablePush = (): void => {
 <style scoped>
 .top {
   flex: none;
+  display: flex;
+  align-items: center;
   border-bottom: 1px solid var(--border);
   background: var(--panel);
   padding-top: env(safe-area-inset-top);
+}
+
+.top > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.gear {
+  flex: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.2rem;
+  line-height: 1;
+  padding: 0.4rem 0.6rem;
+  margin-right: 0.4rem;
+}
+
+.gear.active {
+  color: var(--fg);
 }
 
 .body {

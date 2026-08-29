@@ -6,6 +6,8 @@ export interface Storage {
   get: (key: string) => Promise<unknown>;
   set: (key: string, value: unknown) => Promise<void>;
   remove: (key: string) => Promise<void>;
+  // Forgets every key starting with `prefix`.
+  clear: (prefix: string) => Promise<void>;
 }
 
 export const createMemoryStorage = (): Storage => {
@@ -18,6 +20,10 @@ export const createMemoryStorage = (): Storage => {
     },
     remove: (key) => {
       map.delete(key);
+      return Promise.resolve();
+    },
+    clear: (prefix) => {
+      for (const key of map.keys()) if (key.startsWith(prefix)) map.delete(key);
       return Promise.resolve();
     },
   };

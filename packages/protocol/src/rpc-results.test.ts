@@ -22,6 +22,18 @@ const event = {
   payload: { text: 'hi' },
 };
 const content = { content: 'x', binary: false };
+const device = { deviceId: 'd', pairedAt: '2026-01-01T00:00:00Z', current: true };
+const settings = {
+  flux: {
+    reposDir: '/r',
+    defaultAgent: 'claude',
+    notifyOnAsk: true,
+    notifyOnIdle: true,
+    notifyOnDone: true,
+  },
+  env: { relayUrl: 'r', dataDir: 'd', daemonName: 'n', pushSubject: 'p', claudeCommand: 'c' },
+  agent: { claudeMd: '', settingsJson: '{}' },
+};
 
 // One accepted and one rejected value per method; the table is the spec of protocol.md § 7.
 const cases: { [M in RpcMethod]: [ok: unknown, bad: unknown] } = {
@@ -62,6 +74,10 @@ const cases: { [M in RpcMethod]: [ok: unknown, bad: unknown] } = {
   ],
   'pair.request': [{ deviceId: 'd' }, {}],
   'push.subscribe': [{}, false],
+  'devices.list': [[device, { ...device, name: 'phone', lastSeenAt: 't' }], [{ deviceId: 'd' }]],
+  'devices.remove': [{}, 0],
+  'settings.get': [settings, { ...settings, agent: {} }],
+  'settings.set': [settings, { flux: settings.flux }],
 };
 
 test.each(Object.entries(cases))('%s result guard accepts and rejects', (method, [ok, bad]) => {
@@ -89,4 +105,7 @@ test('optional fields may be present or absent, never wrong', () => {
   );
   expect(rpcResults['git.status']({ files: [{ path: 'b', status: 'R', from: 'a' }] })).toBe(true);
   expect(rpcResults['git.status']({ files: [{ path: 'b', status: 'R', from: 1 }] })).toBe(false);
+  expect(rpcResults['devices.list']([{ ...device, name: 1 }])).toBe(false);
+  expect(rpcResults['devices.list']([{ ...device, lastSeenAt: 1 }])).toBe(false);
+  expect(rpcResults['devices.list']([{ ...device, current: 'yes' }])).toBe(false);
 });

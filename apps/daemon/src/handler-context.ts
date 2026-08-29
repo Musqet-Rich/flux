@@ -1,29 +1,32 @@
-import type { AskRegistry } from './create-ask-registry.ts';
-import type { CommentStore } from './create-comment-store.ts';
-import type { DeviceStore } from './create-device-store.ts';
-import type { EventLog } from './create-event-log.ts';
-import type { GitService } from './create-git-service.ts';
-import type { PushStore } from './create-push-store.ts';
-import type { SessionRecord, SessionStore } from './create-session-store.ts';
+import type { EnvSettings } from '@flux/protocol';
+
+import type { SessionRecord } from './create-session-store.ts';
 import type { SessionSupervisor } from './create-session-supervisor.ts';
+import type { Services } from './open-services.ts';
 
 // Everything an RPC handler may touch (architecture.md § Daemon). Handlers get this and nothing
-// else, so what the wire can reach is visible in one place.
+// else, so what the wire can reach is visible in one place. The service types are named through
+// `Services` rather than imported one by one to stay inside the per-file import budget.
 export interface HandlerContext {
   daemonName: string;
   // base64url of the raw P-256 VAPID public key; the PWA subscribes with it (ADR 0013).
   vapidPublicKey: string;
-  reposDir: string;
+  // What only the environment sets; reported read-only by `settings.get`.
+  env: EnvSettings;
   worktreesDir: string;
-  log: EventLog;
-  sessions: SessionStore;
-  devices: DeviceStore;
-  comments: CommentStore;
-  push: PushStore;
-  asks: AskRegistry;
-  git: GitService;
+  log: Services['log'];
+  sessions: Services['sessions'];
+  devices: Services['devices'];
+  comments: Services['comments'];
+  push: Services['push'];
+  settings: Services['settings'];
+  agentConfig: Services['agentConfig'];
+  asks: Services['asks'];
+  git: Services['git'];
   supervisor: (record: SessionRecord) => SessionSupervisor;
   closeSupervisor: (session: string) => Promise<void>;
+  // Forgets a device everywhere: trust list, push subscriptions, live channels.
+  revokeDevice: (deviceId: string) => Promise<void>;
 }
 
 // A types-only module still needs a runtime export named as the file for the module shape rule

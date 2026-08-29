@@ -4,6 +4,7 @@ import { fluxEvent, guards, protocolVersion } from '@flux/protocol';
 import { ClientError } from '../client/client-error.ts';
 import type { Connection, ConnectionOptions } from '../client/create-connection.ts';
 import type { SessionLog } from '../client/create-session-log.ts';
+import { pairedBox } from '../client/paired-box.ts';
 import { syncSession } from '../client/sync-session.ts';
 import { logCache } from './log-cache.ts';
 import type { StoreInternals } from './store-state.ts';
@@ -18,14 +19,48 @@ const reportError = (i: StoreInternals, error: unknown): void => {
   i.state.error = error instanceof Error ? error.message : String(error);
 };
 
-const call = <M extends keyof RpcMethods>(
+// Forgets the box: the stored keys go, the connection stops, and the app lands on the pair
+// screen with `reason` as the error. Used when the box says this device is no longer paired.
+const unpair = async (i: StoreInternals, reason: string): Promise<void> => {
+  i.connection?.stop();
+  i.connection = null;
+  i.sync = null;
+  i.deviceId = null;
+  i.logs.clear();
+  i.state.logs = {};
+  i.state.sessions = [];
+  i.state.devices = [];
+  i.state.settings = null;
+  i.state.daemon = null;
+  i.state.phase = 'unpaired';
+  i.state.error = reason;
+  // The keys, then the old box's cached logs: another box's session ids must not collide.
+  await i.options.storage.remove(pairedBox.storageKey).catch(() => {
+    // Nothing to do: the keys are already out of memory and the next boot re-reads storage.
+  });
+  await i.options.storage.clear('log:').catch(() => {
+    // A stale cache costs a sync after the next pairing, nothing more.
+  });
+};
+
+const revokedReason = 'This device is no longer paired with the box. Pair it again to continue.';
+
+const call = async <M extends keyof RpcMethods>(
   i: StoreInternals,
   method: M,
   params: RpcMethods[M]['params'],
-): Promise<RpcMethods[M]['result']> =>
-  i.connection === null
-    ? Promise.reject(new ClientError('offline', 'not paired'))
-    : i.connection.call(method, params);
+): Promise<RpcMethods[M]['result']> => {
+  if (i.connection === null) throw new ClientError('offline', 'not paired');
+  try {
+    return await i.connection.call(method, params);
+  } catch (error) {
+    // Only a box that has forgotten this device answers not_paired after pairing; the caller
+    // reports the reason the pair screen shows, not the box's terse message.
+    if (!(error instanceof ClientError) || error.code !== 'not_paired') throw error;
+    await unpair(i, revokedReason);
+    throw new ClientError('not_paired', revokedReason);
+  }
+};
 
 // Runs an action for a view: a failure lands in `state.error` for the status bar and the view
 // gets false, never a rejection to handle.
@@ -120,6 +155,10 @@ const onEvent = (i: StoreInternals, event: FluxEvent): void => {
 };
 
 const onEphemeral = (i: StoreInternals, data: Ephemeral): void => {
+  if (data.type === 'device.revoked') {
+    if (data.deviceId === i.deviceId) void unpair(i, revokedReason);
+    return;
+  }
   const log = i.logs.get(data.session);
   const view = i.state.logs[data.session];
   if (log === undefined || view === undefined) return;
@@ -171,6 +210,7 @@ export const boxLink: {
   reportError: typeof reportError;
   attempt: typeof attempt;
   call: typeof call;
+  unpair: typeof unpair;
 } = {
   options,
   adopt,
@@ -181,4 +221,5 @@ export const boxLink: {
   reportError,
   attempt,
   call,
+  unpair,
 };

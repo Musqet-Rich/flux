@@ -89,7 +89,7 @@ Device initiates. Each side has a static keypair and generates an ephemeral X255
    k_d2b = keys[0..32]    // device → box
    k_b2d = keys[32..64]   // box → device
    ```
-4. The device sends the first data frame: the `hello` RPC (§ 7). If `devPub` is not trusted and no pairing secret is live, the box does not answer the handshake at all. A device that can decrypt the `hello` result knows the box holds `boxPriv`; a box that receives a validly encrypted frame knows the device holds `devPriv`. An untrusted device may only call `pair.request` until it is paired (`not_paired` otherwise).
+4. The device sends the first data frame: the `hello` RPC (§ 7). If `devPub` is not trusted and no pairing secret is live, the box does not answer the handshake at all. A device that can decrypt the `hello` result knows the box holds `boxPriv`; a box that receives a validly encrypted frame knows the device holds `devPriv`. An untrusted device may only call `pair.request` until it is paired (`not_paired` otherwise). A paired device that gets `not_paired` has been revoked (§ 6) and must forget its keys.
 
 Properties: mutual authentication via `ss`, forward secrecy via `es`. Replay across connections is impossible because `es` and `salt` are fresh. Nonces are counters per direction starting at 0; a receiver rejects any nonce ≤ the last seen. Senders must therefore emit frames in counter order even though encryption is asynchronous (the reference implementation queues seals per channel).
 
@@ -242,8 +242,11 @@ Never logged, may be dropped.
 type Ephemeral =
   | { type: 'delta'; session: string; forSeq: number; text: string } // streaming assistant text; forSeq is the seq the final msg.assistant will take
   | { type: 'typing'; session: string; deviceId: string } // optional, P2
-  | { type: 'agent.status'; session: string; status: 'thinking' | 'tool' | 'idle' };
+  | { type: 'agent.status'; session: string; status: 'thinking' | 'tool' | 'idle' }
+  | { type: 'device.revoked'; deviceId: string }; // box → the device being revoked, then the box forgets its channel
 ```
+
+`device.revoked` is the one ephemeral without a session. The box sends it on the channel of a device that has just been removed (`devices.remove`, or `flux devices rm` on the box) and then drops that channel: later frames from it are ignored, and a fresh handshake is treated as a stranger's (§ 3). A device that removed itself gets its `rpc.result` first, then the notice. On receipt the device forgets its keys and returns to pairing.
 
 `forSeq` is the daemon's next seq for that session at the time the assistant message begins. If a tool call is logged in between (which takes that seq), the daemon sends a fresh `delta` with the corrected `forSeq` and an empty `text` to reset the client buffer. The client treats deltas as display hints only.
 
@@ -251,36 +254,37 @@ type Ephemeral =
 
 Device → box. Params are validated by type guards on the box (`rpcMethods`), results on the device (`rpcResults`); a result that fails its guard is a `bad_reply` on the device, never a trusted value.
 
-| method                          | params                                                   | result                                                                                                                                                                                                                                                                          |
-| ------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `hello`                         | `{ protocol: 1; client: string }`                        | `{ protocol: 1; daemon: string; sessions: SessionSummary[]; vapidPublicKey?: string }`                                                                                                                                                                                          |
-| `events.sync`                   | `{ session; since: number }`                             | `{ events: FluxEvent[]; complete: boolean }` (paged, 500 per call)                                                                                                                                                                                                              |
-| `sessions.list`                 | `{}`                                                     | `SessionSummary[]`                                                                                                                                                                                                                                                              |
-| `sessions.cost`                 | `{ session }`                                            | `{ costUsd: number; usage: TokenUsage; turns: number }` (aggregated from `turn.ended`)                                                                                                                                                                                          |
-| `sessions.create`               | `{ repo; branch; base?: string; agent; title? }`         | `SessionSummary`                                                                                                                                                                                                                                                                |
-| `sessions.archive`              | `{ session }`                                            | `{}`                                                                                                                                                                                                                                                                            |
-| `sessions.restart`              | `{ session }`                                            | `{}` (respawns agent with resume)                                                                                                                                                                                                                                               |
-| `agent.send`                    | `{ session; text; commentIds?: string[] }`               | `{ seq: number }`                                                                                                                                                                                                                                                               |
-| `agent.answer`                  | `{ session; askId; answer }`                             | `{}`                                                                                                                                                                                                                                                                            |
-| `agent.interrupt`               | `{ session }`                                            | `{}`                                                                                                                                                                                                                                                                            |
-| `comments.add`                  | `{ session; ref: CodeRef; text }`                        | `{ commentId }`                                                                                                                                                                                                                                                                 |
-| `comments.remove`               | `{ session; commentId }`                                 | `{}`                                                                                                                                                                                                                                                                            |
-| `git.status`                    | `{ session }`                                            | `{ files: FileStatus[] }`                                                                                                                                                                                                                                                       |
-| `git.diff`                      | `{ session; path?: string; from?: string; to?: string }` | `{ diff: string }` (unified, `from` defaults to `base`, `to` defaults to `worktree`)                                                                                                                                                                                            |
-| `git.show`                      | `{ session; path; rev }`                                 | `FileContent`                                                                                                                                                                                                                                                                   |
-| `git.log`                       | `{ session; limit? }`                                    | `{ commits: Commit[] }`                                                                                                                                                                                                                                                         |
-| `git.commit`                    | `{ session; message; paths?: string[] }`                 | `{ sha }` (stages and commits `paths` only, or all changes incl. untracked; `bad_params` on an empty message, an empty list, `''`/`.` or a path outside the worktree; a renamed file needs both its paths)                                                                      |
-| `git.push`                      | `{ session; setUpstream?: boolean }`                     | `{ remote; branch }` (never forces; a branch's first push sets its upstream; `git_error` when detached, without a remote, or rejected by the remote)                                                                                                                            |
-| `git.pr`                        | `{ session; title; body?; base?; draft?: boolean }`      | `{ url }` (`gh pr create` in the worktree; the branch's _open_ PR is returned instead if there is one, a closed or merged one is not; `base` defaults to the session's base when that is a branch of the repository, otherwise to gh's choice, the repository's default branch) |
-| `fs.read`                       | `{ session; path }`                                      | `FileContent`                                                                                                                                                                                                                                                                   |
-| `fs.write`                      | `{ session; path; content: string; ifMatch?: string }`   | `{ hash: string }` (P2; atomic, UTF-8, inside the worktree only)                                                                                                                                                                                                                |
-| `fs.list`                       | `{ session; path }`                                      | `{ entries: { name; kind: 'file' \| 'dir' }[] }`                                                                                                                                                                                                                                |
-| `repos.list`                    | `{}`                                                     | `{ repos: { path; name; branches: string[] }[] }`                                                                                                                                                                                                                               |
-| `pair.request`                  | `{ devPub; proof }`                                      | `{ deviceId }`                                                                                                                                                                                                                                                                  |
-| `devices.list`                  | `{}`                                                     | `Device[]` (P2)                                                                                                                                                                                                                                                                 |
-| `devices.remove`                | `{ deviceId }`                                           | `{}` (P2)                                                                                                                                                                                                                                                                       |
-| `push.subscribe`                | `{ subscription: PushSubscriptionJSON }`                 | `{}` (stored on the box, which sends pushes itself, `adr/0013`)                                                                                                                                                                                                                 |
-| `settings.get` / `settings.set` | P2                                                       | P2                                                                                                                                                                                                                                                                              |
+| method             | params                                                           | result                                                                                                                                                                                                                                                                          |
+| ------------------ | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `hello`            | `{ protocol: 1; client: string }`                                | `{ protocol: 1; daemon: string; sessions: SessionSummary[]; vapidPublicKey?: string }`                                                                                                                                                                                          |
+| `events.sync`      | `{ session; since: number }`                                     | `{ events: FluxEvent[]; complete: boolean }` (paged, 500 per call)                                                                                                                                                                                                              |
+| `sessions.list`    | `{}`                                                             | `SessionSummary[]`                                                                                                                                                                                                                                                              |
+| `sessions.cost`    | `{ session }`                                                    | `{ costUsd: number; usage: TokenUsage; turns: number }` (aggregated from `turn.ended`)                                                                                                                                                                                          |
+| `sessions.create`  | `{ repo; branch; base?: string; agent; title? }`                 | `SessionSummary`                                                                                                                                                                                                                                                                |
+| `sessions.archive` | `{ session }`                                                    | `{}`                                                                                                                                                                                                                                                                            |
+| `sessions.restart` | `{ session }`                                                    | `{}` (respawns agent with resume)                                                                                                                                                                                                                                               |
+| `agent.send`       | `{ session; text; commentIds?: string[] }`                       | `{ seq: number }`                                                                                                                                                                                                                                                               |
+| `agent.answer`     | `{ session; askId; answer }`                                     | `{}`                                                                                                                                                                                                                                                                            |
+| `agent.interrupt`  | `{ session }`                                                    | `{}`                                                                                                                                                                                                                                                                            |
+| `comments.add`     | `{ session; ref: CodeRef; text }`                                | `{ commentId }`                                                                                                                                                                                                                                                                 |
+| `comments.remove`  | `{ session; commentId }`                                         | `{}`                                                                                                                                                                                                                                                                            |
+| `git.status`       | `{ session }`                                                    | `{ files: FileStatus[] }`                                                                                                                                                                                                                                                       |
+| `git.diff`         | `{ session; path?: string; from?: string; to?: string }`         | `{ diff: string }` (unified, `from` defaults to `base`, `to` defaults to `worktree`)                                                                                                                                                                                            |
+| `git.show`         | `{ session; path; rev }`                                         | `FileContent`                                                                                                                                                                                                                                                                   |
+| `git.log`          | `{ session; limit? }`                                            | `{ commits: Commit[] }`                                                                                                                                                                                                                                                         |
+| `git.commit`       | `{ session; message; paths?: string[] }`                         | `{ sha }` (stages and commits `paths` only, or all changes incl. untracked; `bad_params` on an empty message, an empty list, `''`/`.` or a path outside the worktree; a renamed file needs both its paths)                                                                      |
+| `git.push`         | `{ session; setUpstream?: boolean }`                             | `{ remote; branch }` (never forces; a branch's first push sets its upstream; `git_error` when detached, without a remote, or rejected by the remote)                                                                                                                            |
+| `git.pr`           | `{ session; title; body?; base?; draft?: boolean }`              | `{ url }` (`gh pr create` in the worktree; the branch's _open_ PR is returned instead if there is one, a closed or merged one is not; `base` defaults to the session's base when that is a branch of the repository, otherwise to gh's choice, the repository's default branch) |
+| `fs.read`          | `{ session; path }`                                              | `FileContent`                                                                                                                                                                                                                                                                   |
+| `fs.write`         | `{ session; path; content: string; ifMatch?: string }`           | `{ hash: string }` (P2; atomic, UTF-8, inside the worktree only)                                                                                                                                                                                                                |
+| `fs.list`          | `{ session; path }`                                              | `{ entries: { name; kind: 'file' \| 'dir' }[] }`                                                                                                                                                                                                                                |
+| `repos.list`       | `{}`                                                             | `{ repos: { path; name; branches: string[] }[] }`                                                                                                                                                                                                                               |
+| `pair.request`     | `{ devPub; proof }`                                              | `{ deviceId }`                                                                                                                                                                                                                                                                  |
+| `push.subscribe`   | `{ subscription: PushSubscriptionJSON }`                         | `{}` (stored on the box, which sends pushes itself, `adr/0013`)                                                                                                                                                                                                                 |
+| `devices.list`     | `{}`                                                             | `Device[]` (`current` marks the caller)                                                                                                                                                                                                                                         |
+| `devices.remove`   | `{ deviceId }`                                                   | `{}` (`not_found` if unknown; the device is told and cut off, § 6; self-removal allowed)                                                                                                                                                                                        |
+| `settings.get`     | `{}`                                                             | `Settings`                                                                                                                                                                                                                                                                      |
+| `settings.set`     | `{ flux?: Partial<FluxSettings>; agent?: Partial<AgentConfig> }` | `Settings` (the whole state after the patch; `bad_params` and nothing written if any part is invalid, including an unknown key)                                                                                                                                                 |
 
 ```ts
 interface SessionSummary {
@@ -292,6 +296,44 @@ interface SessionSummary {
   state: 'idle' | 'running' | 'waiting_user' | 'ended';
   lastSeq: number;
   updatedAt: string;
+}
+
+interface Device {
+  deviceId: string;
+  name?: string;
+  pairedAt: string;
+  lastSeenAt?: string; // set on each hello
+  current: boolean; // the device making the call
+}
+
+interface Settings {
+  flux: FluxSettings; // runtime settings, stored on the box, changeable while it runs
+  env: EnvSettings; // set only by the daemon's environment; read-only here
+  agent: AgentConfig;
+}
+
+interface FluxSettings {
+  reposDir: string; // absolute; where `repos.list` and `sessions.create` look
+  defaultAgent: 'claude' | 'pi';
+  notifyOnAsk: boolean; // push on `ask`
+  notifyOnIdle: boolean; // push on running → idle
+  notifyOnDone: boolean; // push on `notify` done | blocked
+}
+
+interface EnvSettings {
+  relayUrl: string;
+  dataDir: string;
+  daemonName: string;
+  pushSubject: string;
+  claudeCommand: string;
+}
+
+// The agent's global config files on the box, verbatim: ~/.claude/CLAUDE.md and
+// ~/.claude/settings.json of the user the daemon runs as. Empty string when a file is absent.
+// `settingsJson` must be a JSON object on `settings.set`.
+interface AgentConfig {
+  claudeMd: string;
+  settingsJson: string;
 }
 ```
 
