@@ -323,13 +323,16 @@ test('a task ending is said where the composer was, Back and the strip switch ch
   store.stop();
 });
 
-// The next message closes the turn: an ended task leaves the strip, its note in main still
-// opens its chat, and while that chat is open its row is back (highlighted) for Back.
+// The next message closes the turn: an ended task leaves the strip, which goes with it until a
+// new task starts (a lone `main` row is noise); its note in main still opens its chat, and while that chat is open its row is back (highlighted) for Back.
 test('an ended task leaves the strip on the next message, kept while its chat is open', async () => {
   const { box, wrapper } = await withSubagent();
   const { store, relay, event } = box;
   await relay.emit(event(7, 'task.ended', { taskId: 't1', status: 'completed', summary: 'a' }));
   await relay.emit(event(8, 'msg.user', { text: 'next' }));
+  await until(() => store.state.logs['s1']?.lastSeq === 8);
+  await flushPromises();
+  expect(wrapper.find('.agents').exists()).toBe(false);
   await relay.emit(event(9, 'task.started', started('t2', 'u2', 'Read a.txt')));
   await until(() => store.state.logs['s1']?.lastSeq === 9);
   await flushPromises();
