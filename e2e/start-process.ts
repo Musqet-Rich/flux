@@ -19,6 +19,8 @@ export interface ProcessOptions {
 
 export interface StartedProcess {
   match: RegExpExecArray;
+  // The group leader, for a pidfile a later run can kill the group by.
+  pid: number;
   // SIGTERM to the group, SIGKILL if it is still there after `killAfterMs`.
   stop: () => Promise<void>;
   // For an `exit` handler: SIGKILL the group now, nothing awaited.
@@ -81,6 +83,7 @@ export const startProcess = async (options: ProcessOptions): Promise<StartedProc
   const match = await untilReady(child, options);
   return {
     match,
+    pid: child.pid ?? 0,
     stop: async () => {
       signalGroup(child, 'SIGTERM');
       const killer = setTimeout(() => {

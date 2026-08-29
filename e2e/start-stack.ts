@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { E2eError } from './e2e-error.ts';
 import type { StartedProcess } from './start-process.ts';
 import { startProcess } from './start-process.ts';
+import { sweepStale } from './sweep-stale.ts';
 
 // The deployed shape on one machine, ephemeral ports, throwaway state: the built relay serving
 // the built PWA, the built daemon in a temp data dir with one repository to pick from, and the
@@ -49,12 +50,19 @@ const run = (
 
 // The operator's own git and shell configuration stay out of it: GIT_* from a hook would point
 // every git call at the flux checkout, and a global gitconfig (signing, hooks, aliases) would
-// shape the temp repository. HOME is the temp dir for every child.
+// shape the temp repository. HOME and XDG_CONFIG_HOME (git reads $XDG_CONFIG_HOME/git/config
+// too) are the temp dir for every child.
 const isolatedEnv = (home: string): NodeJS.ProcessEnv => ({
   ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_'))),
   HOME: home,
+  XDG_CONFIG_HOME: home,
   GIT_CONFIG_NOSYSTEM: '1',
 });
+
+// A pidfile per child in the temp dir, so a run that finds this dir left behind can kill the
+// group (sweep-stale.ts) instead of only removing the files.
+const pidfile = (dir: string, name: string, child: StartedProcess): Promise<void> =>
+  writeFile(join(dir, `${name}.pid`), `${child.pid}\n`);
 
 const requireBuilt = async (): Promise<void> => {
   const files = [relayBin, daemonBin, join(pwaDist, 'index.html')];
@@ -136,6 +144,7 @@ const attachCleanup = (children: StartedProcess[], dir: string): (() => void) =>
 
 export const startStack = async (label: string): Promise<Stack> => {
   await requireBuilt();
+  for (const swept of sweepStale()) process.stderr.write(`[e2e] swept stale ${swept}\n`);
   const dir = await mkdtemp(join(tmpdir(), `flux-e2e-${label}-`));
   const reposDir = join(dir, 'repos');
   const dataDir = join(dir, 'data');
@@ -145,6 +154,7 @@ export const startStack = async (label: string): Promise<Stack> => {
   const detach = attachCleanup(children, dir);
   const relay = await startRelay(env);
   children.push(relay);
+  await pidfile(dir, 'relay', relay);
   const pwaUrl = `http://127.0.0.1:${relay.match[1] ?? ''}`;
   const agentStdin = join(dir, 'agent-stdin.jsonl');
   const daemonEnv = {
@@ -160,6 +170,7 @@ export const startStack = async (label: string): Promise<Stack> => {
   };
   const daemon = await startDaemon(daemonEnv);
   children.push(daemon);
+  await pidfile(dir, 'daemon', daemon);
   return {
     pwaUrl,
     pairingUrl: await pair(daemonEnv),
