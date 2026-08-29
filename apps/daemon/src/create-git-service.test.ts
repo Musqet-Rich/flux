@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -75,11 +76,26 @@ test('diff defaults to base against the worktree and accepts revs and a path', a
   expect(await git.diff(repo, base, { path: 'nope.txt' })).toBe('');
 });
 
-test('show reads a rev or the worktree, and flags binary content', async () => {
+const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex');
+
+test('show reads a rev or the worktree, hashes the bytes, and flags binary content', async () => {
   await writeFile(join(repo, 'a.txt'), 'two\n');
-  expect(await git.show(repo, 'a.txt', 'HEAD')).toEqual({ content: 'one\n', binary: false });
-  expect(await git.show(repo, 'a.txt', 'worktree')).toEqual({ content: 'two\n', binary: false });
-  expect(await git.show(repo, 'bin.dat', 'worktree')).toEqual({
+  expect(await git.show(repo, 'a.txt', 'HEAD')).toEqual({
+    content: 'one\n',
+    binary: false,
+    hash: sha256('one\n'),
+    truncated: false,
+  });
+  expect(await git.show(repo, 'a.txt', 'worktree')).toMatchObject({
+    content: 'two\n',
+    binary: false,
+    hash: sha256('two\n'),
+  });
+  expect(await git.show(repo, 'bin.dat', 'worktree')).toMatchObject({
+    content: 'AAECAw==',
+    binary: true,
+  });
+  expect(await git.show(repo, 'bin.dat', 'HEAD')).toMatchObject({
     content: 'AAECAw==',
     binary: true,
   });
@@ -109,14 +125,36 @@ test('branches and worktrees', async () => {
   const path = join(root, 'wt');
   await git.addWorktree(repo, path, 'flux/task', 'main');
   expect(await git.branches(repo)).toContain('flux/task');
-  expect(await git.show(path, 'a.txt', 'worktree')).toEqual({ content: 'one\n', binary: false });
+  expect(await git.show(path, 'a.txt', 'worktree')).toMatchObject({ content: 'one\n' });
   await git.removeWorktree(repo, path);
   await expect(git.show(path, 'a.txt', 'worktree')).rejects.toThrow(DaemonError);
   await expect(git.addWorktree(repo, path, 'main', 'main')).rejects.toMatchObject({
     code: 'git_error',
   });
   await git.addWorktree(repo, path, 'feature', null);
-  expect(await git.show(path, 'a.txt', 'worktree')).toEqual({ content: 'one\n', binary: false });
+  expect(await git.show(path, 'a.txt', 'worktree')).toMatchObject({ content: 'one\n' });
+});
+
+test('show sends the first MiB of a large file, committed or not, and hashes all of it', async () => {
+  const big = 'x'.repeat(1024 * 1024 + 5);
+  await writeFile(join(repo, 'big.txt'), big);
+  sh(repo, ['add', 'big.txt']);
+  sh(repo, ['commit', '-qm', 'big']);
+  const shown = await Promise.all([
+    git.show(repo, 'big.txt', 'worktree'),
+    git.show(repo, 'big.txt', 'HEAD'),
+  ]);
+  expect(shown.map((s) => s.truncated)).toEqual([true, true]);
+  expect(shown.map((s) => s.content.length)).toEqual([1024 * 1024, 1024 * 1024]);
+  expect(shown.map((s) => s.hash)).toEqual([sha256(big), sha256(big)]);
+});
+
+test('show treats bytes that are not UTF-8 as binary, so they cannot be edited lossily', async () => {
+  const latin1 = Buffer.from([0x63, 0x61, 0x66, 0xe9]);
+  await writeFile(join(repo, 'latin.txt'), latin1);
+  const shown = await git.show(repo, 'latin.txt', 'worktree');
+  expect(shown.binary).toBe(true);
+  expect(shown.content).toBe(latin1.toString('base64'));
 });
 
 test('listRepos finds git repositories directly under a root, with their branches', async () => {

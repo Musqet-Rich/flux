@@ -41,6 +41,16 @@ export interface DirEntry {
   kind: 'file' | 'dir';
 }
 
+// A file as `git.show` and `fs.read` return it. `hash` is the sha256 hex of the whole file's
+// bytes, which `fs.write` takes as `ifMatch`; `truncated` says the content is only the first
+// 1 MiB, so it must not be written back. Both are additive (protocol.md § 8).
+export interface FileContent {
+  content: string;
+  binary: boolean;
+  hash?: string;
+  truncated?: boolean;
+}
+
 export interface RpcMethods {
   hello: {
     params: { protocol: number };
@@ -90,7 +100,7 @@ export interface RpcMethods {
   };
   'git.show': {
     params: { session: string; path: string; rev: string };
-    result: { content: string; binary: boolean };
+    result: FileContent;
   };
   'git.log': { params: { session: string; limit?: number }; result: { commits: Commit[] } };
   // Stages `paths` (or every change, untracked included, when omitted) and commits.
@@ -110,7 +120,11 @@ export interface RpcMethods {
   };
   'fs.read': {
     params: { session: string; path: string };
-    result: { content: string; binary: boolean };
+    result: FileContent;
+  };
+  'fs.write': {
+    params: { session: string; path: string; content: string; ifMatch?: string };
+    result: { hash: string };
   };
   'fs.list': { params: { session: string; path: string }; result: { entries: DirEntry[] } };
   'repos.list': { params: Record<string, never>; result: { repos: Repo[] } };
@@ -127,6 +141,7 @@ export type RpcErrorCode =
   | 'agent_unavailable'
   | 'git_error'
   | 'gh_error'
+  | 'conflict'
   | 'internal';
 
 type ParamGuards = { [M in RpcMethod]: (value: unknown) => value is RpcMethods[M]['params'] };
@@ -188,6 +203,11 @@ export const rpcMethods: ParamGuards = {
     isOptional(v['base'], isString) &&
     isOptional(v['draft'], isBoolean),
   'fs.read': (v): v is RpcMethods['fs.read']['params'] => withSession(v) && isString(v['path']),
+  'fs.write': (v): v is RpcMethods['fs.write']['params'] =>
+    withSession(v) &&
+    isString(v['path']) &&
+    isString(v['content']) &&
+    isOptional(v['ifMatch'], isString),
   'fs.list': (v): v is RpcMethods['fs.list']['params'] => withSession(v) && isString(v['path']),
   'repos.list': isEmpty,
   'pair.request': (v): v is RpcMethods['pair.request']['params'] =>

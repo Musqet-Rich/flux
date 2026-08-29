@@ -50,7 +50,8 @@ const cases: { [M in RpcMethod]: [ok: unknown, bad: unknown] } = {
   'git.commit': [{ sha: 'abc' }, { sha: 1 }],
   'git.push': [{ remote: 'origin', branch: 'b' }, { remote: 'origin' }],
   'git.pr': [{ url: 'https://x/pull/1' }, {}],
-  'fs.read': [content, { content: 1, binary: false }],
+  'fs.read': [{ ...content, hash: 'ab', truncated: true }, { content: 1, binary: false }],
+  'fs.write': [{ hash: 'ab' }, { hash: 1 }],
   'fs.list': [{ entries: [{ name: 'a', kind: 'dir' }] }, { entries: [{ name: 'a', kind: 'x' }] }],
   'repos.list': [
     { repos: [{ path: '/r', name: 'r', branches: ['main'] }] },
@@ -74,6 +75,11 @@ test('events.sync accepts a page containing unknown event types', () => {
 });
 
 test('optional fields may be present or absent, never wrong', () => {
+  expect(rpcResults['git.show']({ ...content, hash: 1 })).toBe(false);
+  expect(rpcResults['git.show']({ ...content, hash: null })).toBe(false);
+  expect(rpcResults['fs.read']({ ...content, truncated: 'yes' })).toBe(false);
+  expect(rpcResults['fs.read']({ ...content, truncated: 1 })).toBe(false);
+  expect(rpcResults['fs.read']({ ...content, hash: 'ab' })).toBe(true);
   expect(rpcResults.hello({ protocol: 1, daemon: 'd', sessions: [] })).toBe(true);
   expect(rpcResults.hello({ protocol: 1, daemon: 'd', sessions: [], vapidPublicKey: 1 })).toBe(
     false,

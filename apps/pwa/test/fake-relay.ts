@@ -18,11 +18,13 @@ import {
   wire,
 } from '@flux/protocol';
 
+import { ClientError } from '../src/client/client-error.ts';
 import type { Socket, SocketFactory, SocketHandlers } from '../src/client/socket.ts';
 
 // An in-memory relay with a box behind it, for connection tests: the client's socket factory
 // yields sockets wired straight into this. The box answers RPCs from `handlers`, and the test
-// can make it emit, leave and rejoin. Delivery is asynchronous, as on a real socket.
+// can make it emit, leave and rejoin. Delivery is asynchronous, as on a real socket. A handler
+// that throws a ClientError answers with that code as an rpc error, the way the box refuses.
 
 export type Handlers = {
   [M in keyof RpcMethods]?: (params: RpcMethods[M]['params']) => RpcMethods[M]['result'];
@@ -73,13 +75,27 @@ const reply = async (guest: Guest, message: Wire): Promise<void> => {
   deliver(guest, await guest.channel.seal(bytes.fromUtf8(JSON.stringify(message))));
 };
 
+const refuse = (id: string, code: string, message: string): Wire => ({
+  kind: 'rpc.result',
+  id,
+  ok: false,
+  error: { code, message },
+});
+
+const outcome = (id: string, handler: (params: unknown) => unknown, params: unknown): Wire => {
+  try {
+    return { kind: 'rpc.result', id, ok: true, result: handler(params) };
+  } catch (error) {
+    if (error instanceof ClientError) return refuse(id, error.code, error.message);
+    throw error;
+  }
+};
+
 const answer = (state: State, guest: Guest, id: string, method: string, params: unknown): void => {
   state.calls.push({ method, params });
   const handler = state.handlers[method];
-  const message: Wire =
-    handler === undefined
-      ? { kind: 'rpc.result', id, ok: false, error: { code: 'not_found', message: `no ${method}` } }
-      : { kind: 'rpc.result', id, ok: true, result: handler(params) };
+  const message =
+    handler === undefined ? refuse(id, 'not_found', `no ${method}`) : outcome(id, handler, params);
   void reply(guest, message);
 };
 

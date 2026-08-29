@@ -4,6 +4,7 @@ import { guards } from './guards.ts';
 import type {
   Commit,
   DirEntry,
+  FileContent,
   FileStatus,
   Repo,
   RpcMethod,
@@ -60,8 +61,12 @@ const isRepo = (v: unknown): v is Repo =>
 const isDirEntry = (v: unknown): v is DirEntry =>
   isRecord(v) && isString(v['name']) && isOneOf(v['kind'], ['file', 'dir']);
 
-const isContent = (v: unknown): v is { content: string; binary: boolean } =>
-  isRecord(v) && isString(v['content']) && isBoolean(v['binary']);
+const isContent = (v: unknown): v is FileContent =>
+  isRecord(v) &&
+  isString(v['content']) &&
+  isBoolean(v['binary']) &&
+  isOptional(v['hash'], isString) &&
+  isOptional(v['truncated'], isBoolean);
 
 export const rpcResults: ResultGuards = {
   hello: (v): v is RpcMethods['hello']['result'] =>
@@ -93,6 +98,7 @@ export const rpcResults: ResultGuards = {
     isRecord(v) && isString(v['remote']) && isString(v['branch']),
   'git.pr': (v): v is { url: string } => isRecord(v) && isString(v['url']),
   'fs.read': isContent,
+  'fs.write': (v): v is { hash: string } => isRecord(v) && isString(v['hash']),
   'fs.list': (v): v is { entries: DirEntry[] } =>
     isRecord(v) && isArrayOf(v['entries'], isDirEntry),
   'repos.list': (v): v is { repos: Repo[] } => isRecord(v) && isArrayOf(v['repos'], isRepo),

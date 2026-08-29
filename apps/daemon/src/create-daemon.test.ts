@@ -1,7 +1,7 @@
 import type { Bytes, Channel, Wire } from '@flux/protocol';
 import { base64url, bytes, handshake, pairing, room } from '@flux/protocol';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { lstat, mkdtemp, mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -59,7 +59,7 @@ const setup = async () => {
   });
   await daemon.start();
   await relay.host();
-  return { repo };
+  return { repo, root };
 };
 
 // A device: parses the pairing URL, handshakes over the fake relay, returns an rpc caller.
@@ -151,4 +151,79 @@ test('pair, create a session, talk to the agent, sync the log', async () => {
   expect(await call(d.channel, 'sessions.cost', { session })).toMatchObject({ turns: 1 });
   await call(d.channel, 'sessions.archive', { session });
   expect(await call(d.channel, 'sessions.list', {})).toEqual([]);
+});
+
+// A paired device with one session whose worktree is on disk.
+const pairedSession = async () => {
+  const { repo, root } = await setup();
+  const d = await device();
+  const proof = await pairing.proof(d.payload.secret, d.keys.publicKey, d.payload.boxPub);
+  await call(d.channel, 'pair.request', {
+    devPub: base64url.encode(d.keys.publicKey),
+    proof: base64url.encode(proof),
+  });
+  const created = (await call(d.channel, 'sessions.create', {
+    repo,
+    branch: 'flux/edit',
+    agent: 'claude',
+  })) as { session: string };
+  const { session } = created;
+  const worktree = join(root, 'data', 'worktrees', session);
+  return { repo, d, session, worktree };
+};
+
+// Two devices edit one file: the second save carries a stale hash and is refused without
+// touching the file.
+test('a paired device edits a file in the worktree, with conflict detection', async () => {
+  const { d, session, worktree } = await pairedSession();
+  const read = (await call(d.channel, 'fs.read', { session, path: 'README.md' })) as {
+    content: string;
+    hash: string;
+    truncated: boolean;
+  };
+  expect(read).toMatchObject({ content: '# app\n', truncated: false });
+  const saved = (await call(d.channel, 'fs.write', {
+    session,
+    path: 'README.md',
+    content: '# app\n\nedited\n',
+    ifMatch: read.hash,
+  })) as { hash: string };
+  expect(await readFile(join(worktree, 'README.md'), 'utf8')).toBe('# app\n\nedited\n');
+  await expect(
+    call(d.channel, 'fs.write', { session, path: 'README.md', content: 'x', ifMatch: read.hash }),
+  ).rejects.toThrow('conflict');
+  expect(await readFile(join(worktree, 'README.md'), 'utf8')).toBe('# app\n\nedited\n');
+  const again = (await call(d.channel, 'fs.read', { session, path: 'README.md' })) as {
+    hash: string;
+  };
+  expect(again.hash).toBe(saved.hash);
+  const status = (await call(d.channel, 'git.status', { session })) as { files: unknown[] };
+  expect(status.files).toEqual([{ path: 'README.md', status: 'M' }]);
+});
+
+// Paths that lexically or through a symlink leave the worktree, or enter .git, are refused for
+// reads, writes and listings alike; a symlink that stays inside is written through.
+test('file access stays inside the worktree and out of .git', async () => {
+  const { repo, d, session, worktree } = await pairedSession();
+  await symlink(join(repo, 'README.md'), join(worktree, 'link.md'));
+  const escapes = ['../escape.md', '/etc/passwd', 'link.md', '.git/config', '.git'];
+  await Promise.all(
+    escapes.map((path) =>
+      expect(call(d.channel, 'fs.write', { session, path, content: 'x' })).rejects.toThrow(
+        'bad_params',
+      ),
+    ),
+  );
+  await Promise.all(
+    escapes.map((path) =>
+      expect(call(d.channel, 'fs.read', { session, path })).rejects.toThrow('bad_params'),
+    ),
+  );
+  await expect(call(d.channel, 'fs.list', { session, path: '.git' })).rejects.toThrow('bad_params');
+  expect(await readFile(join(repo, 'README.md'), 'utf8')).toBe('# app\n');
+  // A symlink that stays inside is written through: the link survives, the target changes.
+  await symlink(join(worktree, 'README.md'), join(worktree, 'alias.md'));
+  await call(d.channel, 'fs.write', { session, path: 'alias.md', content: 'via link\n' });
+  expect((await lstat(join(worktree, 'alias.md'))).isSymbolicLink()).toBe(true);
+  expect(await readFile(join(worktree, 'README.md'), 'utf8')).toBe('via link\n');
 });

@@ -25,6 +25,9 @@ test('lists the worktree status, disables deleted files, and emits open and back
   expect(wrapper.find('.from').text()).toBe('← old.ts');
   expect(wrapper.findAll('.status')[1]?.classes()).toContain('R');
   expect(wrapper.findAll('.file')[2]?.attributes('disabled')).toBeDefined();
+  expect(wrapper.findAll('.edit')[2]?.attributes('disabled')).toBeDefined();
+  await wrapper.find('.edit').trigger('click');
+  expect(wrapper.emitted('edit')).toEqual([['src/a.ts']]);
   await wrapper.find('.file').trigger('click');
   await wrapper.findAll('.file')[1]?.trigger('click');
   expect(wrapper.emitted('open')).toEqual([

@@ -3,6 +3,8 @@ import { reactive, readonly } from 'vue';
 import type { Route } from './route.ts';
 import { route } from './route.ts';
 
+export type { Route } from './route.ts';
+
 // Route state as a reactive object, driven by a History-shaped port so tests run without a
 // browser: `location` reads the current path, `push`/`replace` write it, `listen` reports
 // back/forward navigation. A path the app does not know is replaced by the screen it fell

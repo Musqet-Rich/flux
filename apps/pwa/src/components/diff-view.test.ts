@@ -98,5 +98,7 @@ test('without a session.created event there is nothing to diff against', async (
   expect(wrapper.find('.notice').text()).toBe('Session has no base commit yet.');
   await wrapper.find('.toolbar button').trigger('click');
   expect(wrapper.emitted('back')).toEqual([[]]);
+  await wrapper.find('.edit').trigger('click');
+  expect(wrapper.emitted('edit')).toEqual([[]]);
   box.store.stop();
 });

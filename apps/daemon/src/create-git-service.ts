@@ -1,8 +1,9 @@
-import type { Commit, FileStatus, Repo } from '@flux/protocol';
-import { readdir, readFile, stat } from 'node:fs/promises';
+import type { Commit, FileContent, FileStatus, Repo } from '@flux/protocol';
+import { readdir, stat } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 
 import { DaemonError } from './daemon-error.ts';
+import { fileContent } from './file-content.ts';
 import type { GitActions, Runner } from './git-actions.ts';
 import { gitActions } from './git-actions.ts';
 import { runCommand } from './run-command.ts';
@@ -15,11 +16,6 @@ export interface DiffOptions {
   path?: string;
   from?: string;
   to?: string;
-}
-
-export interface FileContent {
-  content: string;
-  binary: boolean;
 }
 
 export interface GitService extends GitActions {
@@ -89,13 +85,6 @@ const parseStatus = (raw: string): FileStatus[] => {
   return files;
 };
 
-const isBinary = (data: Buffer): boolean => data.subarray(0, 8000).includes(0);
-
-const toContent = (data: Buffer): FileContent => {
-  const binary = isBinary(data);
-  return { content: binary ? data.toString('base64') : data.toString('utf8'), binary };
-};
-
 const parseLog = (raw: string): Commit[] =>
   raw
     .split('\n')
@@ -105,16 +94,13 @@ const parseLog = (raw: string): Commit[] =>
       return { sha, subject, author, ts };
     });
 
-const show = async (git: Runner, worktree: string, path: string, rev: string) => {
-  if (rev === 'worktree') {
-    try {
-      return toContent(await readFile(join(worktree, path)));
-    } catch (error) {
-      throw new DaemonError('not_found', error instanceof Error ? error.message : String(error));
-    }
-  }
-  return toContent(Buffer.from(await git(worktree, ['show', `${rev}:${path}`]), 'utf8'));
-};
+// A blob at a rev comes back through the runner's UTF-8 decode; the worktree is read as bytes.
+const show = (git: Runner, worktree: string, path: string, rev: string): Promise<FileContent> =>
+  rev === 'worktree'
+    ? fileContent.read(join(worktree, path))
+    : git(worktree, ['show', `${rev}:${path}`]).then((out) =>
+        fileContent.fromBytes(Buffer.from(out, 'utf8')),
+      );
 
 const localBranches = async (git: Runner, repo: string): Promise<string[]> =>
   (await git(repo, ['for-each-ref', '--format=%(refname:short)', 'refs/heads']))

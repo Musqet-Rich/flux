@@ -1,5 +1,6 @@
 import type { CodeRef, RpcMethods, SessionSummary } from '@flux/protocol';
 
+import { ClientError } from '../client/client-error.ts';
 import { createConnection } from '../client/create-connection.ts';
 import type { RpcCall } from '../client/create-rpc-client.ts';
 import { pairDevice } from '../client/pair-device.ts';
@@ -19,6 +20,10 @@ import { storeState } from './store-state.ts';
 
 export type PrParams = Omit<RpcMethods['git.pr']['params'], 'session'>;
 
+// What saving a file came to. A conflict is the view's to handle (it offers a reload), so it is
+// not put in `state.error` like other failures.
+export type SaveOutcome = { ok: true; hash: string } | { ok: false; conflict: boolean };
+
 export interface Store {
   state: StoreState;
   // Loads the paired box from storage and connects, or lands on the pair screen.
@@ -33,6 +38,14 @@ export interface Store {
   interrupt: (session: string) => Promise<boolean>;
   addComment: (session: string, ref: CodeRef, text: string) => Promise<boolean>;
   removeComment: (session: string, commentId: string) => Promise<boolean>;
+  // Writes a file to the worktree; `ifMatch` is the hash the file was read with, or null to
+  // overwrite whatever is there now.
+  saveFile: (
+    session: string,
+    path: string,
+    content: string,
+    ifMatch: string | null,
+  ) => Promise<SaveOutcome>;
   // Asks the browser for a push subscription under a user gesture and stores it on the box.
   enablePush: () => Promise<boolean>;
   createSession: (params: RpcMethods['sessions.create']['params']) => Promise<SessionSummary>;
@@ -83,6 +96,26 @@ const send = (i: StoreInternals, session: string, text: string): Promise<boolean
   const commentIds = pendingComments(events).map((c) => c.commentId);
   const params = commentIds.length > 0 ? { session, text, commentIds } : { session, text };
   return boxLink.attempt(i, () => boxLink.call(i, 'agent.send', params));
+};
+
+const saveFile = async (
+  i: StoreInternals,
+  session: string,
+  path: string,
+  content: string,
+  ifMatch: string | null,
+): Promise<SaveOutcome> => {
+  const params = ifMatch === null ? { session, path, content } : { session, path, content, ifMatch };
+  try {
+    const { hash } = await boxLink.call(i, 'fs.write', params);
+    return { ok: true, hash };
+  } catch (error) {
+    if (error instanceof ClientError && error.code === 'conflict') {
+      return { ok: false, conflict: true };
+    }
+    boxLink.reportError(i, error);
+    return { ok: false, conflict: false };
+  }
 };
 
 const createSession = async (
@@ -144,6 +177,7 @@ export const createStore = (options: StoreOptions): Store => {
       boxLink.attempt(i, () => boxLink.call(i, 'comments.add', { session, ref, text })),
     removeComment: (session, commentId) =>
       boxLink.attempt(i, () => boxLink.call(i, 'comments.remove', { session, commentId })),
+    saveFile: (session, path, content, ifMatch) => saveFile(i, session, path, content, ifMatch),
     enablePush: async () => {
       try {
         return await boxLink.enablePush(i, true);
