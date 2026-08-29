@@ -86,7 +86,7 @@ Both carry the same `assistant` / `user` message objects. Mapping (verified agai
 - `flux_ask(question: string, options?: string[]) -> string`. Emits an `ask` event, blocks until the operator answers (from PWA or notification), returns the answer. Times out after a configurable period with a clear error so the agent can proceed sensibly.
 - `flux_notify(summary: string, level: 'info' | 'done' | 'blocked')`. Emits `notify`. Non-blocking.
 
-Box-side `CLAUDE.md` instructs the agent to prefer `flux_ask` over guessing on material decisions. Because Flux owns these tools, the `ask` schema is stable across agents and Claude Code versions.
+The daemon appends a short system prompt (`--append-system-prompt`) instructing the agent to prefer `flux_ask` over guessing on material decisions and to `flux_notify` when done or blocked. Because Flux owns these tools, the `ask` schema is stable across agents and Claude Code versions.
 
 ## Relay
 

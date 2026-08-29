@@ -19,6 +19,8 @@ export interface SpawnRequest {
 
 export interface SessionSupervisor {
   send: (text: string, refs?: CodeRef[], commentIds?: string[]) => Promise<number>;
+  // A flux_ask in flight: waiting_user while true, back to running when answered.
+  waiting: (on: boolean) => void;
   interrupt: () => void;
   close: () => Promise<void>;
   state: () => SessionState;
@@ -152,6 +154,9 @@ export const createSessionSupervisor = (options: SupervisorOptions): SessionSupe
   };
   return {
     send: (text, refs = [], commentIds = []) => send(ctx, text, refs, commentIds),
+    waiting: (on) => {
+      setState(ctx, on ? 'waiting_user' : 'running');
+    },
     interrupt: () => {
       ctx.agent?.kill();
     },

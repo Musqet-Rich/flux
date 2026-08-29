@@ -56,7 +56,7 @@ const setup = async () => {
     daemonName: 'flux@test',
     claudeCommand: fake,
   });
-  daemon.start();
+  await daemon.start();
   await relay.host();
   return { repo };
 };

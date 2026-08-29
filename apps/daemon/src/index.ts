@@ -1,16 +1,22 @@
+import { guards } from '@flux/protocol';
+import { connect } from 'node:net';
 import { hostname } from 'node:os';
 import { join } from 'node:path';
+import { createInterface } from 'node:readline';
 
 import { createDaemon } from './create-daemon.ts';
+import { DaemonError } from './daemon-error.ts';
 
 // `flux daemon`: the box side of Flux (architecture.md § Daemon). Configuration is environment:
 //   FLUX_RELAY_URL   the relay origin, e.g. https://flux.example.com (required)
 //   FLUX_DATA_DIR    state directory, default ~/.flux
 //   FLUX_REPOS_DIR   directory whose subdirectories are the repositories, default ~/repos
 //   FLUX_CLAUDE      the claude binary, default `claude` on PATH
-// `flux pair` prints a pairing URL for a running daemon; devices are managed with
-// `flux devices ls|rm <id>`. Both talk to the daemon over its control socket (next change).
+// `flux pair` asks a running daemon for a fresh pairing URL over its control socket; devices
+// are managed with `flux devices ls|rm <id>` (which open the database directly, daemon stopped
+// or not).
 
+const { isRecord, isString } = guards;
 const env = process.env;
 const home = env['HOME'] ?? '/';
 const relayUrl = env['FLUX_RELAY_URL'];
@@ -19,17 +25,44 @@ if (relayUrl === undefined) {
   process.exit(2);
 }
 
+const dataDir = env['FLUX_DATA_DIR'] ?? join(home, '.flux');
+const command = process.argv[2] ?? 'daemon';
+
+// Asks the running daemon for a pairing URL; the socket is the daemon's only local interface.
+const pairViaSocket = (): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const client = connect(join(dataDir, 'control.sock'));
+    client.on('error', () => {
+      reject(new DaemonError('agent_unavailable', 'no running daemon (is `flux daemon` up?)'));
+    });
+    createInterface({ input: client }).once('line', (line) => {
+      client.end();
+      const reply: unknown = JSON.parse(line);
+      const result = isRecord(reply) ? reply['result'] : null;
+      const url = isRecord(result) ? result['url'] : null;
+      if (isString(url)) resolve(url);
+      else reject(new DaemonError('internal', 'daemon refused'));
+    });
+    client.on('connect', () => {
+      client.write('{"type":"pair"}\n');
+    });
+  });
+
+if (command === 'pair') {
+  console.log(await pairViaSocket());
+  process.exit(0);
+}
+
 const daemon = await createDaemon({
-  dataDir: env['FLUX_DATA_DIR'] ?? join(home, '.flux'),
+  dataDir,
   relayUrl,
   reposDir: env['FLUX_REPOS_DIR'] ?? join(home, 'repos'),
   daemonName: `flux@${hostname()}`,
   ...(env['FLUX_CLAUDE'] === undefined ? {} : { claudeCommand: env['FLUX_CLAUDE'] }),
 });
 
-const command = process.argv[2] ?? 'daemon';
 if (command === 'daemon') {
-  daemon.start();
+  await daemon.start();
   console.log(`flux daemon: relay ${relayUrl}`);
   const url = daemon.pairingUrl();
   console.log(`pair a device within 10 minutes: ${url}`);
@@ -52,7 +85,7 @@ if (command === 'daemon') {
   await daemon.stop();
 } else {
   console.error(
-    `unknown command ${command}; use: flux daemon | flux devices ls | flux devices rm <id>`,
+    `unknown command ${command}; use: flux daemon | flux pair | flux devices ls | flux devices rm <id>`,
   );
   await daemon.stop();
   process.exit(2);
