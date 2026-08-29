@@ -6,6 +6,8 @@ import { createInterface } from 'node:readline';
 
 import { createDaemon } from './create-daemon.ts';
 import { DaemonError } from './daemon-error.ts';
+import { qrMatrix } from './qr/qr-matrix.ts';
+import { renderQr } from './qr/render-qr.ts';
 
 // `flux daemon`: the box side of Flux (architecture.md § Daemon). Configuration is environment:
 //   FLUX_RELAY_URL   the relay origin, e.g. https://flux.example.com (required)
@@ -49,8 +51,14 @@ const pairViaSocket = (): Promise<string> =>
     });
   });
 
+// The QR above the URL is plain half-block text, so it prints the same piped or under NO_COLOR.
+const printPairing = (url: string): void => {
+  console.log(renderQr(qrMatrix(url)));
+  console.log(`pair a device within 10 minutes: ${url}`);
+};
+
 if (command === 'pair') {
-  console.log(await pairViaSocket());
+  printPairing(await pairViaSocket());
   process.exit(0);
 }
 
@@ -66,8 +74,7 @@ const daemon = await createDaemon({
 if (command === 'daemon') {
   await daemon.start();
   console.log(`flux daemon: relay ${relayUrl}`);
-  const url = daemon.pairingUrl();
-  console.log(`pair a device within 10 minutes: ${url}`);
+  printPairing(daemon.pairingUrl());
   const shutdown = (): void => {
     daemon
       .stop()
