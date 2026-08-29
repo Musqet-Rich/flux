@@ -2,6 +2,7 @@ import type { Commit, FileContent, FileStatus, Repo } from '@flux/protocol';
 import { readdir, stat } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 
+import { DaemonError } from './daemon-error.ts';
 import { fileContent } from './file-content.ts';
 import type { GitActions, Runner } from './git-actions.ts';
 import { gitActions } from './git-actions.ts';
@@ -107,7 +108,9 @@ const localBranches = async (git: Runner, repo: string): Promise<string[]> =>
     .filter((line) => line !== '');
 
 const listRepos = async (git: Runner, root: string): Promise<Repo[]> => {
-  const entries = await readdir(root, { withFileTypes: true });
+  const entries = await readdir(root, { withFileTypes: true }).catch(() => {
+    throw new DaemonError('not_found', `repositories directory ${root} is missing or unreadable`);
+  });
   const candidates = entries.filter((e) => e.isDirectory()).map((e) => join(root, e.name));
   const repos = await Promise.all(
     candidates.map(async (path): Promise<Repo | null> => {

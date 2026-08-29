@@ -40,16 +40,28 @@ test('shows the settings, enables Save once edited, sends the form and shows env
   await until(() => box.store.state.settings?.flux.reposDir === '/srv/repos');
   await flushPromises();
   expect(box.calls('settings.set')).toEqual([
-    {
-      flux: {
-        reposDir: '/srv/repos',
-        defaultAgent: 'pi',
-        notifyOnAsk: true,
-        notifyOnIdle: true,
-        notifyOnDone: true,
-      },
-    },
+    { flux: { reposDir: '/srv/repos', defaultAgent: 'pi', notifyOnDone: true } },
   ]);
   expect(submit.text()).toBe('Saved');
+  box.store.stop();
+});
+
+test('an unsaved edit survives the other section saving', async () => {
+  const box = await pairedStore([], {
+    'settings.get': () => settingsFixture(),
+    'settings.set': () =>
+      settingsFixture({
+        flux: { ...settingsFixture().flux, notifyOnDone: true },
+        agent: { claudeMd: 'new', settingsJson: '{}' },
+      }),
+  });
+  await box.store.refreshSettings();
+  const wrapper = mount(FluxSettingsForm, { props: { store: box.store } });
+  await wrapper.find('#flux-repos').setValue('/typing');
+  await box.store.saveSettings({ agent: { claudeMd: 'new' } });
+  await flushPromises();
+  expect(wrapper.find<HTMLInputElement>('#flux-repos').element.value).toBe('/typing');
+  expect(wrapper.findAll<HTMLInputElement>('.trigger input')[2]?.element.checked).toBe(true);
+  expect(wrapper.find('button[type=submit]').text()).toBe('Save changes');
   box.store.stop();
 });

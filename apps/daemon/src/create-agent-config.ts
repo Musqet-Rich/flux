@@ -1,16 +1,19 @@
 import type { AgentConfig } from '@flux/protocol';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { guards } from '@flux/protocol';
+import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { DaemonError } from './daemon-error.ts';
 
 // The agent's global config as raw files (prd.md P2): `CLAUDE.md` and `settings.json` in the
 // flux user's `~/.claude`. Read gives the current text (empty when the file does not exist);
-// write replaces whole files, and `settings.json` must parse as JSON so a typo cannot stop
+// write replaces whole files, and `settings.json` must be a JSON object so a typo cannot stop
 // Claude Code from starting.
 
 export interface AgentConfigFiles {
   read: () => Promise<AgentConfig>;
+  // Throws bad_params for a patch `write` would refuse; callers check before touching anything.
+  check: (patch: Partial<AgentConfig>) => void;
   write: (patch: Partial<AgentConfig>) => Promise<AgentConfig>;
 }
 
@@ -25,13 +28,32 @@ const readOrEmpty = async (path: string): Promise<string> => {
   }
 };
 
-const isJson = (text: string): boolean => {
+// Claude Code reads settings.json as an object; `null`, `[]` or `"x"` parse but break it.
+const isJsonObject = (text: string): boolean => {
   try {
-    JSON.parse(text);
-    return true;
+    return guards.isRecord(JSON.parse(text));
   } catch {
     return false;
   }
+};
+
+const check = (patch: Partial<AgentConfig>): void => {
+  if (patch.settingsJson !== undefined && !isJsonObject(patch.settingsJson)) {
+    throw new DaemonError('bad_params', 'settings.json must be a JSON object');
+  }
+};
+
+// Whole-file replace through a sibling temp file and rename, so a crash mid-write cannot leave
+// a half-written config, keeping the mode of the file it replaces. A symlinked file is
+// replaced by a regular file (ADR 0015).
+const replaceFile = async (path: string, text: string): Promise<void> => {
+  const mode = await stat(path).then(
+    (s) => s.mode & 0o777,
+    () => 0o600,
+  );
+  const temp = `${path}.${process.pid}.tmp`;
+  await writeFile(temp, text, { encoding: 'utf8', mode });
+  await rename(temp, path);
 };
 
 export const createAgentConfig = (claudeDir: string): AgentConfigFiles => {
@@ -41,16 +63,18 @@ export const createAgentConfig = (claudeDir: string): AgentConfigFiles => {
   });
   return {
     read,
+    check,
     write: async (patch) => {
-      if (patch.settingsJson !== undefined && !isJson(patch.settingsJson)) {
-        throw new DaemonError('bad_params', 'settings.json is not valid JSON');
-      }
+      check(patch);
       await mkdir(claudeDir, { recursive: true });
-      await Promise.all(
-        fields
-          .filter((field) => patch[field] !== undefined)
-          .map((field) => writeFile(join(claudeDir, files[field]), patch[field] ?? '', 'utf8')),
-      );
+      // One file at a time, so a failure on the second leaves the first complete, not torn.
+      await fields
+        .filter((field) => patch[field] !== undefined)
+        .reduce(
+          (previous, field) =>
+            previous.then(() => replaceFile(join(claudeDir, files[field]), patch[field] ?? '')),
+          Promise.resolve(),
+        );
       return read();
     },
   };

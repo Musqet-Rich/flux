@@ -77,13 +77,7 @@ const assemble = ({ services, supervisors, transport, control, gate }: Parts): D
 const servicesOptions = (config: DaemonConfig): ServicesOptions => ({
   dataDir: config.dataDir,
   claudeDir: config.claudeDir,
-  defaults: {
-    reposDir: config.reposDir,
-    defaultAgent: 'claude',
-    notifyOnAsk: true,
-    notifyOnIdle: true,
-    notifyOnDone: true,
-  },
+  reposDir: config.reposDir,
 });
 
 // Which push triggers the operator has left on; read per event so a change applies at once.
@@ -122,6 +116,7 @@ export const createDaemon = async (config: DaemonConfig): Promise<Daemon> => {
     supervisor: (record) => supervisors.get(record),
     emit,
     pairingUrl: gate.url,
+    revokeDevice: revoker(services, () => transport),
   });
   const supervisors = createSupervisorPool({
     ...services,

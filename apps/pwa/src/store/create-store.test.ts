@@ -354,7 +354,10 @@ test('lists devices, revokes another, and revoking itself forgets the box', asyn
   expect(await store.removeDevice('dev-2')).toBe(true);
   expect(store.state.devices.map((d) => d.deviceId)).toEqual(['dev-1']);
   expect(store.state.phase).toBe('paired');
+  await store.open('s1');
+  expect(await storage.get('log:s1:0')).toEqual(boxLog);
   expect(await store.removeDevice('dev-1')).toBe(true);
+  expect(await storage.get('log:s1:0')).toBeUndefined();
   expect(called('devices.remove').map((c) => c.params)).toEqual([
     { deviceId: 'dev-2' },
     { deviceId: 'dev-1' },

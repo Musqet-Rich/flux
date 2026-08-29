@@ -215,6 +215,32 @@ test('a revoked device is told once, then ignored; unknown ids are a no-op', asy
   expect(h.seen).toEqual([]);
 });
 
+test('revocation while an rpc is in flight drops later frames and strips the device', async () => {
+  const h = await setup(true);
+  const { channel } = await connectDevice(h);
+  const gate = Promise.withResolvers<void>();
+  const entered = Promise.withResolvers<void>();
+  h.hooks.beforeReply = () => {
+    entered.resolve();
+    return gate.promise;
+  };
+  const inFlight = h.channels.handleFrame(await rpcFrame(channel), h.send);
+  await entered.promise;
+  await h.channels.revoke('d1', h.send);
+  // Still connected until the answer is out, but already a stranger to every handler.
+  expect(h.channels.peers()).toMatchObject([{ device: null }]);
+  expect(h.seen[0]?.peer.device).toBeNull();
+  const before = h.out.length;
+  await h.channels.handleFrame(await rpcFrame(channel), h.send);
+  expect(h.out).toHaveLength(before);
+  expect(h.seen).toHaveLength(1);
+  gate.resolve();
+  await inFlight;
+  expect(h.channels.peers()).toEqual([]);
+  expect(await openWire(channel, nth(h.out, -2))).toMatchObject({ kind: 'rpc.result', id: 'r2' });
+  expect(await openWire(channel, last(h.out))).toEqual(revoked);
+});
+
 test('a device removing itself gets the answer before the notice', async () => {
   const h = await setup(true);
   const { channel } = await connectDevice(h);

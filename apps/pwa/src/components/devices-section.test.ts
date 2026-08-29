@@ -52,6 +52,10 @@ test('revoking this device lands on the pair screen', async () => {
   const wrapper = mount(DevicesSection, { props: { store: box.store } });
   await wrapper.find('.revoke').trigger('click');
   expect(wrapper.find('.confirm').text()).toContain('pair again');
+  await wrapper.find('.confirm .secondary').trigger('click');
+  box.store.state.devices = box.store.state.devices.slice(0, 1);
+  await wrapper.find('.revoke').trigger('click');
+  expect(wrapper.find('.confirm').text()).toContain('last device');
   await wrapper.find('.confirm .danger').trigger('click');
   await until(() => box.store.state.phase === 'unpaired');
   expect(box.calls('devices.remove')).toEqual([{ deviceId: 'dev-1' }]);

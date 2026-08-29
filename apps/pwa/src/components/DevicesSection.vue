@@ -14,16 +14,23 @@ const busy = ref(false);
 const when = (iso: string | undefined): string =>
   iso === undefined ? 'never' : new Date(iso).toLocaleString();
 
-const rows = computed(() =>
-  props.store.state.devices.map((d) => ({
+const question = (current: boolean, last: boolean): string => {
+  if (last) return 'This is the last device; you will need `flux pair` on the box to reconnect.';
+  return current ? 'Revoke your own device? You will need to pair again.' : 'Revoke?';
+};
+
+const rows = computed(() => {
+  const last = props.store.state.devices.length === 1;
+  return props.store.state.devices.map((d) => ({
     deviceId: d.deviceId,
     label: d.name ?? d.deviceId,
     current: d.current,
     paired: when(d.pairedAt),
     seen: when(d.lastSeenAt),
     confirming: confirming.value === d.deviceId,
-  })),
-);
+    question: question(d.current, last),
+  }));
+});
 
 const ask = (deviceId: string): void => {
   confirming.value = deviceId;
@@ -52,9 +59,7 @@ const revoke = async (deviceId: string): Promise<void> => {
         </div>
         <div class="meta">paired {{ d.paired }} · last seen {{ d.seen }}</div>
         <div v-if="d.confirming" class="confirm">
-          <span>{{
-            d.current ? 'Revoke this device? You will need to pair again.' : 'Revoke?'
-          }}</span>
+          <span>{{ d.question }}</span>
           <button type="button" class="danger" :disabled="busy" @click="revoke(d.deviceId)">
             Confirm
           </button>

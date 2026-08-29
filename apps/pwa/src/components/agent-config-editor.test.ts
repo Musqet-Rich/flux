@@ -37,6 +37,32 @@ test('marks edited files, refuses bad JSON, and sends only what changed', async 
   box.store.stop();
 });
 
+test('an unsaved edit survives the other section saving, and empty JSON is refused', async () => {
+  const box = await pairedStore([], {
+    'settings.get': () => settingsFixture(),
+    'settings.set': () =>
+      settingsFixture({
+        flux: { ...settingsFixture().flux, defaultAgent: 'pi' },
+        agent: { claudeMd: '# Rules\n', settingsJson: '{"model":"opus","x":1}' },
+      }),
+  });
+  await box.store.refreshSettings();
+  const wrapper = mount(AgentConfigEditor, { props: { store: box.store } });
+  await wrapper.find('#agent-md').setValue('typing…');
+  await box.store.saveSettings({ flux: { defaultAgent: 'pi' } });
+  await flushPromises();
+  expect(wrapper.find<HTMLTextAreaElement>('#agent-md').element.value).toBe('typing…');
+  expect(wrapper.find<HTMLTextAreaElement>('#agent-json').element.value).toBe(
+    '{"model":"opus","x":1}',
+  );
+  await wrapper.find('#agent-json').setValue('');
+  expect(wrapper.find('.error').text()).toBe('settings.json cannot be empty');
+  await wrapper.find('#agent-json').setValue('[]');
+  expect(wrapper.find('.error').text()).toBe('settings.json must be a JSON object');
+  expect(wrapper.find('button[type=submit]').attributes('disabled')).toBeDefined();
+  box.store.stop();
+});
+
 test('shows the box error when a save is refused', async () => {
   const box = await pairedStore([], { 'settings.get': () => settingsFixture() });
   await box.store.refreshSettings();

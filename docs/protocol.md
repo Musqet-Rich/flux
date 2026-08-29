@@ -284,7 +284,7 @@ Device → box. Params are validated by type guards on the box (`rpcMethods`), r
 | `devices.list`     | `{}`                                                             | `Device[]` (`current` marks the caller)                                                                                                                                                                                                                                         |
 | `devices.remove`   | `{ deviceId }`                                                   | `{}` (`not_found` if unknown; the device is told and cut off, § 6; self-removal allowed)                                                                                                                                                                                        |
 | `settings.get`     | `{}`                                                             | `Settings`                                                                                                                                                                                                                                                                      |
-| `settings.set`     | `{ flux?: Partial<FluxSettings>; agent?: Partial<AgentConfig> }` | `Settings` (the whole state after the patch; `bad_params` and nothing written if any part is invalid)                                                                                                                                                                           |
+| `settings.set`     | `{ flux?: Partial<FluxSettings>; agent?: Partial<AgentConfig> }` | `Settings` (the whole state after the patch; `bad_params` and nothing written if any part is invalid, including an unknown key)                                                                                                                                                 |
 
 ```ts
 interface SessionSummary {
@@ -330,7 +330,7 @@ interface EnvSettings {
 
 // The agent's global config files on the box, verbatim: ~/.claude/CLAUDE.md and
 // ~/.claude/settings.json of the user the daemon runs as. Empty string when a file is absent.
-// `settingsJson` must parse as JSON on `settings.set`.
+// `settingsJson` must be a JSON object on `settings.set`.
 interface AgentConfig {
   claudeMd: string;
   settingsJson: string;

@@ -42,6 +42,13 @@ const { isString, isBoolean, isRecord, isOneOf, isOptional } = guards;
 
 const isAgentKind = (v: unknown): v is AgentKind => isOneOf(v, ['claude', 'pi']);
 
+// A patch may name only fields that exist; a misspelt key would otherwise be silently ignored.
+const onlyKeys = (v: Record<string, unknown>, keys: readonly string[]): boolean =>
+  Object.keys(v).every((k) => keys.includes(k));
+
+const fluxKeys = ['reposDir', 'defaultAgent', 'notifyOnAsk', 'notifyOnIdle', 'notifyOnDone'];
+const agentKeys = ['claudeMd', 'settingsJson'];
+
 const isFlux = (v: unknown): v is FluxSettings =>
   isRecord(v) &&
   isString(v['reposDir']) &&
@@ -52,6 +59,7 @@ const isFlux = (v: unknown): v is FluxSettings =>
 
 const isFluxPatch = (v: unknown): v is Partial<FluxSettings> =>
   isRecord(v) &&
+  onlyKeys(v, fluxKeys) &&
   isOptional(v['reposDir'], isString) &&
   isOptional(v['defaultAgent'], isAgentKind) &&
   isOptional(v['notifyOnAsk'], isBoolean) &&
@@ -70,12 +78,18 @@ const isAgent = (v: unknown): v is AgentConfig =>
   isRecord(v) && isString(v['claudeMd']) && isString(v['settingsJson']);
 
 const isAgentPatch = (v: unknown): v is Partial<AgentConfig> =>
-  isRecord(v) && isOptional(v['claudeMd'], isString) && isOptional(v['settingsJson'], isString);
+  isRecord(v) &&
+  onlyKeys(v, agentKeys) &&
+  isOptional(v['claudeMd'], isString) &&
+  isOptional(v['settingsJson'], isString);
 
 const is = (v: unknown): v is Settings =>
   isRecord(v) && isFlux(v['flux']) && isEnv(v['env']) && isAgent(v['agent']);
 
 const isPatch = (v: unknown): v is SettingsPatch =>
-  isRecord(v) && isOptional(v['flux'], isFluxPatch) && isOptional(v['agent'], isAgentPatch);
+  isRecord(v) &&
+  onlyKeys(v, ['flux', 'agent']) &&
+  isOptional(v['flux'], isFluxPatch) &&
+  isOptional(v['agent'], isAgentPatch);
 
 export const settings: { is: typeof is; isPatch: typeof isPatch } = { is, isPatch };

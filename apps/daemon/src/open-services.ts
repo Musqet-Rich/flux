@@ -1,4 +1,3 @@
-import type { FluxSettings } from '@flux/protocol';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -28,8 +27,8 @@ export interface ServicesOptions {
   dataDir: string;
   // The flux user's `~/.claude`, where CLAUDE.md and settings.json live.
   claudeDir: string;
-  // What the environment configured; the settings store overrides these once set.
-  defaults: FluxSettings;
+  // The environment's repositories directory; the settings store overrides it once one is set.
+  reposDir: string;
 }
 
 export const openServices = (options: ServicesOptions): Services => {
@@ -38,7 +37,7 @@ export const openServices = (options: ServicesOptions): Services => {
   const db = openDatabase(join(options.dataDir, 'flux.sqlite'));
   const asks = createAskRegistry();
   return {
-    ...openStores(db, options.defaults),
+    ...openStores(db, options.reposDir),
     worktreesDir,
     agentConfig: createAgentConfig(options.claudeDir),
     asks,

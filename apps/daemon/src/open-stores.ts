@@ -1,4 +1,3 @@
-import type { FluxSettings } from '@flux/protocol';
 import type { DatabaseSync } from 'node:sqlite';
 
 import type { CommentStore } from './create-comment-store.ts';
@@ -25,7 +24,7 @@ export interface Stores {
   settings: SettingsStore;
 }
 
-export const openStores = (db: DatabaseSync, defaults: FluxSettings): Stores => {
+export const openStores = (db: DatabaseSync, reposDir: string): Stores => {
   const log = createEventLog({ db });
   return {
     log,
@@ -33,6 +32,6 @@ export const openStores = (db: DatabaseSync, defaults: FluxSettings): Stores => 
     devices: createDeviceStore({ db }),
     comments: createCommentStore(db),
     push: createPushStore(db),
-    settings: createSettingsStore({ db, defaults }),
+    settings: createSettingsStore({ db, reposDir }),
   };
 };

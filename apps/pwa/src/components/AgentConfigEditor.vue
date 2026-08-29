@@ -16,11 +16,15 @@ const failure = ref<string | null>(null);
 
 const stored = computed(() => props.store.state.settings?.agent ?? null);
 
+// A field follows the box only while it has no unsaved edit: the other section's save
+// replaces `settings` too and must not wipe what is being typed here.
 watch(
   stored,
-  (next) => {
-    claudeMd.value = next?.claudeMd ?? '';
-    settingsJson.value = next?.settingsJson ?? '';
+  (next, previous) => {
+    if (claudeMd.value === (previous?.claudeMd ?? '')) claudeMd.value = next?.claudeMd ?? '';
+    if (settingsJson.value === (previous?.settingsJson ?? '')) {
+      settingsJson.value = next?.settingsJson ?? '';
+    }
   },
   { immediate: true },
 );
@@ -31,11 +35,15 @@ const jsonDirty = computed(
 );
 const dirty = computed(() => mdDirty.value || jsonDirty.value);
 
+// The box refuses anything but a JSON object, an empty file included.
 const jsonError = computed((): string | null => {
-  if (!jsonDirty.value || settingsJson.value.trim() === '') return null;
+  if (!jsonDirty.value) return null;
+  if (settingsJson.value.trim() === '') return 'settings.json cannot be empty';
   try {
-    JSON.parse(settingsJson.value);
-    return null;
+    const parsed: unknown = JSON.parse(settingsJson.value);
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+      ? null
+      : 'settings.json must be a JSON object';
   } catch (error) {
     return error instanceof Error ? error.message : 'not valid JSON';
   }

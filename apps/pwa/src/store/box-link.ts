@@ -34,8 +34,12 @@ const unpair = async (i: StoreInternals, reason: string): Promise<void> => {
   i.state.daemon = null;
   i.state.phase = 'unpaired';
   i.state.error = reason;
+  // The keys, then the old box's cached logs: another box's session ids must not collide.
   await i.options.storage.remove(pairedBox.storageKey).catch(() => {
     // Nothing to do: the keys are already out of memory and the next boot re-reads storage.
+  });
+  await i.options.storage.clear('log:').catch(() => {
+    // A stale cache costs a sync after the next pairing, nothing more.
   });
 };
 

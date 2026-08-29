@@ -47,16 +47,12 @@ export const createSettingsHandlers = (ctx: HandlerContext): SettingsHandlers =>
   },
   'settings.get': () => readSettings(ctx),
   'settings.set': async (p) => {
-    // Both halves are validated before either is written, so a bad patch changes nothing.
-    if (p.agent?.settingsJson !== undefined) {
-      try {
-        JSON.parse(p.agent.settingsJson);
-      } catch {
-        throw new DaemonError('bad_params', 'settings.json is not valid JSON');
-      }
-    }
-    if (p.flux !== undefined) ctx.settings.set(p.flux);
+    // Both halves are checked before either is written, and the files go first: a failed file
+    // write then leaves the database untouched too.
+    if (p.agent !== undefined) ctx.agentConfig.check(p.agent);
+    if (p.flux !== undefined) ctx.settings.check(p.flux);
     if (p.agent !== undefined) await ctx.agentConfig.write(p.agent);
+    if (p.flux !== undefined) ctx.settings.set(p.flux);
     return readSettings(ctx);
   },
 });

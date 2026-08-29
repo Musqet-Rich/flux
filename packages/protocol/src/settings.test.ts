@@ -51,6 +51,9 @@ test.each([
   [{ agent: { settingsJson: {} } }, false],
   [{ agent: [] }, false],
   [[], false],
+  [{ env: {} }, false],
+  [{ flux: { reposDir: '/r', repoDir: '/x' } }, false],
+  [{ agent: { claudeMd: '', extra: 1 } }, false],
 ])('settings.isPatch(%j) is %s', (value, expected) => {
   expect(settings.isPatch(value)).toBe(expected);
 });

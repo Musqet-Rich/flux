@@ -145,6 +145,25 @@ test('flux devices ls needs no relay URL, opens a fresh data dir and exits clean
   expect(unknown.stderr).toContain('unknown command bogus');
 });
 
+test('flux devices rm goes through a running daemon and falls back to the database', async () => {
+  const env = { HOME: dataDir, FLUX_DATA_DIR: dataDir };
+  const socketPath = join(dataDir, 'control.sock');
+  const lines: string[] = [];
+  const live = await fakeDaemon(socketPath, (socket) => {
+    socket.once('data', (chunk: Buffer) => {
+      lines.push(chunk.toString());
+      socket.end('{"ok":true,"result":{}}\n');
+    });
+  });
+  const viaDaemon = await runFlux(['devices', 'rm', 'dev-1'], env);
+  await live.close();
+  expect(viaDaemon).toEqual({ code: 0, stdout: 'removed dev-1\n', stderr: '' });
+  expect(lines).toEqual(['{"type":"devices.rm","deviceId":"dev-1"}\n']);
+  const noDaemon = await runFlux(['devices', 'rm', 'dev-1'], env);
+  expect(noDaemon.code).toBe(1);
+  expect(noDaemon.stderr).toContain('no device dev-1');
+});
+
 test('flux pair reports a missing daemon, one that hangs up, and one that talks rubbish', async () => {
   const env = { HOME: dataDir, FLUX_DATA_DIR: dataDir };
   const missing = await runFlux(['pair'], env);

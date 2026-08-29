@@ -5,6 +5,7 @@ import { connect } from 'node:net';
 import { hostname } from 'node:os';
 import { join } from 'node:path';
 
+import type { Daemon } from './create-daemon.ts';
 import { createDaemon } from './create-daemon.ts';
 import { DaemonError } from './daemon-error.ts';
 import { qrMatrix } from './qr/qr-matrix.ts';
@@ -18,10 +19,11 @@ import { renderQr } from './qr/render-qr.ts';
 //   FLUX_CLAUDE_DIR  the agent's config directory (CLAUDE.md, settings.json), default ~/.claude
 //   FLUX_PUSH_SUBJECT VAPID contact (mailto: or https: URL) shown to push services
 //   FLUX_QR_INVERT   set to 1 on a light terminal; the pairing QR is drawn for a dark one
-// `flux pair` asks a running daemon for a fresh pairing URL over its control socket; devices
-// are managed with `flux devices ls|rm <id>` (which open the database directly, daemon stopped
-// or not) or from the PWA's settings screen. Repos dir and notification triggers can be
-// changed from that screen too; the environment only sets their starting values.
+// `flux pair` asks a running daemon for a fresh pairing URL over its control socket. `flux
+// devices ls` opens the database directly; `flux devices rm <id>` goes through the socket too,
+// so the live daemon cuts the device's channel off, and only falls back to the database when
+// no daemon is running. The PWA's settings screen does the same over the wire; repos dir and
+// notification triggers are changed there, the environment only sets their starting values.
 
 const { isRecord, isString } = guards;
 const env = process.env;
@@ -29,11 +31,11 @@ const home = env['HOME'] ?? '/';
 const dataDir = env['FLUX_DATA_DIR'] ?? join(home, '.flux');
 const command = process.argv[2] ?? 'daemon';
 
-// Asks the running daemon for a pairing URL; the socket is the daemon's only local interface.
-// One request, one line back, so the reply is accumulated by hand: readline would re-emit the
-// socket's errors on an Interface nobody listens to, and would say nothing if the daemon closed
-// without replying.
-const pairViaSocket = (): Promise<string> =>
+// One request to the running daemon; the socket is the daemon's only local interface. One line
+// back, so the reply is accumulated by hand: readline would re-emit the socket's errors on an
+// Interface nobody listens to, and would say nothing if the daemon closed without replying.
+// Resolves with the reply's `result`; `agent_unavailable` means no daemon answered at all.
+const controlRequest = (request: Record<string, unknown>): Promise<Record<string, unknown>> =>
   new Promise((resolve, reject) => {
     const client = connect(join(dataDir, 'control.sock'));
     let buffer = '';
@@ -53,7 +55,7 @@ const pairViaSocket = (): Promise<string> =>
       fail('agent_unavailable', `no running daemon (is \`flux daemon\` up?): ${error.message}`);
     });
     client.on('connect', () => {
-      client.write('{"type":"pair"}\n');
+      client.write(`${JSON.stringify(request)}\n`);
     });
     client.on('data', (chunk: Buffer) => {
       buffer += chunk.toString();
@@ -67,10 +69,9 @@ const pairViaSocket = (): Promise<string> =>
         return;
       }
       const result = isRecord(reply) ? reply['result'] : null;
-      const url = isRecord(result) ? result['url'] : null;
-      if (isString(url)) {
+      if (isRecord(result)) {
         settle(() => {
-          resolve(url);
+          resolve(result);
         });
       } else fail('internal', 'daemon refused');
     });
@@ -83,6 +84,25 @@ const pairViaSocket = (): Promise<string> =>
 const printPairing = (url: string): void => {
   if (process.stdout.isTTY) console.log(renderQr(qrMatrix(url), env['FLUX_QR_INVERT'] === '1'));
   console.log(`pair a device within 10 minutes: ${url}`);
+};
+
+const pairViaSocket = async (): Promise<string> => {
+  const url = (await controlRequest({ type: 'pair' }))['url'];
+  if (!isString(url)) throw new DaemonError('internal', 'daemon refused');
+  return url;
+};
+
+// Revokes through the live daemon so the device is cut off now; without one, the database
+// alone, which the next daemon start honours.
+const removeDevice = async (daemon: Daemon, deviceId: string): Promise<void> => {
+  try {
+    await controlRequest({ type: 'devices.rm', deviceId });
+    console.log(`removed ${deviceId}`);
+  } catch (error) {
+    if (!(error instanceof DaemonError) || error.code !== 'agent_unavailable') throw error;
+    await daemon.removeDevice(deviceId);
+    console.log(`removed ${deviceId} (no running daemon: revoked in the database only)`);
+  }
 };
 
 // `pair` talks to the running daemon only, so it needs no relay URL: `flux pair` works from any
@@ -133,8 +153,13 @@ if (command === 'daemon') {
 } else if (command === 'devices') {
   const sub = process.argv[3] ?? 'ls';
   if (sub === 'rm' && process.argv[4] !== undefined) {
-    await daemon.removeDevice(process.argv[4]);
-    console.log(`removed ${process.argv[4]}`);
+    try {
+      await removeDevice(daemon, process.argv[4]);
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      await daemon.stop();
+      process.exit(1);
+    }
   } else {
     for (const d of daemon.devices()) {
       console.log(`${d.deviceId}\t${d.name}\t${d.pairedAt}\t${d.lastSeenAt ?? 'never seen'}`);

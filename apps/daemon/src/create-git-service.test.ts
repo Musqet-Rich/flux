@@ -157,6 +157,12 @@ test('show treats bytes that are not UTF-8 as binary, so they cannot be edited l
   expect(shown.content).toBe(latin1.toString('base64'));
 });
 
+test('a missing repositories root is not_found, not an errno', async () => {
+  await expect(createGitService().listRepos('/nowhere/at/all')).rejects.toThrow(
+    'missing or unreadable',
+  );
+});
+
 test('listRepos finds git repositories directly under a root, with their branches', async () => {
   await mkdir(join(root, 'not-a-repo'));
   await writeFile(join(root, 'file.txt'), 'x');

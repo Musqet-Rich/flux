@@ -1,9 +1,8 @@
 import type { Bytes, Channel, Wire } from '@flux/protocol';
 import { base64url, bytes, handshake, pairing, room } from '@flux/protocol';
-import { execFileSync } from 'node:child_process';
-import { lstat, mkdtemp, mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { lstat, mkdir, readFile, symlink } from 'node:fs/promises';
 import { join } from 'node:path';
+import { connect } from 'node:net';
 import { afterEach, expect, test } from 'vitest';
 
 import { deviceHandshake } from '../test/device-side.ts';
@@ -11,6 +10,7 @@ import type { FakeRelay } from '../test/fake-relay.ts';
 import { startFakeRelay } from '../test/fake-relay.ts';
 import type { FrameRouter } from '../test/frame-router.ts';
 import { frameRouter } from '../test/frame-router.ts';
+import { tempRepo } from '../test/temp-repo.ts';
 import type { Daemon } from './create-daemon.ts';
 import { createDaemon } from './create-daemon.ts';
 
@@ -20,10 +20,6 @@ import { createDaemon } from './create-daemon.ts';
 
 const fake = join(import.meta.dirname, '../test/fake-claude.ts');
 const fixture = join(import.meta.dirname, '../test/fixtures/claude/session-two-turns.jsonl');
-const gitEnv = Object.fromEntries(
-  Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')),
-);
-
 let relay: FakeRelay;
 let frames: FrameRouter;
 let daemon: Daemon;
@@ -35,20 +31,7 @@ afterEach(async () => {
 
 const setup = async () => {
   process.env['FLUX_FAKE_FIXTURE'] = fixture;
-  const root = await mkdtemp(join(tmpdir(), 'flux-daemon-'));
-  const repos = join(root, 'repos');
-  const repo = join(repos, 'app');
-  await mkdir(repo, { recursive: true });
-  execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: repo, env: gitEnv });
-  await writeFile(join(repo, 'README.md'), '# app\n');
-  execFileSync('git', ['-c', 'user.email=t@x', '-c', 'user.name=t', 'add', '-A'], {
-    cwd: repo,
-    env: gitEnv,
-  });
-  execFileSync('git', ['-c', 'user.email=t@x', '-c', 'user.name=t', 'commit', '-qm', 'init'], {
-    cwd: repo,
-    env: gitEnv,
-  });
+  const { root, repos, repo } = await tempRepo();
   relay = await startFakeRelay();
   frames = frameRouter(relay.nextFrame);
   const claudeDir = join(root, 'claude');
@@ -121,6 +104,18 @@ const untilEvent = (d: Dev, type: string): Promise<Wire> =>
 
 const untilRevoked = (d: Dev): Promise<Wire> =>
   untilMatch(d, (m) => m.kind === 'ephemeral' && m.data.type === 'device.revoked');
+
+// What `flux devices rm` does: one line to the control socket, one line back.
+const controlRm = (deviceId: string): Promise<unknown> =>
+  new Promise((resolve) => {
+    const client = connect(daemon.controlSocket, () => {
+      client.write(`${JSON.stringify({ type: 'devices.rm', deviceId })}\n`);
+    });
+    client.once('data', (chunk: Buffer) => {
+      client.end();
+      resolve(JSON.parse(chunk.toString()));
+    });
+  });
 
 const pair = async (d: Dev): Promise<string> => {
   const proof = await pairing.proof(d.payload.secret, d.keys.publicKey, d.payload.boxPub);
@@ -251,6 +246,18 @@ test('revoking a device cuts it off at once and leaves the other one working', a
   expect(daemon.devices()).toEqual([]);
 });
 
+test('flux devices rm over the control socket cuts a connected device off', async () => {
+  const { a, aId, b, bId } = await twoDevices();
+  expect(await controlRm(bId)).toEqual({ ok: true, result: {} });
+  expect(await untilRevoked(b)).toEqual({
+    kind: 'ephemeral',
+    data: { type: 'device.revoked', deviceId: bId },
+  });
+  expect(daemon.devices().map((d) => d.deviceId)).toEqual([aId]);
+  expect(await call(a, 'devices.list', {})).toHaveLength(1);
+  expect(await controlRm(bId)).toMatchObject({ ok: false });
+});
+
 test('settings: runtime values persist, env is read-only, agent config files are edited', async () => {
   const { repos, claudeDir } = await setup();
   const d = await device();
@@ -286,17 +293,33 @@ test('settings: runtime values persist, env is read-only, agent config files are
     agent: { claudeMd: '# Be terse\n', settingsJson: '{"model":"opus"}' },
   });
   expect(await readFile(join(claudeDir, 'CLAUDE.md'), 'utf8')).toBe('# Be terse\n');
+  expect(await call(d, 'settings.get', {})).toEqual(updated);
+});
+
+test('settings.set refuses a bad patch whole, and a repos dir change applies at once', async () => {
+  const { repos, claudeDir } = await setup();
+  const d = await device();
+  await pair(d);
+  const updated = await call(d, 'settings.set', { agent: { claudeMd: 'kept' } });
   await expect(
-    call(d, 'settings.set', { flux: { reposDir: '/nowhere' }, agent: { settingsJson: '{' } }),
+    call(d, 'settings.set', { flux: { reposDir: repos }, agent: { settingsJson: '{' } }),
   ).rejects.toThrow('bad_params');
+  await expect(
+    call(d, 'settings.set', { flux: { reposDir: '/nowhere' }, agent: { claudeMd: 'lost' } }),
+  ).rejects.toThrow('not a directory');
   await expect(call(d, 'settings.set', { flux: { reposDir: 'relative' } })).rejects.toThrow(
     'bad_params',
   );
   expect(await call(d, 'settings.get', {})).toEqual(updated);
-  // A repos dir change applies to the next call without a restart.
+  expect(await readFile(join(claudeDir, 'CLAUDE.md'), 'utf8')).toBe('kept');
+  // A repos dir change applies to the next call without a restart, and a trailing slash is
+  // normalised away so `inside` still matches.
   const empty = join(repos, '..', 'empty');
   await mkdir(empty);
-  await call(d, 'settings.set', { flux: { reposDir: empty } });
+  const moved = (await call(d, 'settings.set', { flux: { reposDir: `${empty}/` } })) as {
+    flux: { reposDir: string };
+  };
+  expect(moved.flux.reposDir).toBe(empty);
   expect(await call(d, 'repos.list', {})).toEqual({ repos: [] });
 });
 

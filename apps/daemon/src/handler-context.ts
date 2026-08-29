@@ -4,15 +4,25 @@ import type { SessionRecord } from './create-session-store.ts';
 import type { SessionSupervisor } from './create-session-supervisor.ts';
 import type { Services } from './open-services.ts';
 
-// Everything an RPC handler may touch (architecture.md § Daemon): the services minus their
-// shutdown, plus the process-level facts. Handlers get this and nothing else, so what the wire
-// can reach is visible in one place.
-export interface HandlerContext extends Omit<Services, 'close'> {
+// Everything an RPC handler may touch (architecture.md § Daemon). Handlers get this and nothing
+// else, so what the wire can reach is visible in one place. The service types are named through
+// `Services` rather than imported one by one to stay inside the per-file import budget.
+export interface HandlerContext {
   daemonName: string;
   // base64url of the raw P-256 VAPID public key; the PWA subscribes with it (ADR 0013).
   vapidPublicKey: string;
   // What only the environment sets; reported read-only by `settings.get`.
   env: EnvSettings;
+  worktreesDir: string;
+  log: Services['log'];
+  sessions: Services['sessions'];
+  devices: Services['devices'];
+  comments: Services['comments'];
+  push: Services['push'];
+  settings: Services['settings'];
+  agentConfig: Services['agentConfig'];
+  asks: Services['asks'];
+  git: Services['git'];
   supervisor: (record: SessionRecord) => SessionSupervisor;
   closeSupervisor: (session: string) => Promise<void>;
   // Forgets a device everywhere: trust list, push subscriptions, live channels.

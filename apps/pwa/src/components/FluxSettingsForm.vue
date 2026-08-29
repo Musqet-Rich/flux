@@ -26,17 +26,37 @@ const env = computed(() => {
       ];
 });
 
+const fields = ['reposDir', 'defaultAgent', 'notifyOnAsk', 'notifyOnIdle', 'notifyOnDone'] as const;
+
+// A field follows the box only while it has no unsaved edit (see AgentConfigEditor).
 watch(
   stored,
-  (next) => {
-    form.value = next === null ? null : { ...next };
+  (next, previous) => {
+    if (next === null) {
+      form.value = null;
+      return;
+    }
+    const current = form.value;
+    if (current === null || previous === null || previous === undefined) {
+      form.value = { ...next };
+      return;
+    }
+    for (const field of fields) {
+      if (current[field] === previous[field]) Object.assign(current, { [field]: next[field] });
+    }
   },
   { immediate: true },
 );
 
-const dirty = computed(
-  () => JSON.stringify(form.value) !== JSON.stringify(stored.value) && form.value !== null,
-);
+const changed = computed((): Partial<FluxSettings> => {
+  const current = form.value;
+  const base = stored.value;
+  if (current === null || base === null) return {};
+  return Object.fromEntries(
+    fields.filter((field) => current[field] !== base[field]).map((f) => [f, current[f]]),
+  );
+});
+const dirty = computed(() => Object.keys(changed.value).length > 0);
 
 const agents: AgentKind[] = ['claude', 'pi'];
 const triggers = [
@@ -48,7 +68,7 @@ const triggers = [
 const save = async (): Promise<void> => {
   if (form.value === null) return;
   busy.value = true;
-  await props.store.saveSettings({ flux: { ...form.value } });
+  await props.store.saveSettings({ flux: changed.value });
   busy.value = false;
 };
 </script>

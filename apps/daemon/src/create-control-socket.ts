@@ -6,12 +6,14 @@ import { createInterface } from 'node:readline';
 
 // The daemon's local control socket (ADR 0008): newline-delimited JSON over a Unix socket.
 // The Flux MCP server calls `ask` and `notify` on it from inside an agent session; `flux pair`
-// calls `pair`. Nothing here is reachable from outside the box.
+// calls `pair` and `flux devices rm` calls `devices.rm`, so a revocation reaches the live
+// channels. Nothing here is reachable from outside the box.
 
 export type ControlRequest =
   | { type: 'ask'; session: string; question: string; options?: string[]; timeoutMs?: number }
   | { type: 'notify'; session: string; summary: string; level: 'info' | 'done' | 'blocked' }
-  | { type: 'pair' };
+  | { type: 'pair' }
+  | { type: 'devices.rm'; deviceId: string };
 
 export type ControlReply = { ok: true; result: unknown } | { ok: false; error: string };
 
@@ -45,6 +47,8 @@ const isRequest = (v: unknown): v is ControlRequest => {
       );
     case 'pair':
       return true;
+    case 'devices.rm':
+      return isString(v['deviceId']);
     default:
       return false;
   }
