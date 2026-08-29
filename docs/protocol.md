@@ -320,6 +320,7 @@ interface SessionSummary {
   agent: 'claude' | 'pi';
   state: 'idle' | 'running' | 'waiting_user' | 'ended';
   lastSeq: number;
+  createdAt?: string; // when the session was created; the device orders tabs by it, never by activity. Absent from a daemon built before 2026-08-29; the device then orders by id
   updatedAt: string;
 }
 

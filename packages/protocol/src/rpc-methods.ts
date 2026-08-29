@@ -16,6 +16,8 @@ export interface SessionSummary {
   agent: AgentKind;
   state: SessionState;
   lastSeq: number;
+  // Absent from a daemon built before it was sent (2026-08-29); the device then orders by id.
+  createdAt?: string;
   updatedAt: string;
 }
 

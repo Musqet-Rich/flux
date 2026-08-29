@@ -38,6 +38,7 @@ const isSessionSummary = (v: unknown): v is SessionSummary =>
   isAgentKind(v['agent']) &&
   isOneOf(v['state'], sessionStates) &&
   isInteger(v['lastSeq'], 0) &&
+  isOptional(v['createdAt'], isString) &&
   isString(v['updatedAt']);
 
 const isTokenUsage = (v: unknown): v is TokenUsage =>

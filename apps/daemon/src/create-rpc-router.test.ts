@@ -27,6 +27,7 @@ const summary = {
   agent: 'claude' as const,
   state: 'idle' as const,
   lastSeq: 0,
+  createdAt: 'now',
   updatedAt: 'now',
 };
 
