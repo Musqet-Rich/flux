@@ -17,6 +17,8 @@ import type { Device } from './create-device-store.ts';
 // The test plays the device side of protocol.md § 3 with the protocol primitives.
 
 const setup = async (trusted: boolean, pairingOpen = false) => {
+  // The box's clock; a test moves it to age a handshake out.
+  const clock = { ms: 1_000_000 };
   const box = await handshake.generateKeyPair(true);
   const dev = await handshake.generateKeyPair(true);
   const device: Device = {
@@ -44,8 +46,9 @@ const setup = async (trusted: boolean, pairingOpen = false) => {
         ? { kind: 'rpc.result', id: message.id, ok: true, result: 42 }
         : null;
     },
+    now: () => new Date(clock.ms),
   });
-  return { box, dev, device, channels, seen, out, send, hooks };
+  return { box, dev, device, channels, seen, out, send, hooks, clock };
 };
 
 // Runs the device side of the handshake against `channels` and returns the device's channel.
@@ -85,6 +88,8 @@ const connectDevice = async (
   const fingerprint = await room.fingerprint(h.dev.publicKey);
   return { channel: createChannel({ keys, fingerprint }), reply };
 };
+
+type Tab = Awaited<ReturnType<typeof connectDevice>>;
 
 const openWire = async (channel: ReturnType<typeof createChannel>, data: Bytes): Promise<unknown> =>
   JSON.parse(bytes.toUtf8((await channel.open(data)) ?? new Uint8Array()));
@@ -327,6 +332,12 @@ test('a device removing itself gets the answer before the notice', async () => {
   expect(h.channels.peers()).toEqual([]);
 });
 
+// Every tab sends an rpc; the channels are distinct, so the frames can go in together.
+const speak = async (h: Awaited<ReturnType<typeof setup>>, tabs: Tab[]): Promise<void> => {
+  const frames = await Promise.all(tabs.map((tab) => rpcFrame(tab.channel)));
+  await Promise.all(frames.map((data) => h.channels.handleFrame(data, h.send)));
+};
+
 const opensOn = async (channel: ReturnType<typeof createChannel>, frames: Bytes[]) => {
   const opened = await Promise.all(frames.map((data) => channel.open(data).catch(() => null)));
   return opened.filter((plain) => plain !== null).length;
@@ -377,6 +388,8 @@ test('revoking a device cuts every tab; one tab going quiet leaves the other wor
 
 // The relay's guest cap (protocol.md § 2) bounds the channels the box keeps per device.
 const guestCap = 8;
+// Pending channels younger than this are kept past the cap, up to `guestCap` of them.
+const confirmGraceMs = 2_000;
 
 // The relay never tells the host that a guest left, so a closed tab's channel lingers until
 // the device handshakes past the relay's guest cap; then the channel heard from least recently
@@ -386,6 +399,7 @@ test('past the per-device cap the quietest channel is dropped', async () => {
   const { channel: first } = await connectDevice(h);
   const { channel: second } = await connectDevice(h);
   await h.channels.handleFrame(await rpcFrame(first), h.send);
+  h.clock.ms += confirmGraceMs;
   const later = await Promise.all(Array.from({ length: guestCap - 1 }, () => connectDevice(h)));
   await h.channels.broadcast(assistant(1, 'x'), h.send);
   const frames = h.out.slice(-guestCap);
@@ -394,4 +408,87 @@ test('past the per-device cap the quietest channel is dropped', async () => {
   const forLater = await Promise.all(later.map((tab) => opensOn(tab.channel, frames)));
   expect(forLater).toEqual(later.map(() => 1));
   expect(h.channels.peers()).toHaveLength(1);
+});
+
+// A handshake past the cap has not been confirmed, so it never displaces a channel that has:
+// a co-guest replaying handshakes under the device's public key (or its own tab reconnecting
+// in a loop) costs the device nothing. The replays evict each other, oldest first, once the
+// device holds `guestCap` of them; every one inside its grace survives up to that, so the
+// device holds at most twice the cap.
+test('a flood of handshakes past the cap leaves every confirmed channel working', async () => {
+  const h = await setup(true);
+  const tabs = await Promise.all(Array.from({ length: guestCap }, () => connectDevice(h)));
+  await speak(h, tabs);
+  expect(h.seen).toHaveLength(guestCap);
+  const flood = await Promise.all(Array.from({ length: 20 }, () => connectDevice(h)));
+  await h.channels.broadcast(assistant(1, 'x'), h.send);
+  const frames = h.out.slice(-(guestCap * 2));
+  const forTabs = await Promise.all(tabs.map((tab) => opensOn(tab.channel, frames)));
+  expect(forTabs).toEqual(tabs.map(() => 1));
+  // The replays handshake concurrently, so which survive is not fixed; exactly `guestCap` do.
+  const forFlood = await Promise.all(flood.map((tab) => opensOn(tab.channel, frames)));
+  expect(forFlood.reduce((sum, n) => sum + n, 0)).toBe(guestCap);
+  // Past its grace a pending channel goes for the next handshake even below `guestCap` pending.
+  h.clock.ms += confirmGraceMs;
+  const { channel: late } = await connectDevice(h);
+  const before = h.out.length;
+  await h.channels.broadcast(assistant(2, 'y'), h.send);
+  expect(h.out.length - before).toBe(guestCap * 2);
+  expect(await opensOn(late, h.out.slice(before))).toBe(1);
+});
+
+// Tabs restored together handshake before any of them sends its first frame. With the device
+// at the cap in confirmed channels, the second must not evict the first before it confirms.
+test('two tabs handshaking together past the cap both confirm', async () => {
+  const h = await setup(true);
+  const tabs = await Promise.all(Array.from({ length: guestCap }, () => connectDevice(h)));
+  await speak(h, tabs);
+  const pair = await Promise.all(Array.from({ length: 2 }, () => connectDevice(h)));
+  await speak(h, pair);
+  await h.channels.broadcast(assistant(1, 'x'), h.send);
+  const frames = h.out.slice(-guestCap);
+  const forPair = await Promise.all(pair.map((tab) => opensOn(tab.channel, frames)));
+  expect(forPair).toEqual([1, 1]);
+  const forTabs = await Promise.all(tabs.map((tab) => opensOn(tab.channel, frames)));
+  expect(forTabs.reduce((sum, n) => sum + n, 0)).toBe(guestCap - 2);
+});
+
+// A ninth working tab is the device really holding more than the relay admits, so the
+// confirmed channel heard from least recently makes room; the rest keep working.
+test('a confirmed ninth tab evicts the quietest confirmed channel', async () => {
+  const h = await setup(true);
+  const tabs = await Promise.all(Array.from({ length: guestCap }, () => connectDevice(h)));
+  await speak(h, tabs);
+  const quiet = tabs.slice(0, 1);
+  const rest = tabs.slice(1);
+  await speak(h, rest);
+  const { channel: ninth } = await connectDevice(h);
+  await h.channels.handleFrame(await rpcFrame(ninth), h.send);
+  await h.channels.broadcast(assistant(1, 'x'), h.send);
+  const frames = h.out.slice(-guestCap);
+  expect(await Promise.all(quiet.map((tab) => opensOn(tab.channel, frames)))).toEqual([0]);
+  const forRest = await Promise.all(rest.map((tab) => opensOn(tab.channel, frames)));
+  expect(forRest).toEqual(rest.map(() => 1));
+  expect(await opensOn(ninth, frames)).toBe(1);
+});
+
+// A handshake whose first frame never comes is dropped once its window has passed, on the
+// next handshake or frame for the device, so replayed handshakes cannot pile up.
+test('an unconfirmed channel is dropped after its confirmation window', async () => {
+  const h = await setup(true);
+  const { channel: working } = await connectDevice(h);
+  await h.channels.handleFrame(await rpcFrame(working), h.send);
+  const { channel: stale } = await connectDevice(h);
+  h.clock.ms += 30_000;
+  await h.channels.handleFrame(await rpcFrame(working), h.send);
+  await h.channels.broadcast(assistant(1, 'x'), h.send);
+  expect(await opensOn(working, h.out.slice(-1))).toBe(1);
+  expect(await opensOn(stale, h.out.slice(-2))).toBe(0);
+  const before = h.out.length;
+  await h.channels.handleFrame(await rpcFrame(stale), h.send);
+  expect(h.out).toHaveLength(before);
+  // Only a stale channel goes: a fresh handshake in the same admit is kept.
+  const { channel: fresh } = await connectDevice(h);
+  await h.channels.handleFrame(await rpcFrame(fresh), h.send);
+  expect(await openWire(fresh, last(h.out))).toMatchObject({ kind: 'rpc.result', id: 'r2' });
 });
