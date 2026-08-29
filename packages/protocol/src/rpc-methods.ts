@@ -4,7 +4,7 @@ import { guards } from './guards.ts';
 import { isCodeRef } from './is-code-ref.ts';
 
 // RPC methods (protocol.md § 7): params are validated on the box with the guards below; results
-// are typed only, the box constructs them. Settings and devices are P2 and not listed yet.
+// are validated on the device with `rpc-results.ts`. Settings and devices are P2 and not listed yet.
 
 export interface SessionSummary {
   session: string;
