@@ -40,6 +40,17 @@ test.each([
   expect(toolSummary.end(name, ok, result)).toBe(expected);
 });
 
+// A subagent's tool_result has no tool_use_result, so its content is what there is to count;
+// the structured result wins when both are present, and non-text content counts nothing.
+test.each([
+  ['Bash', true, undefined, 'total 16\na.txt\nb.txt', 'Bash ok, 3 lines'],
+  ['Bash', true, { stdout: 'one' }, 'x\ny', 'Bash ok, 1 line'],
+  ['Bash', true, undefined, [{ type: 'text', text: 'a' }], 'Bash ok, 0 lines'],
+  ['Read', true, undefined, 'a\nb', 'Read ok'],
+])('end summary for %s from the block content', (name, ok, result, content, expected) => {
+  expect(toolSummary.end(name, ok, result, content)).toBe(expected);
+});
+
 test('writes marks the tools that can change the worktree', () => {
   expect(['Write', 'Edit', 'NotebookEdit', 'Bash'].map((n) => toolSummary.writes(n))).toEqual([
     true,

@@ -250,3 +250,106 @@ test.each([
 ])('parseStreamLine(%s)', (input, expected) => {
   expect(parseStreamLine(input)).toEqual(expected);
 });
+
+const subagents = readFileSync(
+  new URL('../../test/fixtures/claude/session-subagents.jsonl', import.meta.url),
+  'utf8',
+)
+  .split('\n')
+  .filter((l) => l.trim() !== '')
+  .map((l) => parseStreamLine(l));
+
+// Two Explore subagents run in parallel: every line the subagents produced carries the Agent
+// call's id as `parent`, and every top-level line has none (fixture session-subagents).
+test('subagent lines carry their parent, task lines carry the agent type and usage', () => {
+  const parents = ['toolu_01LMaEftTtJHUknWuZNF9cD5', 'toolu_01VrVjEzF12x5RHjY37MeYyg'];
+  const children = subagents.filter((l) => l?.parent !== undefined);
+  expect(children).toHaveLength(6);
+  expect(new Set(children.map((l) => l?.parent))).toEqual(new Set(parents));
+  expect(children.map((l) => l?.kind)).toEqual([
+    'user_text',
+    'user_text',
+    'assistant',
+    'assistant',
+    'tool_result',
+    'tool_result',
+  ]);
+  expect(children[0]).toMatchObject({ kind: 'user_text', parent: parents[0] });
+  expect(subagents.filter((l) => l?.kind === 'user_text')).toHaveLength(2);
+  const started = subagents.filter((l) => l?.kind === 'task_started');
+  expect(started).toEqual([
+    {
+      kind: 'task_started',
+      taskId: 'a524a12742a29a90a',
+      toolUseId: parents[0],
+      description: 'List directory files',
+      background: false,
+      agentType: 'Explore',
+    },
+    {
+      kind: 'task_started',
+      taskId: 'a11e094b2df159456',
+      toolUseId: parents[1],
+      description: 'Read a.txt contents',
+      background: false,
+      agentType: 'Explore',
+    },
+  ]);
+  expect(subagents.find((l) => l?.kind === 'task_ended')).toMatchObject({
+    taskId: 'a11e094b2df159456',
+    status: 'completed',
+    tokens: 12070,
+    summary: expect.stringMatching(/^File: `/u),
+  });
+  const other = subagents.filter((l) => l?.kind === 'other');
+  expect(other).toHaveLength(29);
+  expect(other.filter((l) => JSON.stringify(l).includes('"task_updated"'))).toHaveLength(2);
+});
+
+// task_progress restates what the task is doing, with its usage so far; task_updated is new to
+// this capture and stays other, like the hooks and the streaming envelopes around the parent's
+// own replies.
+test('task_progress lines carry the description and usage so far', () => {
+  expect(subagents.filter((l) => l?.kind === 'task_progress')).toEqual([
+    {
+      kind: 'task_progress',
+      taskId: 'a524a12742a29a90a',
+      description: 'Running List top-level directory contents',
+      tokens: 11720,
+    },
+    {
+      kind: 'task_progress',
+      taskId: 'a11e094b2df159456',
+      description: 'Reading a.txt',
+      tokens: 11717,
+    },
+  ]);
+});
+
+test('a task_progress line without usage has no tokens', () => {
+  const line = { type: 'system', subtype: 'task_progress', task_id: 't', description: 'd' };
+  expect(parseStreamLine(JSON.stringify(line))).toEqual({
+    kind: 'task_progress',
+    taskId: 't',
+    description: 'd',
+  });
+});
+
+test('a top-level user line with text is other, not a subagent prompt', () => {
+  const line = { type: 'user', message: { role: 'user', content: [{ type: 'text', text: 'x' }] } };
+  expect(parseStreamLine(JSON.stringify(line))?.kind).toBe('other');
+  const child = { ...line, parent_tool_use_id: 'toolu_1' };
+  expect(parseStreamLine(JSON.stringify(child))).toEqual({
+    kind: 'user_text',
+    text: 'x',
+    parent: 'toolu_1',
+  });
+  const mixed = {
+    ...child,
+    message: { content: [{ type: 'text', text: 'x' }, { type: 'image' }] },
+  };
+  expect(parseStreamLine(JSON.stringify(mixed))).toMatchObject({
+    kind: 'other',
+    parent: 'toolu_1',
+  });
+});

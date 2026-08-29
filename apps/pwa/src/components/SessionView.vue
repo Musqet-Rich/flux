@@ -1,26 +1,24 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 
+import { useSessionTimeline } from '../composables/useSessionTimeline.ts';
 import { useTailScroll } from '../composables/useTailScroll.ts';
 import { renderMarkdown } from '../markdown/render-markdown.ts';
 import type { Store } from '../store/create-store.ts';
-import { openAsk } from '../store/open-ask.ts';
-import { pendingComments } from '../store/pending-comments.ts';
+import AgentStrip from './AgentStrip.vue';
 import AskCard from './AskCard.vue';
-import CommentTray from './CommentTray.vue';
+import Composer from './Composer.vue';
 import EventItem from './EventItem.vue';
 import SessionToolbar from './SessionToolbar.vue';
 
-// One session: its toolbar (SessionToolbar), timeline, the streaming reply, the agent's open
-// question, the comments waiting to go and the composer. The store owns the data and reports failures; this only
-// renders and dispatches.
+// One session: its toolbar (SessionToolbar), the agents strip once subagents have run, the
+// timeline of the open chat (main, or one subagent's), the streaming reply, the agent's open
+// question and the composer. The store owns the data and reports failures; this only renders
+// and dispatches.
 
 const props = defineProps<{ store: Store; session: string }>();
 defineEmits<{ changes: []; closed: [] }>();
 
-const hiddenTypes = new Set(['raw', 'rate_limit']);
-const draft = ref('');
-const sending = ref(false);
 // The timeline follows new content only while the operator is at the tail; scrolled up, a pill
 // counts what arrived and the view stays put (useTailScroll).
 const tail = useTailScroll();
@@ -28,10 +26,8 @@ const { scroller, behind, unread } = tail;
 
 const log = computed(() => props.store.state.logs[props.session]);
 const events = computed(() => log.value?.events ?? []);
-// Agent lines Flux does not read (`raw`) and rate-limit changes stay in the log for the ask,
-// comment and sync logic, but they are noise on a phone: hooks and streaming envelopes would
-// put half a dozen bare rows around every reply, and the status bar already shows the windows.
-const timeline = computed(() => events.value.filter((e) => !hiddenTypes.has(e.type)));
+const chat = useSessionTimeline(() => events.value);
+const { tasks, view, task, timeline, earlier, ask } = chat;
 const streaming = computed(() => log.value?.streaming ?? '');
 // The delta buffer renders through the same Markdown pass as the final message, so an open
 // fence is a code block from its first line and the bubble never flickers back to raw text.
@@ -44,30 +40,25 @@ const thinkingText = computed(() => {
   const label = tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}k` : String(tokens);
   return `Thinking… ~${label} tokens`;
 });
-const ask = computed(() => openAsk(events.value));
-const pending = computed(() => pendingComments(events.value));
 const summary = computed(() => props.store.state.sessions.find((s) => s.session === props.session));
 const busy = computed(() => summary.value?.state === 'running');
+// The streaming bubble and the thinking indicator are the main agent's (architecture.md
+// § Adapter: a subagent's ephemerals are dropped), so they show on main only.
+const onMain = computed(() => view.value === null);
+const ended = ref(false);
 
 const pill = computed(() => (unread.value > 0 ? `↓ ${unread.value} new` : '↓ New activity'));
 
-const send = async (): Promise<void> => {
-  const text = draft.value.trim();
-  if (text === '' || sending.value) return;
-  sending.value = true;
+// Switching chats always lands at the end of the one opened.
+const select = (next: string | null): void => {
+  chat.select(next);
+  tail.reset();
   void tail.jump();
-  const ok = await props.store.send(props.session, text);
-  sending.value = false;
-  if (ok) draft.value = '';
 };
 
 const answer = (text: string): void => {
   void tail.jump();
   void props.store.answer(props.session, ask.value?.askId ?? '', text);
-};
-
-const remove = (commentId: string): void => {
-  void props.store.removeComment(props.session, commentId);
 };
 
 const interrupt = (): void => {
@@ -80,23 +71,34 @@ onMounted(() => {
 watch(
   () => props.session,
   (session) => {
-    tail.reset();
+    select(null);
     void props.store.open(session);
   },
 );
+// Only rows newer than the last one shown count as new: Show earlier prepends rows and a chat
+// switch swaps them, and neither is activity to follow or to put on the pill.
 watch(
-  () => timeline.value.length,
-  (count, before) => {
-    void tail.follow(Math.max(0, count - before));
+  () => timeline.value,
+  (rows, before) => {
+    const last = before.at(-1)?.seq ?? 0;
+    const added = rows.filter((row) => row.seq > last).length;
+    if (added > 0) void tail.follow(added);
   },
 );
 // Only growth counts: the text emptying is the reply landing, and that event is counted above.
 watch(streaming, (text) => {
-  if (text !== '') void tail.follow(0);
+  if (text !== '' && onMain.value) void tail.follow(0);
 });
 watch(thinking, (state) => {
-  if (state !== null) void tail.follow(0);
+  if (state !== null && onMain.value) void tail.follow(0);
 });
+// A task that ends while its chat is open is said so once, where the composer would be.
+watch(
+  () => task.value?.status,
+  (status) => {
+    ended.value = status !== undefined && status !== 'running';
+  },
+);
 </script>
 
 <template>
@@ -111,10 +113,25 @@ watch(thinking, (state) => {
       @changes="$emit('changes')"
       @closed="$emit('closed')"
     />
+    <AgentStrip
+      v-if="tasks.length > 0"
+      :tasks="tasks"
+      :active="view"
+      :busy="busy"
+      @select="select"
+    />
     <div class="log">
       <div ref="scroller" class="timeline" @scroll="tail.measure">
-        <EventItem v-for="e in timeline" :key="e.seq" :event="e" />
-        <article v-if="streaming !== '' || thinking !== null" class="streaming">
+        <button
+          v-if="earlier > 0"
+          type="button"
+          class="secondary earlier"
+          @click="chat.showEarlier"
+        >
+          Show {{ earlier }} earlier
+        </button>
+        <EventItem v-for="e in timeline" :key="e.seq" :event="e" @task="select" />
+        <article v-if="onMain && (streaming !== '' || thinking !== null)" class="streaming">
           <Streaming v-if="streaming !== ''" />
           <span v-else class="thinking"
             ><span class="loader" aria-hidden="true" />{{ thinkingText }}</span
@@ -126,18 +143,10 @@ watch(thinking, (state) => {
         {{ pill }}
       </button>
     </div>
-    <div class="composer">
-      <CommentTray :comments="pending" @remove="remove" />
-      <form class="row" @submit.prevent="send">
-        <textarea
-          v-model="draft"
-          rows="2"
-          placeholder="Message the agent"
-          @keydown.enter.meta.prevent="send"
-          @keydown.enter.ctrl.prevent="send"
-        />
-        <button type="submit" :disabled="sending || draft.trim() === ''">Send</button>
-      </form>
+    <Composer v-if="onMain" :store="store" :session="session" :events="events" @sent="tail.jump" />
+    <div v-else class="aside">
+      <span class="hint">{{ ended ? `Task ${task?.status}. ` : '' }}Messages go to main</span>
+      <button type="button" class="secondary" @click="select(null)">Back</button>
     </div>
   </section>
 </template>
@@ -169,6 +178,11 @@ watch(thinking, (state) => {
   padding: 0.75rem;
 }
 
+.earlier {
+  align-self: center;
+  font-size: 0.85rem;
+}
+
 .new-activity {
   position: absolute;
   bottom: 0.75rem;
@@ -198,19 +212,19 @@ watch(thinking, (state) => {
   margin-right: 0.5rem;
 }
 
-.composer {
+.aside {
   flex: none;
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 0.75rem;
   border-top: 1px solid var(--border);
   background: var(--panel);
 }
 
-.row {
-  display: flex;
-  gap: 0.5rem;
-  align-items: flex-end;
+.hint {
+  flex: 1;
+  color: var(--muted);
+  font-size: 0.85rem;
 }
 </style>

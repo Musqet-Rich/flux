@@ -33,7 +33,7 @@ const relayBin = join(root, 'apps/relay/dist/index.mjs');
 const daemonBin = join(root, 'apps/daemon/dist/index.mjs');
 const pwaDist = join(root, 'apps/pwa/dist');
 const fakeClaude = join(root, 'apps/daemon/test/fake-claude.ts');
-const fixture = join(root, 'apps/daemon/test/fixtures/claude/session-two-turns.jsonl');
+const defaultFixture = join(root, 'apps/daemon/test/fixtures/claude/session-two-turns.jsonl');
 const shim = join(root, 'e2e/fake-claude.sh');
 
 const run = (
@@ -142,7 +142,8 @@ const attachCleanup = (children: StartedProcess[], dir: string): (() => void) =>
   };
 };
 
-export const startStack = async (label: string): Promise<Stack> => {
+// `fixture` is the capture the fake agent replays, one turn per message sent to it.
+export const startStack = async (label: string, fixture = defaultFixture): Promise<Stack> => {
   await requireBuilt();
   for (const swept of sweepStale()) process.stderr.write(`[e2e] swept stale ${swept}\n`);
   const dir = await mkdtemp(join(tmpdir(), `flux-e2e-${label}-`));

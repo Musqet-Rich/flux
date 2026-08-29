@@ -1,9 +1,23 @@
+import type { FluxEvent } from '@flux/protocol';
+import type { DOMWrapper, VueWrapper } from '@vue/test-utils';
 import { flushPromises, mount } from '@vue/test-utils';
 import { expect, test } from 'vitest';
 
+import type { PairedStore } from '../../test/paired-store.ts';
 import { pairedStore } from '../../test/paired-store.ts';
 import { until } from '../../test/until.ts';
+import Composer from './Composer.vue';
 import SessionView from './SessionView.vue';
+
+// The rows of the agents strip as read: glyph, type and description with a space between.
+const stripRows = (wrapper: VueWrapper): string[] =>
+  wrapper.findAll('.agents .row').map((r) =>
+    r
+      .findAll('span')
+      .map((span) => span.text())
+      .filter((text) => text !== '')
+      .join(' '),
+  );
 
 const ref = { path: 'a.ts', rev: 'worktree', range: { startLine: 1, endLine: 1 } };
 
@@ -35,7 +49,7 @@ test('renders the log, streams, answers asks, sends with pending comments', asyn
   await wrapper.find('form.row').trigger('submit');
   await until(() => box.calls('agent.send').length === 1);
   expect(box.calls('agent.send')).toEqual([{ session: 's1', text: 'do it', commentIds: ['c1'] }]);
-  await until(() => Reflect.get(wrapper.vm, 'sending') === false);
+  await until(() => Reflect.get(wrapper.findComponent(Composer).vm, 'sending') === false);
   await flushPromises();
   expect(wrapper.find('textarea').element.value).toBe('');
   store.stop();
@@ -121,7 +135,7 @@ test('a failed action keeps the draft and surfaces the box error', async () => {
   await wrapper.find('textarea').setValue('keep me');
   await wrapper.find('form.row').trigger('submit');
   await until(() => store.state.error?.message === 'no agent.send');
-  await until(() => Reflect.get(wrapper.vm, 'sending') === false);
+  await until(() => Reflect.get(wrapper.findComponent(Composer).vm, 'sending') === false);
   expect(wrapper.find('textarea').element.value).toBe('keep me');
   store.stop();
 });
@@ -223,5 +237,120 @@ test('the streaming bubble renders an open fence as a code block until it closes
   await flushPromises();
   expect(wrapper.find('.streaming').exists()).toBe(false);
   expect(wrapper.find('.item.assistant pre > code.language-sh').text()).toBe('ls -la');
+  store.stop();
+});
+
+const started = (taskId: string, toolUseId: string, description: string): unknown => ({
+  taskId,
+  toolUseId,
+  description,
+  background: false,
+  agentType: 'Explore',
+});
+
+// A row's first line: the disclosure's summary where there is one, else the whole row.
+const heading = (item: DOMWrapper<Element>): string =>
+  item.find('summary').exists() ? item.find('summary').text() : item.text();
+
+// A session whose agent has spawned one subagent that has done one thing so far.
+const withSubagent = async (): Promise<{ box: PairedStore; wrapper: VueWrapper }> => {
+  const box = await pairedStore([]);
+  const { store, relay, event } = box;
+  const wrapper = mount(SessionView, { props: { store, session: 's1' } });
+  await until(() => store.state.logs['s1'] !== undefined);
+  await relay.emit(event(1, 'session.state', { state: 'running' }));
+  await relay.emit(
+    event(2, 'tool.start', { toolId: 'u1', name: 'Agent', input: {}, summary: 'Agent: ls' }),
+  );
+  await relay.emit(event(3, 'task.started', started('t1', 'u1', 'List files')));
+  await relay.emit({ ...event(4, 'msg.user', { text: 'List the files' }), parent: 'u1' });
+  await relay.emit({
+    ...event(5, 'tool.start', { toolId: 'b', name: 'Bash', input: {}, summary: 'Bash: ls' }),
+    parent: 'u1',
+  });
+  await relay.emit({ ...event(6, 'raw', { agent: 'claude', data: {} }), parent: 'u1' });
+  await until(() => store.state.logs['s1']?.lastSeq === 6);
+  await flushPromises();
+  return { box, wrapper };
+};
+
+// A subagent's rows belong to its own chat: the strip appears with the first task, main keeps
+// only the task note (tappable), and the subagent's chat shows its rows with a note in place
+// of the composer, since nothing can be said to a subagent.
+test('subagent events live in their own chat, reached from the task note', async () => {
+  const { box, wrapper } = await withSubagent();
+  expect(stripRows(wrapper)).toEqual(['main', 'Explore List files']);
+  expect(wrapper.findAll('.item').map((i) => i.text())).toEqual([
+    'Agent running',
+    'Agent: ls',
+    'Task: Explore · List files ›',
+  ]);
+  expect(wrapper.find('.composer').exists()).toBe(true);
+  await wrapper.find('.item button.task').trigger('click');
+  await flushPromises();
+  expect(wrapper.findAll('.item').map((i) => i.text())).toEqual(['List the files', 'Bash: ls']);
+  expect(wrapper.find('.composer').exists()).toBe(false);
+  expect(wrapper.find('.aside .hint').text()).toBe('Messages go to main');
+  expect(wrapper.findAll('.agents .row')[1]?.classes()).toContain('active');
+  box.store.stop();
+});
+
+test('a task ending is said where the composer was, Back and the strip switch chats', async () => {
+  const { box, wrapper } = await withSubagent();
+  const { store, relay, event } = box;
+  await wrapper.findAll('.agents .row')[1]?.trigger('click');
+  await flushPromises();
+  expect(wrapper.findAll('.item').length).toBe(2);
+  await relay.emit(event(7, 'task.ended', { taskId: 't1', status: 'completed', summary: 'a, b' }));
+  await relay.emit(event(8, 'msg.assistant', { text: 'done' }));
+  await until(() => store.state.logs['s1']?.lastSeq === 8);
+  await flushPromises();
+  expect(wrapper.find('.aside .hint').text()).toBe('Task completed. Messages go to main');
+  expect(stripRows(wrapper)[1]).toBe('○ Explore List files');
+  await wrapper.find('.aside button').trigger('click');
+  await flushPromises();
+  expect(wrapper.findAll('.item').map((i) => heading(i))).toEqual([
+    'Agent running',
+    'Agent: ls',
+    'Task: Explore · List files ›',
+    'Task completed',
+    'done',
+  ]);
+  expect(wrapper.find('.composer').exists()).toBe(true);
+  await wrapper.findAll('.agents .row')[1]?.trigger('click');
+  await flushPromises();
+  expect(wrapper.findAll('.item').length).toBe(2);
+  store.stop();
+});
+
+// Hundreds of rows per task is normal; the last 200 render and a button brings the rest.
+test('a long subagent chat shows its last 200 rows until asked for earlier ones', async () => {
+  const ts = '2026-01-01T00:00:00Z';
+  const events: FluxEvent[] = [
+    { seq: 1, ts, session: 's1', type: 'task.started', payload: started('t1', 'u1', 'Long') },
+  ];
+  for (let seq = 2; seq <= 252; seq += 1) {
+    const payload = { text: `row ${seq}` };
+    events.push({ seq, ts, session: 's1', type: 'msg.assistant', payload, parent: 'u1' });
+  }
+  const box = await pairedStore(events);
+  const { store } = box;
+  const wrapper = mount(SessionView, { props: { store, session: 's1' } });
+  await until(() => store.state.logs['s1']?.lastSeq === 252);
+  await flushPromises();
+  await wrapper.findAll('.agents .row')[1]?.trigger('click');
+  await flushPromises();
+  expect(wrapper.findAll('.item').length).toBe(200);
+  expect(wrapper.find('.item').text()).toBe('row 53');
+  expect(wrapper.find('.earlier').text()).toBe('Show 51 earlier');
+  // The operator is at the top to press it; the rows it brings in are old, not new activity.
+  const el = withGeometry(wrapper.find<HTMLElement>('.timeline').element);
+  await scrollTo(el, 0);
+  await wrapper.find('.earlier').trigger('click');
+  await flushPromises();
+  expect(wrapper.findAll('.item').length).toBe(251);
+  expect(wrapper.find('.earlier').exists()).toBe(false);
+  expect(wrapper.find('.new-activity').exists()).toBe(false);
+  expect(el.scrollTop).toBe(0);
   store.stop();
 });

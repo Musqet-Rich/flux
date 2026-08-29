@@ -96,10 +96,26 @@ const cases: [EventType, unknown, boolean][] = [
   ['task.started', { taskId: 't', toolUseId: 'u', description: 'd', background: false }, true],
   ['task.started', { taskId: 't', toolUseId: 'u', description: 'd' }, false],
   ['task.started', { taskId: 't', toolUseId: 'u', description: 1, background: true }, false],
+  [
+    'task.started',
+    { taskId: 't', toolUseId: 'u', description: 'd', background: false, agentType: 'Explore' },
+    true,
+  ],
+  [
+    'task.started',
+    { taskId: 't', toolUseId: 'u', description: 'd', background: false, agentType: 1 },
+    false,
+  ],
+  ['task.progress', { taskId: 't', description: 'Reading a.txt' }, true],
+  ['task.progress', { taskId: 't', description: 'Reading a.txt', tokens: 11717 }, true],
+  ['task.progress', { taskId: 't', description: 'Reading a.txt', tokens: 'many' }, false],
+  ['task.progress', { taskId: 't' }, false],
   ['task.ended', { taskId: 't', status: 'completed', summary: 's' }, true],
   ['task.ended', { taskId: 't', status: 'whatever_comes_next', summary: 's' }, true],
   ['task.ended', { taskId: 't', status: 1, summary: 's' }, false],
   ['task.ended', { taskId: 't', status: 'failed' }, false],
+  ['task.ended', { taskId: 't', status: 'completed', summary: 's', tokens: 12070 }, true],
+  ['task.ended', { taskId: 't', status: 'completed', summary: 's', tokens: 1.5 }, false],
   [
     'pr.published',
     {

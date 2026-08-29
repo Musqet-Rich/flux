@@ -137,6 +137,7 @@ interface Envelope<T extends string, P> {
   session: string; // flux session id (ulid)
   type: T;
   payload: P;
+  parent?: string; // the Agent call (`tool.start.toolId`) this event belongs to, when a subagent produced it; absent on every top-level event
 }
 
 type FluxEvent =
@@ -200,9 +201,16 @@ type FluxEvent =
   // agent signals (Claude Code system lines, architecture.md § Adapter)
   | Envelope<
       'task.started',
-      { taskId: string; toolUseId: string; description: string; background: boolean }
+      {
+        taskId: string;
+        toolUseId: string;
+        description: string;
+        background: boolean;
+        agentType?: string; // the Agent call's `subagent_type` ('Explore', 'general-purpose', …) when the box saw it
+      }
     >
-  | Envelope<'task.ended', { taskId: string; status: string; summary: string }> // status: 'completed' | 'failed' | whatever the agent adds next
+  | Envelope<'task.progress', { taskId: string; description: string; tokens?: number }> // what the task is doing now, for the device's agents strip; tokens its usage so far when reported
+  | Envelope<'task.ended', { taskId: string; status: string; summary: string; tokens?: number }> // status: 'completed' | 'failed' | whatever the agent adds next; summary is the subagent's final report; tokens its own usage when reported
   | Envelope<
       'pr.published',
       { provider: string; url: string; repo: string; identifier: string; action: string }
@@ -224,6 +232,7 @@ interface UnknownEvent {
   session: string;
   type: string; // none of the types above
   payload: unknown;
+  parent?: string;
 }
 
 interface TokenUsage {
@@ -252,7 +261,8 @@ Rules:
 - `files.changed` is emitted by the daemon after any `tool.end` whose adapter flags a filesystem write, computed from `git status --porcelain` in the worktree. It reflects the full current set, not a delta.
 - A `type` the receiver does not know is accepted with its payload untouched and kept in the log (§ 8).
 - `msg.user.refs` are the code references rendered into the text sent to the agent. The daemon renders each ref as a fenced block with path and line range plus the referenced lines, so the agent sees the actual code.
-- `task.started` / `task.ended` bracket a tool call the agent runs as a task (`toolUseId` is that call's `tool.start.toolId`); `background` says the agent did not wait for it. `status` and `pr.published.action` are open sets: the receiver shows the string it gets and styles only the values it knows.
+- `task.started` / `task.ended` bracket a tool call the agent runs as a task (`toolUseId` is that call's `tool.start.toolId`); `background` says the agent did not wait for it. `status` and `pr.published.action` are open sets: the receiver shows the string it gets and styles only the values it knows. `agentType` is absent when the agent did not name one; `tokens` when it reported no usage. `task.progress` rows between the two restate what the task is doing (its `description` replaces the strip's line while the task runs); a receiver may get none, one or many per task.
+- `parent` is set on every event a subagent produced (its prompt as `msg.user`, its `msg.assistant`, `tool.start`, `tool.end`, `files.changed`, `hook.failed`, `raw`, …) and names the Agent call that spawned it, which is the `toolUseId` of a `task.started` in the same log. It is absent, never `null`, on top-level events, so a log without subagents is what it was before the field and a device that predates it ignores it. Nested subagents chain: a grandchild's `parent` is the child's own Agent call, so the tree is walked through `task.started` rows; the `task.*` rows themselves carry the `parent` of the agent that spawned the task (none at the top level). Task boundaries are not synthesised: a task with no `task.ended` when the session leaves `running` (its `session.state` `idle` or `ended`, or `session.cleared`) was interrupted, and the device shows it so. `ask` and `notify` are always top-level: the Flux tools reach the box over the control socket, not the agent's stream.
 - `pr.published` is logged when the agent opens a pull request itself and when the operator opens one through `git.pr`, so a session's PR is always the latest `pr.published` in its log. `repo` and `identifier` are empty strings when the URL is not a GitHub pull request URL.
 - `hook.failed` is logged only for a hook whose outcome is not `success`; `stderr` is capped at 2 KiB by the adapter. `exitCode` is absent when the agent did not report one.
 

@@ -6,21 +6,26 @@ import { computed, ref } from 'vue';
 
 import { renderMarkdown } from '../markdown/render-markdown.ts';
 
-// One entry of the session timeline. Every event type renders as one of seven shapes so the
+// One entry of the session timeline. Every event type renders as one of nine shapes so the
 // template stays a switch on `kind`; the detail (tool input/output) opens on tap, a `link`
-// opens in a new tab, a `warning` keeps its text (hook stderr) behind a disclosure, and a
-// `divider` rules across the timeline where the agent's context was cleared.
+// opens in a new tab, a `warning` keeps its text (hook stderr) behind a disclosure, a
+// `divider` rules across the timeline where the agent's context was cleared, a `task` is a
+// note that opens that subagent's chat, and a `report` keeps the subagent's final report (what
+// the parent actually read) behind a disclosure, rendered as Markdown like any reply.
 
 interface View {
-  kind: 'user' | 'assistant' | 'tool' | 'note' | 'link' | 'warning' | 'divider';
+  kind: 'user' | 'assistant' | 'tool' | 'note' | 'link' | 'warning' | 'divider' | 'task' | 'report';
   text: string;
   // The value behind the tap, stringified lazily; `undefined` means there is nothing to open.
   detail: unknown;
   tone: 'ok' | 'warn' | 'error' | null;
   href?: string;
+  // The Agent call a `task` row opens.
+  task?: string;
 }
 
 const props = defineProps<{ event: FluxEvent }>();
+defineEmits<{ task: [toolUseId: string] }>();
 const expanded = ref(false);
 
 // A tool output or a raw agent line can run to hundreds of KB; the detail is only stringified
@@ -84,12 +89,17 @@ const describeNote = (event: KnownEvent): View => {
 const describeSignal = (event: KnownEvent): View | null => {
   switch (event.type) {
     case 'task.started': {
-      const { background, description } = event.payload;
-      return note(`${background ? 'Background task' : 'Task'}: ${description}`);
+      const { background, description, agentType, toolUseId } = event.payload;
+      const who = agentType === undefined ? '' : `${agentType} · `;
+      const text = `${background ? 'Background task' : 'Task'}: ${who}${description}`;
+      return { kind: 'task', text, detail: undefined, tone: null, task: toolUseId };
     }
     case 'task.ended': {
-      const { status, summary } = event.payload;
-      return note(`Task ${status}: ${summary}`, status === 'completed' ? null : 'warn');
+      const { status, summary, tokens } = event.payload;
+      const used = tokens === undefined ? '' : ` · ${(tokens / 1000).toFixed(1)}k tokens`;
+      const detail = summary === '' ? undefined : summary;
+      const tone = status === 'completed' ? null : 'warn';
+      return { kind: 'report', text: `Task ${status}${used}`, detail, tone };
     }
     case 'pr.published': {
       const { identifier, action, repo, url } = event.payload;
@@ -155,6 +165,7 @@ const view = computed(() => describe(props.event));
 // The agent writes Markdown; the operator's own text stays as typed. A functional component so
 // the VNode tree is built inside its own render, not in the template.
 const Markdown = (): VNode => renderMarkdown(view.value.text);
+const Report = (): VNode => renderMarkdown(String(view.value.detail));
 const hasDetail = computed(() => view.value.detail !== undefined);
 const detail = computed(() => (expanded.value && hasDetail.value ? json(view.value.detail) : null));
 const toggle = (): void => {
@@ -184,6 +195,18 @@ const toggle = (): void => {
       <summary class="note">{{ view.text }}</summary>
       <pre class="detail stderr">{{ view.detail }}</pre>
     </details>
+    <details v-else-if="view.kind === 'report' && hasDetail" class="disclosure">
+      <summary class="note">{{ view.text }}</summary>
+      <div class="detail report"><Report /></div>
+    </details>
+    <button
+      v-else-if="view.kind === 'task'"
+      type="button"
+      class="note task"
+      @click="$emit('task', view.task ?? '')"
+    >
+      {{ view.text }} ›
+    </button>
     <span v-else-if="view.kind === 'divider'" class="rule" role="separator">{{ view.text }}</span>
     <span v-else class="note">{{ view.text }}</span>
   </article>
@@ -299,5 +322,16 @@ const toggle = (): void => {
   font-size: 0.8rem;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.report {
+  text-align: left;
+  font-size: 0.9rem;
+}
+
+.task {
+  background: transparent;
+  padding: 0.15rem 0.4rem;
+  color: var(--accent);
 }
 </style>

@@ -68,10 +68,20 @@ test('lists every event type from protocol.md § 5', () => {
       'comment.removed',
       'comment.sent',
       'task.started',
+      'task.progress',
       'task.ended',
       'pr.published',
       'hook.failed',
       'raw',
     ].toSorted(),
   );
+});
+
+// A subagent's event names the Agent call it belongs to (protocol.md § 5); the field is
+// optional, so a log written before it and a box that never runs subagents both still pass.
+test('accepts a string parent or none, and rejects anything else', () => {
+  expect(fluxEvent.is({ ...valid, parent: 'toolu_01' })).toBe(true);
+  expect(fluxEvent.is({ ...future, parent: 'toolu_01' })).toBe(true);
+  expect(fluxEvent.is({ ...valid, parent: null })).toBe(false);
+  expect(fluxEvent.is({ ...valid, parent: 7 })).toBe(false);
 });
