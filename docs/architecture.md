@@ -146,6 +146,7 @@ Triggered by the daemon on `ask` and on `session.state idle` (after `running`) a
 - Relay: `apps/relay/dist/index.mjs`, a single Node process bound to `127.0.0.1:8787` behind Caddy (`deploy/Caddyfile`, automatic TLS, HSTS, WebSocket passthrough) with `FLUX_TRUST_PROXY=1`. `hono`, `@hono/node-server` and `ws` are external, so the checkout keeps its `node_modules`. `deploy/flux-relay.service` runs it fully sandboxed (read-only system, no home, no devices). Serves PWA from `apps/pwa/dist`.
 - PWA: built once by Vite, served by the relay. No separate hosting.
 - `apps/daemon/test/built-daemon.test.ts` builds the daemon into a temp dir under the real config and runs both files, so `pnpm run check` fails if the production build breaks.
+- `e2e/` runs this whole shape on one machine: the built relay serving the built PWA on an ephemeral port, the built daemon in a temp data dir with `FLUX_CLAUDE` pointing at the fixture-replaying fake, pairing through the URL `flux pair` prints, and Chromium under Playwright as the device (`docs/engineering.md` § Testing).
 
 ## Out of scope for this document
 

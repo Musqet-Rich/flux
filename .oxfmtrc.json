@@ -1,5 +1,5 @@
 {
   "$schema": "./node_modules/oxfmt/configuration_schema.json",
   "singleQuote": true,
-  "ignorePatterns": ["**/dist/**", "**/coverage/**", "pnpm-lock.yaml"]
+  "ignorePatterns": ["**/dist/**", "**/coverage/**", "**/test-results/**", "pnpm-lock.yaml"]
 }
