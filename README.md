@@ -10,12 +10,18 @@ Licence: MIT or Apache-2.0, at your option. See `LICENSE-MIT` and `LICENSE-APACH
 
 ## Quickstart
 
-You need Node 24, git, and a DNS name (say `flux.example.com`) pointing at the VPS. Both machines build from the same checkout:
+Both machines need Node 24 and git, and a DNS name (say `flux.example.com`) must point at the VPS. On Ubuntu 24.04, install Node from NodeSource so it lands at `/usr/bin/node`, which is what the systemd units run:
+
+```sh
+curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
+sudo apt-get install -y nodejs git
+```
+
+Both machines build from the same checkout:
 
 ```sh
 git clone https://github.com/Musqet-Rich/flux.git
 cd flux
-corepack enable
 corepack pnpm install --frozen-lockfile
 corepack pnpm run build
 ```
@@ -37,14 +43,14 @@ sudo systemctl reload caddy
 curl https://YOUR.DOMAIN/healthz
 ```
 
-The relay listens on `127.0.0.1:8787`; Caddy terminates TLS and proxies the WebSocket. It stores nothing.
+The relay listens on `127.0.0.1:8787`; Caddy terminates TLS and proxies the WebSocket. The unit sets `FLUX_TRUST_PROXY=1` so the relay's per-IP connection limit counts the address Caddy forwards rather than `127.0.0.1` for everyone. It stores nothing.
 
 ### Box (daemon)
 
 The daemon runs as a `flux` user whose home holds the repositories and the Claude Code login. Checkout at `/home/flux/flux`.
 
 ```sh
-sudo useradd --create-home flux
+sudo useradd --create-home --shell /bin/bash flux
 sudo -u flux -i                     # as flux: install claude, log in, put repos in ~/repos
 git clone https://github.com/Musqet-Rich/flux.git && cd flux
 corepack pnpm install --frozen-lockfile && corepack pnpm run build
@@ -52,12 +58,13 @@ exit
 sudo ln -s /home/flux/flux/apps/daemon/dist/index.mjs /usr/local/bin/flux
 sudo install -d -m 750 -o root -g flux /etc/flux
 sudo install -m 640 -o root -g flux deploy/.env.example /etc/flux/flux.env
-sudoedit /etc/flux/flux.env         # set FLUX_RELAY_URL=https://YOUR.DOMAIN
+sudoedit /etc/flux/flux.env         # uncomment and set FLUX_RELAY_URL=https://YOUR.DOMAIN
 sudo cp deploy/flux-daemon.service /etc/systemd/system/
 sudo systemctl daemon-reload && sudo systemctl enable --now flux-daemon
+sudo journalctl -u flux-daemon -n 5  # "flux daemon: relay https://YOUR.DOMAIN"
 ```
 
-`deploy/.env.example` documents every `FLUX_*` variable. The unit hardens what it can; it cannot lock the filesystem because agents write to it. Read the comments before running it on a shared machine.
+`deploy/.env.example` documents every `FLUX_*` variable. The unit hardens what it can; it cannot lock the filesystem or filter system calls because agents write to it and sandbox themselves. Read the comments before running it on a shared machine.
 
 ### Pair a phone
 
@@ -65,7 +72,7 @@ sudo systemctl daemon-reload && sudo systemctl enable --now flux-daemon
 sudo -u flux -i flux pair
 ```
 
-That prints a QR code and the link it encodes, valid for ten minutes. On the phone, open `https://YOUR.DOMAIN`, tap **Scan QR code** (or paste the link), and accept the notification prompt when asked. Add the page to the home screen for a full-screen app. Pairing is per device; list or revoke with `sudo -u flux -i flux devices ls` and `flux devices rm <id>`.
+That prints a QR code and the link it encodes, valid for ten minutes. On the phone, open `https://YOUR.DOMAIN`, tap **Scan QR code** (or paste the link), and accept the notification prompt when asked. Add the page to the home screen for a full-screen app. Pairing is per device; list or revoke with `sudo -u flux -i flux devices ls` and `flux devices rm <id>`. Under systemd the daemon never prints a pairing link to the journal; it only does so when started on a terminal.
 
 ### Notifications
 
@@ -76,7 +83,7 @@ Web Push is sent by the daemon itself, straight to the browser's push service, e
 ```sh
 corepack pnpm install
 corepack pnpm run check     # fmt, lint, typecheck, tests with coverage: the pre-commit gate
-corepack pnpm run build     # protocol, daemon, relay, pwa, in dependency order
+corepack pnpm run build     # daemon, relay, pwa, in dependency order
 corepack pnpm --filter @flux/pwa dev
 ```
 

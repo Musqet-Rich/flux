@@ -6,9 +6,6 @@
     "flux": "./dist/index.mjs",
     "flux-mcp": "./dist/flux-mcp.mjs"
   },
-  "files": [
-    "dist"
-  ],
   "type": "module",
   "scripts": {
     "build": "tsdown",

@@ -24,9 +24,13 @@ EnvironmentFile=/etc/flux/flux.env
 # `claude` and `git` are resolved on this PATH; ~/.local/bin is where the Claude Code installer
 # puts its binary. Set FLUX_CLAUDE in flux.env instead if it lives elsewhere.
 Environment=PATH=/home/flux/.local/bin:/usr/local/bin:/usr/bin:/bin
-ExecStart=/usr/bin/env node /home/flux/flux/apps/daemon/dist/index.mjs daemon
+# /usr/bin/node is where the NodeSource package puts it (README § Box).
+ExecStart=/usr/bin/node /home/flux/flux/apps/daemon/dist/index.mjs daemon
 Restart=always
 RestartSec=5
+# Exit 2 is a configuration error (missing FLUX_RELAY_URL, unknown command): restarting
+# cannot fix it, so stay down and let journalctl show why.
+RestartPreventExitStatus=2
 # SIGTERM goes to the daemon first, which stops its agents; anything left gets killed after
 # the timeout. Never SIGKILL the daemon while an agent process is still running under it.
 KillMode=mixed
@@ -53,9 +57,10 @@ RemoveIPC=true
 CapabilityBoundingSet=
 AmbientCapabilities=
 SystemCallArchitectures=native
-SystemCallFilter=@system-service
-# Not set, on purpose: RestrictNamespaces (Claude Code's own sandbox uses user namespaces) and
-# MemoryDenyWriteExecute (V8 JITs).
+# Not set, on purpose. SystemCallFilter=@system-service excludes @mount, which Claude Code's
+# bubblewrap sandbox needs (it dies with SIGSYS); RestrictNamespaces would block the user
+# namespaces that sandbox is built on; MemoryDenyWriteExecute would block V8's JIT. This box
+# runs arbitrary developer tools by design, so system-call level filtering is not the tool.
 
 [Install]
 WantedBy=multi-user.target
