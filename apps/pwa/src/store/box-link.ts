@@ -1,0 +1,181 @@
+import type { Ephemeral, FluxEvent, RpcMethods } from '@flux/protocol';
+import { guards, protocolVersion } from '@flux/protocol';
+
+import { ClientError } from '../client/client-error.ts';
+import type { Connection, ConnectionOptions } from '../client/create-connection.ts';
+import type { SessionLog } from '../client/create-session-log.ts';
+import { syncSession } from '../client/sync-session.ts';
+import { logCache } from './log-cache.ts';
+import type { StoreInternals } from './store-state.ts';
+
+// The store's side of the connection (architecture.md § Sync model): what to do when the channel
+// comes up, when an event or delta arrives, and when a call fails. Everything here mutates
+// `i.state` and nothing else touches the connection.
+
+type LinkOptions = Omit<ConnectionOptions, 'relayUrl' | 'keys' | 'boxPub'>;
+
+const reportError = (i: StoreInternals, error: unknown): void => {
+  i.state.error = error instanceof Error ? error.message : String(error);
+};
+
+const call = <M extends keyof RpcMethods>(
+  i: StoreInternals,
+  method: M,
+  params: RpcMethods[M]['params'],
+): Promise<RpcMethods[M]['result']> =>
+  i.connection === null
+    ? Promise.reject(new ClientError('offline', 'not paired'))
+    : i.connection.call(method, params);
+
+// Runs an action for a view: a failure lands in `state.error` for the status bar and the view
+// gets false, never a rejection to handle.
+const attempt = async (i: StoreInternals, action: () => Promise<unknown>): Promise<boolean> => {
+  try {
+    await action();
+    return true;
+  } catch (error) {
+    reportError(i, error);
+    return false;
+  }
+};
+
+// Pulls a log up to date; a no-op while offline because reconnecting syncs every open log.
+const syncLog = async (i: StoreInternals, log: SessionLog): Promise<void> => {
+  if (i.sync === null || i.connection?.status() !== 'connected') return;
+  await i.sync(log);
+  logCache.publish(i, log);
+};
+
+const refreshSessions = (i: StoreInternals): Promise<void> => {
+  if (i.refreshing !== null) return i.refreshing;
+  const run = async (): Promise<void> => {
+    try {
+      i.state.sessions = await call(i, 'sessions.list', {});
+    } catch (error) {
+      reportError(i, error);
+    } finally {
+      i.refreshing = null;
+    }
+  };
+  i.refreshing = run();
+  return i.refreshing;
+};
+
+// Stores this device's push subscription on the box. Without `prompt` the browser is only asked
+// for a subscription it can give silently (permission already granted); a tap on "Enable
+// notifications" calls this with `prompt` so the permission dialog has a gesture behind it.
+// `state.push` becomes `on` only once the box has the subscription, so a refusal is retried.
+const enablePush = async (i: StoreInternals, prompt: boolean): Promise<boolean> => {
+  const { subscribePush } = i.options;
+  const key = i.vapidPublicKey;
+  if (i.state.push === 'on' || key === null || subscribePush === undefined) return false;
+  const subscription = await subscribePush(key, prompt);
+  if (!guards.isRecord(subscription)) return false;
+  await call(i, 'push.subscribe', { subscription });
+  i.state.push = 'on';
+  return true;
+};
+
+const afterConnect = async (i: StoreInternals): Promise<void> => {
+  const hello = await call(i, 'hello', { protocol: protocolVersion });
+  i.state.daemon = hello.daemon;
+  i.state.sessions = hello.sessions;
+  i.state.error = null;
+  i.vapidPublicKey = hello.vapidPublicKey ?? null;
+  if (i.state.push === 'unavailable' && i.vapidPublicKey !== null) i.state.push = 'off';
+  await Promise.all([...i.logs.values()].map((log) => syncLog(i, log)));
+  await enablePush(i, false);
+};
+
+const patchSummary = (i: StoreInternals, event: FluxEvent): void => {
+  const summary = i.state.sessions.find((s) => s.session === event.session);
+  if (summary === undefined) {
+    void refreshSessions(i);
+    return;
+  }
+  summary.lastSeq = Math.max(summary.lastSeq, event.seq);
+  summary.updatedAt = event.ts;
+  if (event.type === 'session.state') summary.state = event.payload.state;
+  else if (event.type === 'session.renamed') summary.title = event.payload.title;
+};
+
+const onEvent = (i: StoreInternals, event: FluxEvent): void => {
+  // Before the connection is adopted (mid-pairing) nothing can be asked back; hello will bring
+  // the session list and every open log syncs after it.
+  if (i.connection === null) return;
+  if (event.type === 'rate_limit') i.state.rateWindows = event.payload.windows;
+  patchSummary(i, event);
+  const log = i.logs.get(event.session);
+  if (log === undefined) return;
+  const receipt = log.receive(event);
+  if (receipt === 'applied') logCache.publish(i, log);
+  else if (receipt === 'gap') {
+    void syncLog(i, log).catch((error: unknown) => {
+      reportError(i, error);
+    });
+  }
+};
+
+const onEphemeral = (i: StoreInternals, data: Ephemeral): void => {
+  const log = i.logs.get(data.session);
+  const view = i.state.logs[data.session];
+  if (log === undefined || view === undefined) return;
+  log.delta(data);
+  view.streaming = log.streaming();
+};
+
+const onStatus = (i: StoreInternals, status: StoreInternals['state']['status']): void => {
+  i.state.status = status;
+  // While pairing, the caller runs afterConnect once pair.request has been accepted; a hello
+  // before that would be refused as not_paired.
+  if (status === 'connected' && i.state.phase === 'paired') {
+    void afterConnect(i).catch((error: unknown) => {
+      reportError(i, error);
+    });
+  }
+};
+
+const options = (i: StoreInternals): LinkOptions => {
+  const { minBackoffMs, maxBackoffMs } = i.options;
+  return {
+    socket: i.options.socket,
+    onEvent: (event) => {
+      onEvent(i, event);
+    },
+    onEphemeral: (data) => {
+      onEphemeral(i, data);
+    },
+    onStatus: (status) => {
+      onStatus(i, status);
+    },
+    ...(minBackoffMs === undefined ? {} : { minBackoffMs }),
+    ...(maxBackoffMs === undefined ? {} : { maxBackoffMs }),
+  };
+};
+
+const adopt = (i: StoreInternals, connection: Connection): void => {
+  i.connection = connection;
+  i.sync = syncSession(connection.call);
+};
+
+export const boxLink: {
+  options: typeof options;
+  adopt: typeof adopt;
+  afterConnect: typeof afterConnect;
+  syncLog: typeof syncLog;
+  refreshSessions: typeof refreshSessions;
+  enablePush: typeof enablePush;
+  reportError: typeof reportError;
+  attempt: typeof attempt;
+  call: typeof call;
+} = {
+  options,
+  adopt,
+  afterConnect,
+  syncLog,
+  refreshSessions,
+  enablePush,
+  reportError,
+  attempt,
+  call,
+};

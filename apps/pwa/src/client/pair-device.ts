@@ -32,10 +32,16 @@ export const pairDevice = async (options: PairDeviceOptions): Promise<PairDevice
   connection.start();
   await connection.connected();
   const proof = await pairing.proof(payload.secret, keys.publicKey, payload.boxPub);
-  const { deviceId } = await connection.call('pair.request', {
-    devPub: base64url.encode(keys.publicKey),
-    proof: base64url.encode(proof),
-  });
-  const box = await pairedBox.create(relayUrl, payload.boxPub, keys, deviceId);
-  return { box, connection };
+  try {
+    const { deviceId } = await connection.call('pair.request', {
+      devPub: base64url.encode(keys.publicKey),
+      proof: base64url.encode(proof),
+    });
+    const box = await pairedBox.create(relayUrl, payload.boxPub, keys, deviceId);
+    return { box, connection };
+  } catch (error) {
+    // A refused device has nothing to reconnect for; the caller only gets the error.
+    connection.stop();
+    throw error;
+  }
 };

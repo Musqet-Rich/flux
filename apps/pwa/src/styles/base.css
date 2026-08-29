@@ -1,0 +1,94 @@
+/* The only global stylesheet (engineering.md § Vue): theme tokens and element defaults.
+   Components use the custom properties and scope everything else. */
+
+:root {
+  --bg: #0f1115;
+  --fg: #e8eaf0;
+  --muted: #8b93a1;
+  --panel: #171a21;
+  --panel-2: #1f2430;
+  --border: #2a2f3a;
+  --accent: #4f8cff;
+  --accent-fg: #ffffff;
+  --danger: #ff5f5f;
+  --ok: #3fbf7f;
+  --warn: #ffb347;
+  --radius: 10px;
+  color-scheme: dark;
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  -webkit-text-size-adjust: 100%;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border: 0;
+  border-radius: var(--radius);
+  padding: 0.5rem 0.9rem;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+button.secondary {
+  background: var(--panel-2);
+  color: var(--fg);
+  border: 1px solid var(--border);
+}
+
+input,
+textarea,
+select {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.7rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+textarea {
+  resize: vertical;
+  min-height: 3.2rem;
+}
+
+pre,
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85em;
+}
+
+pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+}
