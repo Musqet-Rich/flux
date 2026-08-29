@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import type { VNode } from 'vue';
 import { computed, onMounted, ref, watch } from 'vue';
 
 import { useTailScroll } from '../composables/useTailScroll.ts';
+import { renderMarkdown } from '../markdown/render-markdown.ts';
 import type { Store } from '../store/create-store.ts';
 import { openAsk } from '../store/open-ask.ts';
 import { pendingComments } from '../store/pending-comments.ts';
@@ -31,6 +33,9 @@ const events = computed(() => log.value?.events ?? []);
 // put half a dozen bare rows around every reply, and the status bar already shows the windows.
 const timeline = computed(() => events.value.filter((e) => !hiddenTypes.has(e.type)));
 const streaming = computed(() => log.value?.streaming ?? '');
+// The delta buffer renders through the same Markdown pass as the final message, so an open
+// fence is a code block from its first line and the bubble never flickers back to raw text.
+const Streaming = (): VNode => renderMarkdown(streaming.value);
 const ask = computed(() => openAsk(events.value));
 const pending = computed(() => pendingComments(events.value));
 const summary = computed(() => props.store.state.sessions.find((s) => s.session === props.session));
@@ -94,7 +99,7 @@ watch(streaming, (text) => {
       <div ref="scroller" class="timeline" @scroll="tail.measure">
         <EventItem v-for="e in timeline" :key="e.seq" :event="e" />
         <article v-if="streaming !== ''" class="streaming">
-          <pre>{{ streaming }}</pre>
+          <Streaming />
         </article>
         <AskCard v-if="ask !== null" :key="ask.askId" :ask="ask" @answer="answer" />
       </div>
@@ -182,10 +187,6 @@ watch(streaming, (text) => {
   padding: 0.6rem 0.8rem;
   max-width: 85%;
   opacity: 0.8;
-}
-
-.streaming pre {
-  font: inherit;
 }
 
 .composer {

@@ -92,3 +92,76 @@ pre {
   word-break: break-word;
   margin: 0;
 }
+
+/* Assistant messages (markdown/render-markdown.ts), used by the timeline and the streaming
+   bubble: paragraphs and blocks are spaced, headings are bold lines a step below the app's
+   own, code sits in a panel. Global because both components render the same tree. */
+
+.markdown > :first-child {
+  margin-top: 0;
+}
+
+.markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown p,
+.markdown ul,
+.markdown ol,
+.markdown pre,
+.markdown blockquote {
+  margin: 0.5em 0;
+}
+
+.markdown .heading {
+  font-size: 1.05em;
+}
+
+.markdown .h1 {
+  font-size: 1.15em;
+}
+
+.markdown ul,
+.markdown ol {
+  padding-left: 1.4em;
+}
+
+.markdown ul ul,
+.markdown ul ol,
+.markdown ol ul,
+.markdown ol ol {
+  margin: 0.2em 0;
+}
+
+.markdown code {
+  background: var(--panel);
+  border-radius: 4px;
+  padding: 0.05em 0.3em;
+}
+
+.markdown pre {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.6rem;
+  overflow-x: auto;
+}
+
+.markdown pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.markdown pre.open {
+  border-style: dashed;
+}
+
+.markdown blockquote {
+  border-left: 3px solid var(--border);
+  color: var(--muted);
+  padding-left: 0.6em;
+}
+
+.markdown a {
+  color: var(--accent);
+}
