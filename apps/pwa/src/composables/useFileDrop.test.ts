@@ -9,9 +9,9 @@ import { useFileDrop } from './useFileDrop.ts';
 
 const file = new File(['x'], 'a.txt', { type: 'text/plain' });
 
-const dragEvent = (type: string, files: File[] = []): Event => {
+const dragEvent = (type: string, files: File[] = [], types = ['Files']): Event => {
   const event = new Event(type, { bubbles: true, cancelable: true });
-  Object.defineProperty(event, 'dataTransfer', { value: { files, dropEffect: '' } });
+  Object.defineProperty(event, 'dataTransfer', { value: { files, types, dropEffect: '' } });
   return event;
 };
 
@@ -66,6 +66,24 @@ test('a drop on the bar hands over its files; elsewhere it is swallowed', async 
   wrapper.unmount();
   bar.dispatchEvent(dragEvent('drop', [file]));
   expect(dropped).toHaveLength(1);
+});
+
+// A selection dragged within the editor carries text, not files: the page leaves it alone,
+// so CodeMirror's own drag and drop keeps working.
+test('a drag without files is not touched', async () => {
+  const { wrapper, dropped } = page();
+  const bar = wrapper.find('.bar').element;
+  const over = dragEvent('dragover', [], ['text/plain']);
+  bar.dispatchEvent(over);
+  expect(over.defaultPrevented).toBe(false);
+  await wrapper.vm.$nextTick();
+  expect(wrapper.find('.bar').text()).toBe('idle');
+  expect(bar.classList.contains('drop-target')).toBe(false);
+  const drop = dragEvent('drop', [file], ['text/plain']);
+  bar.dispatchEvent(drop);
+  expect(drop.defaultPrevented).toBe(false);
+  expect(dropped).toEqual([]);
+  wrapper.unmount();
 });
 
 test('filesOf reads a paste or a drop and ignores anything else', () => {

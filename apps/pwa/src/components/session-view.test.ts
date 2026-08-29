@@ -409,3 +409,32 @@ test('reply from a bubble menu sends replyTo, shows the chip, and clears on send
   expect(wrapper.find('.composer .reply').exists()).toBe(false);
   store.stop();
 });
+
+// Reopened from the list, a session's rows are in the store before the view mounts, and its
+// thumbnails went when it was left: they are fetched again on mount, not only on new rows.
+test('thumbnails are fetched again when a session already loaded is shown again', async () => {
+  const image = { id: 'img-1', name: 'shot.png', mime: 'image/png', size: 1, image: true };
+  const row: FluxEvent = {
+    seq: 1,
+    ts: 't',
+    session: 's1',
+    type: 'msg.user',
+    payload: { text: 'see', attachments: [image] },
+  };
+  const { store, calls } = await pairedStore([row], {
+    'attach.read': () => ({ data: 'AA==', size: 1, mime: 'image/png', name: 'shot.png' }),
+  });
+  const first = mount(SessionView, { props: { store, session: 's1' } });
+  await until(() => store.state.thumbs['img-1'] !== undefined);
+  await flushPromises();
+  expect(first.find('.files img').exists()).toBe(true);
+  first.unmount();
+  expect(store.state.thumbs).toEqual({});
+  const again = mount(SessionView, { props: { store, session: 's1' } });
+  await until(() => store.state.thumbs['img-1'] !== undefined);
+  expect(calls('attach.read')).toHaveLength(2);
+  await flushPromises();
+  expect(again.find('.files img').exists()).toBe(true);
+  again.unmount();
+  store.stop();
+});

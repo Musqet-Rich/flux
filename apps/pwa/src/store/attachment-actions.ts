@@ -58,6 +58,8 @@ const run = async (i: StoreInternals, session: string, entry: PendingAttachment)
       },
       cancelled: () => !i.files.has(entry.key),
     });
+    // Removed while `attach.end` was in flight: the box has a file nobody will send.
+    if (!i.files.has(entry.key)) discard(i, entry.id);
     entry.status = 'ready';
   } catch (error) {
     if (entry.id !== null) discard(i, entry.id);

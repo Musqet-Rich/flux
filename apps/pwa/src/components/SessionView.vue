@@ -102,8 +102,16 @@ watch(
     const last = before.at(-1)?.seq ?? 0;
     const added = rows.filter((row) => row.seq > last).length;
     if (added > 0) void tail.follow(added);
+  },
+);
+// Immediate: a session the store already holds (reopened from the list, say) has its rows
+// before this mounts, and its thumbnails went when it was left.
+watch(
+  () => timeline.value,
+  (rows) => {
     props.store.loadThumbnails(props.session, rows);
   },
+  { immediate: true },
 );
 // Only growth counts: the text emptying is the reply landing, and that event is counted above.
 watch(streaming, (text) => {

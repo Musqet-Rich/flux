@@ -122,6 +122,34 @@ test('a ready attachment removed before sending is deleted on the box', async ()
   store.stop();
 });
 
+// The chip goes while the box is answering `attach.end`, past the last cancellation check:
+// the finished upload is deleted rather than left for the 24 hour sweep.
+test('an attachment removed while attach.end is in flight is deleted once the box has it', async () => {
+  const hooks = { onEnd: (): void => {} };
+  const { store, calls } = await pairedStore([], {
+    'attach.begin': () => ({ attachmentId: 'att-1' }),
+    'attach.chunk': () => ({}),
+    'attach.end': (p) => {
+      hooks.onEnd();
+      return { path: `/box/${p.attachmentId}`, size: 0 };
+    },
+    'attach.delete': () => ({}),
+    'agent.send': () => ({ seq: 9 }),
+  });
+  store.attach('s1', [txt]);
+  const draft = store.composer('s1');
+  const key = String(draft.attachments.map((a) => a.key)[0]);
+  hooks.onEnd = (): void => {
+    store.removeAttachment('s1', key);
+  };
+  await until(() => calls('attach.delete').length === 1);
+  expect(calls('attach.delete')).toEqual([{ attachmentId: 'att-1' }]);
+  expect(draft.attachments).toEqual([]);
+  expect(await store.send('s1', 'go')).toBe(true);
+  expect(calls('agent.send')).toEqual([{ session: 's1', text: 'go' }]);
+  store.stop();
+});
+
 test('thumbnails are fetched once per image and dropped on leave', async () => {
   const { store, calls } = await box();
   store.loadThumbnails('s1', sent);

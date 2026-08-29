@@ -32,7 +32,7 @@ const chips = (wrapper: VueWrapper): string[] =>
 
 const withFiles = (type: string, field: 'dataTransfer' | 'clipboardData', files: File[]): Event => {
   const event = new Event(type, { bubbles: true, cancelable: true });
-  Object.defineProperty(event, field, { value: { files, dropEffect: '' } });
+  Object.defineProperty(event, field, { value: { files, types: ['Files'], dropEffect: '' } });
   return event;
 };
 

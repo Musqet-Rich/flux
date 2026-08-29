@@ -7,7 +7,8 @@ import { onMounted, onScopeDispose, ref } from 'vue';
 // the tab away to the file. Listens on the document, since the browser fires `dragover` on
 // whatever is under the pointer and the default (navigate) must be cancelled everywhere.
 // `over` is true while a drag hovers the bar, for the highlight; the bar's elements also get
-// a `drop-target` class, since the status bar is another component's.
+// a `drop-target` class, since the status bar is another component's. Only a drag carrying
+// files is handled: a text selection dragged inside the editor stays the editor's.
 
 export interface FileDrop {
   over: Ref<boolean>;
@@ -34,6 +35,13 @@ const filesOf = (event: Event): File[] => {
   return Array.from(transfer['files']).filter((f) => f instanceof File);
 };
 
+// Whether a drag brings files: `dataTransfer.types` names `Files` for one, a text drag not.
+const carriesFiles = (event: Event): boolean => {
+  if (!('dataTransfer' in event) || !isRecord(event.dataTransfer)) return false;
+  const types = event.dataTransfer['types'];
+  return isArrayLike(types) && Array.from(types).includes('Files');
+};
+
 export const useFileDrop = (
   bar: () => (Element | null)[],
   onFiles: (files: File[]) => void,
@@ -49,6 +57,7 @@ export const useFileDrop = (
     for (const el of bar()) el?.classList.toggle('drop-target', on);
   };
   const onDragOver = (event: Event): void => {
+    if (!carriesFiles(event)) return;
     event.preventDefault();
     const inside = onBar(event);
     if ('dataTransfer' in event && isRecord(event.dataTransfer)) {
@@ -60,6 +69,7 @@ export const useFileDrop = (
     if (!onBar(event)) mark(false);
   };
   const onDrop = (event: Event): void => {
+    if (!carriesFiles(event)) return;
     event.preventDefault();
     const inside = onBar(event);
     mark(false);
