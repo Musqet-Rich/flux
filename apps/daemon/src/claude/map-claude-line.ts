@@ -86,7 +86,7 @@ const toolResult = (line: ClaudeLine & { kind: 'tool_result' }, pending: Pending
       payload: {
         toolId: block.tool_use_id,
         ok,
-        summary: toolSummary.end(name, ok, line.toolUseResult),
+        summary: toolSummary.end(name, ok, line.toolUseResult, block.content),
         output: capOutput(block.content),
       },
     });

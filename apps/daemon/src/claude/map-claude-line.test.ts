@@ -289,7 +289,7 @@ test('subagent events carry their parent, top-level events do not', () => {
   expect(chatOf(events, first).map((s) => s.slice(0, 20))).toEqual([
     'msg.user List the',
     'tool.start Bash: ls ',
-    'tool.end Bash ok, 0 ',
+    'tool.end Bash ok, 6 ',
   ]);
   expect(chatOf(events, second).map((s) => s.slice(0, 20))).toEqual([
     'msg.user Read the',

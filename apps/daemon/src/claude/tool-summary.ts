@@ -44,11 +44,23 @@ const startSummary = (name: string, input: unknown, cwd: string): string => {
   }
 };
 
-const endSummary = (name: string, ok: boolean, toolUseResult: unknown): string => {
+// A subagent's tool_result line carries no `tool_use_result` (fixture session-subagents), so
+// the block's own content stands in for stdout there.
+const stdoutOf = (result: Record<string, unknown>, content: unknown): string => {
+  if (isString(result['stdout'])) return result['stdout'];
+  return isString(content) ? content : '';
+};
+
+const endSummary = (
+  name: string,
+  ok: boolean,
+  toolUseResult: unknown,
+  content?: unknown,
+): string => {
   const result = isRecord(toolUseResult) ? toolUseResult : {};
   const status = ok ? 'ok' : 'failed';
   if (name === 'Bash') {
-    const stdout = isString(result['stdout']) ? result['stdout'] : '';
+    const stdout = stdoutOf(result, content);
     const lines = stdout === '' ? 0 : stdout.split('\n').length;
     return `Bash ${status}, ${lines} line${lines === 1 ? '' : 's'}`;
   }
