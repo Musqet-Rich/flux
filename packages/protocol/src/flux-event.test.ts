@@ -39,8 +39,11 @@ test.each(rejected)('rejects %j (%s)', (value) => {
   expect(fluxEvent.is(value)).toBe(false);
 });
 
-test('isKnown separates events this build can read from the rest', () => {
+// isKnown partitions on type alone; payload validation belongs to `is`, so a known type never
+// reads as unknown even when handed something `is` would have refused.
+test('isKnown separates known types from the rest without re-checking the payload', () => {
   expect(fluxEvent.isKnown(valid)).toBe(true);
+  expect(fluxEvent.isKnown({ ...valid, payload: { text: 1 } })).toBe(true);
   expect(fluxEvent.isKnown(future)).toBe(false);
 });
 

@@ -197,7 +197,15 @@ type FluxEvent =
   | Envelope<'raw', { agent: string; data: unknown }>
 
   // any type added after this build shipped (§ 8); payload is opaque
-  | Envelope<string, unknown>;
+  | UnknownEvent;
+
+interface UnknownEvent {
+  seq: number;
+  ts: string;
+  session: string;
+  type: string; // none of the types above
+  payload: unknown;
+}
 
 interface TokenUsage {
   input: number;
@@ -289,4 +297,4 @@ Error codes: `bad_params`, `not_found`, `not_paired`, `agent_unavailable`, `git_
 
 `protocol: 1` is exchanged in `hello` and in the relay's first message. Additive changes (new event types, new optional fields, new RPC methods) do not bump the version. Removing or changing the meaning of anything bumps the version.
 
-Unknown event types are version skew, not corruption. A receiver accepts any envelope whose `type` is a string it does not know, with whatever `payload` it carries, both as a live `event` message and inside an `events.sync` page; dropping it would leave a gap in `seq` and force a sync that can never complete. The event is kept in the log and rendered like `raw`: the type name and the payload as opaque JSON. A known type whose payload fails its guard is still rejected. In `@flux/protocol` this is the `UnknownEvent` member of `FluxEvent`; `fluxEvent.isKnown` narrows to the types a build can read.
+Unknown event types are version skew, not corruption. A receiver accepts any envelope whose `type` is a string it does not know, with whatever `payload` it carries, both as a live `event` message and inside an `events.sync` page; dropping it would leave a gap in `seq` and force a sync that can never complete. The event is kept in the log and rendered like `raw`: the type name and the payload as opaque JSON. A known type whose payload fails its guard is still rejected.

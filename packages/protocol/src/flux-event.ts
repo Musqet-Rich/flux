@@ -42,12 +42,14 @@ const hasEnvelope = (v: unknown): v is UnknownEvent =>
 
 const isKnownType = (type: string): type is EventType => eventTypes.includes(type);
 
-const isKnown = (event: FluxEvent): event is KnownEvent =>
-  isKnownType(event.type) && eventPayloads[event.type](event.payload);
+// A pure partition on `type`: it trusts that the event already passed `is`, so it never re-runs
+// a payload guard and a known type can never read as unknown.
+const isKnown = (event: FluxEvent): event is KnownEvent => isKnownType(event.type);
 
 // A known type with a payload that fails its guard is corruption and is rejected; an unknown
 // type is version skew and is accepted as is (protocol.md § 8).
-const is = (v: unknown): v is FluxEvent => hasEnvelope(v) && (!isKnownType(v.type) || isKnown(v));
+const is = (v: unknown): v is FluxEvent =>
+  hasEnvelope(v) && (!isKnown(v) || eventPayloads[v.type](v.payload));
 
 export const fluxEvent: { is: typeof is; isKnown: typeof isKnown; types: readonly string[] } = {
   is,

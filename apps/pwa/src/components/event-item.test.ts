@@ -61,9 +61,21 @@ test('raw and unknown types show their name with the payload behind a tap', asyn
   expect(raw.find('.summary').text()).toBe('raw event');
   await raw.find('.summary').trigger('click');
   expect(raw.find('.detail').text()).toContain('"k": 1');
+  expect(raw.find('.detail').text()).toContain('"agent": "claude"');
   const future = mount(EventItem, { props: { event: ev('msg.future', { any: 'thing' }) } });
   expect(future.find('.summary').text()).toBe('msg.future event');
   expect(future.find('.detail').exists()).toBe(false);
   await future.find('.summary').trigger('click');
   expect(future.find('.detail').text()).toContain('"any": "thing"');
+});
+
+// Tool output and raw agent lines can run to hundreds of KB; the detail is cut at 64 KiB.
+test('a long detail is truncated with a marker', async () => {
+  const wrapper = mount(EventItem, {
+    props: { event: ev('raw', { agent: 'claude', data: 'x'.repeat(100 * 1024) }) },
+  });
+  await wrapper.find('.summary').trigger('click');
+  const text = wrapper.find('.detail').text();
+  expect(text.length).toBeLessThan(65 * 1024);
+  expect(text.endsWith('… truncated at 64 KiB')).toBe(true);
 });

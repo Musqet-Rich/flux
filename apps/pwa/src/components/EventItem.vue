@@ -9,15 +9,22 @@ import { computed, ref } from 'vue';
 interface View {
   kind: 'user' | 'assistant' | 'tool' | 'note';
   text: string;
-  detail: string | null;
+  // The value behind the tap, stringified lazily; `undefined` means there is nothing to open.
+  detail: unknown;
   tone: 'ok' | 'warn' | 'error' | null;
 }
 
 const props = defineProps<{ event: FluxEvent }>();
 const expanded = ref(false);
 
-const json = (value: unknown): string | null =>
-  value === undefined ? null : JSON.stringify(value, null, 2);
+// A tool output or a raw agent line can run to hundreds of KB; the detail is only stringified
+// once opened and never past this many characters, so a long event cannot stall the timeline.
+const detailCap = 64 * 1024;
+
+const json = (value: unknown): string => {
+  const text = JSON.stringify(value, null, 2);
+  return text.length > detailCap ? `${text.slice(0, detailCap)}\n… truncated at 64 KiB` : text;
+};
 
 const money = (usd: number | undefined): string =>
   usd === undefined ? '' : ` · $${usd.toFixed(3)}`;
@@ -25,7 +32,7 @@ const money = (usd: number | undefined): string =>
 const note = (text: string, tone: View['tone'] = null): View => ({
   kind: 'note',
   text,
-  detail: null,
+  detail: undefined,
   tone,
 });
 
@@ -69,7 +76,7 @@ const describeNote = (event: KnownEvent): View => {
 const opaque = (type: string, payload: unknown): View => ({
   kind: 'tool',
   text: `${type} event`,
-  detail: json(payload),
+  detail: payload,
   tone: null,
 });
 
@@ -77,23 +84,23 @@ const describe = (event: FluxEvent): View => {
   if (!fluxEvent.isKnown(event)) return opaque(event.type, event.payload);
   switch (event.type) {
     case 'raw':
-      return opaque(event.type, event.payload.data);
+      return opaque(event.type, event.payload);
     case 'msg.user':
-      return { kind: 'user', text: event.payload.text, detail: null, tone: null };
+      return { kind: 'user', text: event.payload.text, detail: undefined, tone: null };
     case 'msg.assistant':
-      return { kind: 'assistant', text: event.payload.text, detail: null, tone: null };
+      return { kind: 'assistant', text: event.payload.text, detail: undefined, tone: null };
     case 'tool.start':
       return {
         kind: 'tool',
         text: event.payload.summary,
-        detail: json(event.payload.input),
+        detail: event.payload.input,
         tone: null,
       };
     case 'tool.end':
       return {
         kind: 'tool',
         text: event.payload.summary,
-        detail: json(event.payload.output),
+        detail: event.payload.output,
         tone: event.payload.ok ? 'ok' : 'error',
       };
     default:
@@ -102,6 +109,8 @@ const describe = (event: FluxEvent): View => {
 };
 
 const view = computed(() => describe(props.event));
+const hasDetail = computed(() => view.value.detail !== undefined);
+const detail = computed(() => (expanded.value && hasDetail.value ? json(view.value.detail) : null));
 const toggle = (): void => {
   expanded.value = !expanded.value;
 };
@@ -111,10 +120,10 @@ const toggle = (): void => {
   <article class="item" :class="[view.kind, view.tone]">
     <pre v-if="view.kind === 'user' || view.kind === 'assistant'" class="text">{{ view.text }}</pre>
     <template v-else-if="view.kind === 'tool'">
-      <button type="button" class="summary" :disabled="view.detail === null" @click="toggle">
+      <button type="button" class="summary" :disabled="!hasDetail" @click="toggle">
         {{ view.text }}
       </button>
-      <pre v-if="expanded && view.detail !== null" class="detail">{{ view.detail }}</pre>
+      <pre v-if="detail !== null" class="detail">{{ detail }}</pre>
     </template>
     <span v-else class="note">{{ view.text }}</span>
   </article>
