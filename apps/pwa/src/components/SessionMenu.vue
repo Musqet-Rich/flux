@@ -37,6 +37,7 @@ const run = async (action: () => Promise<boolean>, leave: boolean): Promise<void
 
 const startRename = (): void => {
   open.value = false;
+  confirming.value = false;
   renaming.value = true;
 };
 const cancelRename = (): void => {
@@ -56,6 +57,7 @@ const archive = (): void => {
 };
 const startDelete = (): void => {
   open.value = false;
+  renaming.value = false;
   dirty.value = null;
   confirming.value = true;
 };

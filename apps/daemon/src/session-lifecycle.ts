@@ -104,12 +104,18 @@ const clear = async (ctx: Ctx, session: string): Promise<Record<string, never>> 
   return {};
 };
 
-// The title is the tab's label and nothing else, so a rename touches only the row and the log.
-// Whitespace is trimmed; a title that is nothing but whitespace would leave a blank tab.
+// The title is the tab's label and nothing else, so a rename touches only the row and the log,
+// archived or not. Whitespace is trimmed; a title that is nothing but whitespace would leave a
+// blank tab, and one longer than a tab could ever show is refused rather than logged forever.
+const titleLimit = 200;
+
 const rename = (ctx: Ctx, session: string, title: string): Record<string, never> => {
   ctx.sessions.get(session);
   const trimmed = title.trim();
   if (trimmed === '') throw new DaemonError('bad_params', 'title is empty');
+  if (trimmed.length > titleLimit) {
+    throw new DaemonError('bad_params', `title is longer than ${titleLimit} characters`);
+  }
   ctx.sessions.setTitle(session, trimmed);
   ctx.log.append(session, { type: 'session.renamed', payload: { title: trimmed } });
   return {};

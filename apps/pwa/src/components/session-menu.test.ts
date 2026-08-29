@@ -108,6 +108,7 @@ test('rename shows the current title, refuses a blank one, and sends the trimmed
   expect(wrapper.find('[role="menu"]').exists()).toBe(false);
   const input = wrapper.find<HTMLInputElement>('form.rename input');
   expect(input.element.value).toBe('First');
+  expect(input.attributes('maxlength')).toBe('200');
   await input.setValue('   ');
   expect(wrapper.find('form.rename button[type="submit"]').attributes('disabled')).toBeDefined();
   await wrapper.find('form.rename').trigger('submit');
@@ -122,12 +123,18 @@ test('rename shows the current title, refuses a blank one, and sends the trimmed
   store.stop();
 });
 
-test('cancel closes the rename form without a call', async () => {
+test('cancel closes the rename form without a call; opening delete closes it too', async () => {
   const { wrapper, calls, store } = await setup();
   await wrapper.find('button[aria-haspopup="menu"]').trigger('click');
   await wrapper.findAll('[role="menuitem"]')[0]?.trigger('click');
   await wrapper.find('form.rename button.secondary').trigger('click');
   expect(wrapper.find('form.rename').exists()).toBe(false);
+  await wrapper.find('button[aria-haspopup="menu"]').trigger('click');
+  await wrapper.findAll('[role="menuitem"]')[0]?.trigger('click');
+  await wrapper.find('button[aria-haspopup="menu"]').trigger('click');
+  await wrapper.findAll('[role="menuitem"]')[3]?.trigger('click');
+  expect(wrapper.find('form.rename').exists()).toBe(false);
+  expect(wrapper.find('form.confirm').exists()).toBe(true);
   expect(calls('sessions.rename')).toEqual([]);
   store.stop();
 });

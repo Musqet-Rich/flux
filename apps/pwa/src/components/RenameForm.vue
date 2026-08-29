@@ -2,7 +2,10 @@
 import { onMounted, ref } from 'vue';
 
 // The inline form behind "Rename…": the current title, editable, submitted as the new one. The
-// box trims and refuses a blank title, so the submit is disabled on one rather than sent.
+// box trims and refuses a blank or over-long title (protocol.md § 7), so the submit is disabled
+// on a blank one and the input stops at the box's limit rather than sending what it would refuse.
+
+const titleLimit = 200;
 
 const props = defineProps<{ title: string; busy: boolean }>();
 const emit = defineEmits<{ confirm: [title: string]; cancel: [] }>();
@@ -27,7 +30,14 @@ const cancel = (): void => {
   <form class="rename" @submit.prevent="confirm">
     <label class="field">
       <span>Session name</span>
-      <input ref="input" v-model="draft" type="text" autocomplete="off" enterkeyhint="done" />
+      <input
+        ref="input"
+        v-model="draft"
+        type="text"
+        autocomplete="off"
+        enterkeyhint="done"
+        :maxlength="titleLimit"
+      />
     </label>
     <div class="actions">
       <button type="button" class="secondary" @click="cancel">Cancel</button>
