@@ -4,6 +4,7 @@ import { expect, test } from 'vitest';
 
 import type { FakeRelay } from '../../test/fake-relay.ts';
 import { createFakeRelay } from '../../test/fake-relay.ts';
+import type { ClientError } from './client-error.ts';
 import type { ConnectionStatus } from './create-connection.ts';
 import { createConnection } from './create-connection.ts';
 
@@ -24,14 +25,19 @@ const createSignals = () => {
   const events: FluxEvent[] = [];
   const ephemerals: Ephemeral[] = [];
   const statuses: ConnectionStatus[] = [];
+  const errors: ClientError[] = [];
   const waiting: { status: ConnectionStatus; resolve: () => void }[] = [];
   let onEphemeral: (() => void) | null = null;
   return {
     events,
     ephemerals,
     statuses,
+    errors,
     onEvent: (e: FluxEvent) => {
       events.push(e);
+    },
+    onError: (e: ClientError) => {
+      errors.push(e);
     },
     onEphemeral: (d: Ephemeral) => {
       ephemerals.push(d);
@@ -63,17 +69,18 @@ const createRelay = () =>
 
 // A connection to `relay` as the device holding `keys`; a second one with the same keys is
 // another tab of the same browser profile.
-const setup = async (relay?: FakeRelay, keys?: KeyPair) => {
+const setup = async (relay?: FakeRelay, keys?: KeyPair, relayUrl = 'https://relay.example') => {
   relay ??= await createRelay();
   const signals = createSignals();
   const connection = await createConnection({
-    relayUrl: 'https://relay.example',
+    relayUrl,
     keys: keys ?? (await handshake.generateKeyPair()),
     boxPub: relay.boxPub,
     socket: relay.socket,
     onEvent: signals.onEvent,
     onEphemeral: signals.onEphemeral,
     onStatus: signals.onStatus,
+    onError: signals.onError,
     minBackoffMs: 1,
     maxBackoffMs: 5,
     keepaliveMs: 2,
@@ -142,6 +149,41 @@ test('reconnects after the socket drops and fails the calls in flight', async ()
   expect(relay.guests()).toBe(1);
   connection.stop();
   expect(relay.guests()).toBe(0);
+});
+
+// A box on another protocol version answers the handshake with its version and no keys
+// (protocol.md § 8). The device says which side to update, keeps retrying in case the box is
+// updated meanwhile, and never reports a channel that cannot decrypt as connected.
+test('a box on another protocol version is reported, and retried once updated', async () => {
+  const { relay, signals, connection } = await setup();
+  relay.boxVersion(1);
+  connection.start();
+  await expect.poll(() => signals.errors.length).toBeGreaterThanOrEqual(1);
+  expect(signals.errors[0]).toMatchObject({
+    code: 'bad_version',
+    message: 'Box is on protocol 1; update it',
+  });
+  expect(signals.statuses).not.toContain('connected');
+  relay.boxVersion(3);
+  await expect
+    .poll(() => signals.errors.at(-1)?.message)
+    .toBe('Box is on protocol 3; update this app');
+  relay.boxVersion(2);
+  await connection.connected();
+  connection.stop();
+});
+
+// A plaintext relay is only ever the developer's own machine (protocol.md § 2).
+test('refuses a plaintext relay off loopback before opening a socket', async () => {
+  const relay = await createRelay();
+  await expect(setup(relay, undefined, 'http://relay.example')).rejects.toMatchObject({
+    code: 'insecure_transport',
+  });
+  expect(relay.guests()).toBe(0);
+  const { connection } = await setup(relay, undefined, 'http://localhost:5173');
+  connection.start();
+  await connection.connected();
+  connection.stop();
 });
 
 test('a refused join backs off and retries', async () => {

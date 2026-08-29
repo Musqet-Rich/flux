@@ -3,12 +3,12 @@ import { expect, test } from 'vitest';
 import { relayMessage } from './relay-message.ts';
 
 test.each([
-  [{ v: 1, role: 'host', token: 't' }, true],
-  [{ v: 1, role: 'guest' }, true],
-  [{ v: 1, role: 'host' }, false],
-  [{ v: 1, role: 'host', token: 1 }, false],
-  [{ v: 2, role: 'guest' }, false],
-  [{ v: 1, role: 'admin' }, false],
+  [{ v: 2, role: 'host', token: 't' }, true],
+  [{ v: 2, role: 'guest' }, true],
+  [{ v: 2, role: 'host' }, false],
+  [{ v: 2, role: 'host', token: 1 }, false],
+  [{ v: 1, role: 'guest' }, false],
+  [{ v: 2, role: 'admin' }, false],
   [{ role: 'guest' }, false],
   ['guest', false],
 ])('isJoin(%j) is %s', (value, expected) => {

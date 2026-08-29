@@ -24,7 +24,8 @@ const pair = async (compressAbove?: number) => {
   const devStatic = await handshake.generateKeyPair();
   const boxEph = await handshake.generateKeyPair();
   const devEph = await handshake.generateKeyPair();
-  const common = { nonceD: handshake.nonce(), nonceB: handshake.nonce(), roomId: 'r' };
+  const transcript = { helloD: bytes.fromUtf8('{"d":1}'), helloB: bytes.fromUtf8('{"b":1}') };
+  const common = { nonceD: handshake.nonce(), nonceB: handshake.nonce(), transcript };
   const deviceKeys = await handshake.derive({
     ...common,
     role: 'device',

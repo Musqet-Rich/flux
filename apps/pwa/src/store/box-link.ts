@@ -224,6 +224,9 @@ const options = (i: StoreInternals): LinkOptions => {
     onStatus: (status) => {
       onStatus(i, status);
     },
+    onError: (error) => {
+      reportError(i, error, 'connection');
+    },
     ...(minBackoffMs === undefined ? {} : { minBackoffMs }),
     ...(maxBackoffMs === undefined ? {} : { maxBackoffMs }),
   };

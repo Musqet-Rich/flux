@@ -3,28 +3,40 @@ import type { Bytes } from './bytes.ts';
 import { bytes } from './bytes.ts';
 import { guards } from './guards.ts';
 import { ProtocolError } from './protocol-error.ts';
+import { protocolVersion } from './protocol-version.ts';
+import { room } from './room.ts';
 
 // Key agreement (protocol.md § 3, Handshake): static-static plus ephemeral-ephemeral X25519,
-// HKDF-SHA256 over both, one AES-256-GCM key per direction. WebCrypto only.
+// HKDF-SHA256 over both with the handshake transcript in `info`, one AES-256-GCM key per
+// direction. WebCrypto only.
 
 export interface KeyPair {
   publicKey: Bytes;
   privateKey: CryptoKey;
 }
 
+// `v` is any positive integer so a peer on another version still parses: the box answers
+// with its own version and the device can say which side to update (protocol.md § 8).
 export interface DeviceHello {
-  v: 1;
+  v: number;
   devPub: string;
   devEph: string;
   nonceD: string;
 }
 
 export interface BoxHello {
-  v: 1;
+  v: number;
   boxEph: string;
   nonceB: string;
   // The fingerprint of the device this hello answers; other guests in the room ignore it.
   to: string;
+}
+
+// The two handshake payloads exactly as they went over the wire (the bytes after the frame
+// kind), never re-serialised: both sides hash the same input only if neither rebuilds it.
+export interface HandshakeTranscript {
+  helloD: Bytes;
+  helloB: Bytes;
 }
 
 export interface DeriveInput {
@@ -35,7 +47,7 @@ export interface DeriveInput {
   ephemeralPeerPublic: Bytes;
   nonceD: Bytes;
   nonceB: Bytes;
-  roomId: string;
+  transcript: HandshakeTranscript;
 }
 
 export interface DirectionKeys {
@@ -95,6 +107,15 @@ const agree = async (privateKey: CryptoKey, peerPublic: Bytes): Promise<Bytes> =
 const aesKey = (raw: Bytes, usage: 'encrypt' | 'decrypt'): Promise<CryptoKey> =>
   crypto.subtle.importKey('raw', raw, { name: 'AES-GCM' }, false, [usage]);
 
+// HKDF `info` = "flux-v<version>" || sha256(helloD || helloB): 39 bytes. Every hello field,
+// `v` and `to` included, is thereby authenticated; a tampered hello yields different keys on
+// the two sides, and the first data frame fails to open (protocol.md § 3).
+const info = async (transcript: HandshakeTranscript): Promise<Bytes> =>
+  bytes.concat(
+    bytes.fromUtf8(`flux-v${protocolVersion}`),
+    await room.sha256(bytes.concat(transcript.helloD, transcript.helloB)),
+  );
+
 const derive = async (input: DeriveInput): Promise<DirectionKeys> => {
   const es = await agree(input.ephemeralPrivate, input.ephemeralPeerPublic);
   const ss = await agree(input.staticPrivate, input.staticPeerPublic);
@@ -107,7 +128,7 @@ const derive = async (input: DeriveInput): Promise<DirectionKeys> => {
         name: 'HKDF',
         hash: 'SHA-256',
         salt: bytes.concat(input.nonceD, input.nonceB),
-        info: bytes.fromUtf8(`flux-v1-${input.roomId}`),
+        info: await info(input.transcript),
       },
       ikm,
       keyLength * 2 * 8,
@@ -131,14 +152,14 @@ const isEncoded = (value: unknown, length: number): value is string => {
 
 const isDeviceHello = (value: unknown): value is DeviceHello =>
   guards.isRecord(value) &&
-  value['v'] === 1 &&
+  guards.isInteger(value['v'], 1) &&
   isEncoded(value['devPub'], keyLength) &&
   isEncoded(value['devEph'], keyLength) &&
   isEncoded(value['nonceD'], helloNonceLength);
 
 const isBoxHello = (value: unknown): value is BoxHello =>
   guards.isRecord(value) &&
-  value['v'] === 1 &&
+  guards.isInteger(value['v'], 1) &&
   isEncoded(value['boxEph'], keyLength) &&
   isEncoded(value['nonceB'], helloNonceLength) &&
   isEncoded(value['to'], fingerprintLength);
@@ -150,6 +171,7 @@ export const handshake: {
   exportPrivateKey: typeof exportPrivateKey;
   importPrivateKey: typeof importPrivateKey;
   derive: typeof derive;
+  info: typeof info;
   isDeviceHello: typeof isDeviceHello;
   isBoxHello: typeof isBoxHello;
   nonce: typeof nonce;
@@ -158,6 +180,7 @@ export const handshake: {
   exportPrivateKey,
   importPrivateKey,
   derive,
+  info,
   isDeviceHello,
   isBoxHello,
   nonce,

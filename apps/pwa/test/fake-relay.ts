@@ -13,6 +13,7 @@ import {
   createChannel,
   frame,
   handshake,
+  protocolVersion,
   relayMessage,
   room,
   wire,
@@ -42,6 +43,8 @@ export interface FakeRelay {
   refuseJoins: (error: 'room_full' | null) => void;
   // Makes the box answer one method with this error code from now on.
   refuseCall: (method: string, code: string) => void;
+  // Makes the box claim this protocol version in its hello: it then derives no channel.
+  boxVersion: (v: number) => void;
   guests: () => number;
 }
 
@@ -61,6 +64,7 @@ interface State {
   hostPresent: boolean;
   refusal: 'room_full' | null;
   refusedCalls: Map<string, string>;
+  version: number;
 }
 
 const later = (fn: () => void): void => {
@@ -116,28 +120,28 @@ const boxHandshake = async (state: State, guest: Guest, payload: Bytes): Promise
   const eph = await handshake.generateKeyPair();
   const nonceB = handshake.nonce();
   const devPub = base64url.decode(hello.devPub);
-  const keys = await handshake.derive({
-    role: 'box',
-    staticPrivate: state.boxKeys.privateKey,
-    staticPeerPublic: devPub,
-    ephemeralPrivate: eph.privateKey,
-    ephemeralPeerPublic: base64url.decode(hello.devEph),
-    nonceD: base64url.decode(hello.nonceD),
-    nonceB,
-    roomId: state.roomId,
-  });
   const fingerprint = await room.fingerprint(devPub);
-  guest.channel = createChannel({ keys, fingerprint });
   const boxHello = {
-    v: 1,
+    v: state.version,
     boxEph: base64url.encode(eph.publicKey),
     nonceB: base64url.encode(nonceB),
     to: base64url.encode(fingerprint),
   };
-  const out = frame.encode({
-    kind: frame.kind.handshake,
-    payload: bytes.fromUtf8(JSON.stringify(boxHello)),
-  });
+  const helloB = bytes.fromUtf8(JSON.stringify(boxHello));
+  if (state.version === protocolVersion) {
+    const keys = await handshake.derive({
+      role: 'box',
+      staticPrivate: state.boxKeys.privateKey,
+      staticPeerPublic: devPub,
+      ephemeralPrivate: eph.privateKey,
+      ephemeralPeerPublic: base64url.decode(hello.devEph),
+      nonceD: base64url.decode(hello.nonceD),
+      nonceB,
+      transcript: { helloD: payload, helloB },
+    });
+    guest.channel = createChannel({ keys, fingerprint });
+  }
+  const out = frame.encode({ kind: frame.kind.handshake, payload: helloB });
   // The box broadcasts; every guest sees every box hello and ignores the ones not for it.
   for (const other of state.guests) deliver(other, out);
 };
@@ -210,6 +214,7 @@ export const createFakeRelay = async (handlers: Handlers): Promise<FakeRelay> =>
     hostPresent: true,
     refusal: null,
     refusedCalls: new Map(),
+    version: protocolVersion,
   };
   const broadcast = async (message: Wire): Promise<void> => {
     await Promise.all([...state.guests].map((guest) => reply(state, guest, message)));
@@ -240,6 +245,9 @@ export const createFakeRelay = async (handlers: Handlers): Promise<FakeRelay> =>
     },
     refuseCall: (method, code) => {
       state.refusedCalls.set(method, code);
+    },
+    boxVersion: (v) => {
+      state.version = v;
     },
     guests: () => state.guests.size,
   };

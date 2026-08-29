@@ -93,7 +93,7 @@ corepack pnpm run build     # daemon, relay, pwa, in dependency order
 corepack pnpm --filter @flux/pwa dev
 ```
 
-Run the daemon from source with `FLUX_RELAY_URL=http://127.0.0.1:8787 node apps/daemon/src/index.ts` (Node strips the types) against `node apps/relay/src/index.ts`. `apps/daemon/test/built-daemon.test.ts` builds the daemon into a temp dir and runs the result, so a broken production build fails `pnpm run check`.
+Run the daemon from source with `FLUX_RELAY_URL=http://127.0.0.1:8787 node apps/daemon/src/index.ts` (Node strips the types) against `node apps/relay/src/index.ts`. A plain `http://` relay is only accepted on loopback (`localhost`, `127.0.0.1`, `::1`); anywhere else the daemon refuses to start (`insecure_transport`) and the app refuses the pairing link, so a deployed relay is always `https://`. `apps/daemon/test/built-daemon.test.ts` builds the daemon into a temp dir and runs the result, so a broken production build fails `pnpm run check`.
 
 To work on the PWA with hot reload, run the three parts in three terminals:
 

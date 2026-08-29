@@ -25,7 +25,14 @@ export { fluxEvent } from './flux-event.ts';
 export type { DataFrame, DataFrameKind, Frame, FrameKind, HandshakeFrame } from './frame.ts';
 export { frame } from './frame.ts';
 export { guards } from './guards.ts';
-export type { BoxHello, DeriveInput, DeviceHello, DirectionKeys, KeyPair } from './handshake.ts';
+export type {
+  BoxHello,
+  DeriveInput,
+  DeviceHello,
+  DirectionKeys,
+  HandshakeTranscript,
+  KeyPair,
+} from './handshake.ts';
 export { handshake } from './handshake.ts';
 export { isCodeRef } from './is-code-ref.ts';
 export type { PairingPayload } from './pairing.ts';
@@ -33,6 +40,7 @@ export { pairing } from './pairing.ts';
 export type { ProtocolErrorCode } from './protocol-error.ts';
 export { ProtocolError } from './protocol-error.ts';
 export { protocolVersion } from './protocol-version.ts';
+export { relayEndpoint } from './relay-endpoint.ts';
 export type { RelayControl, RelayJoin, RelayJoinError, RelayJoinReply } from './relay-message.ts';
 export { relayMessage } from './relay-message.ts';
 export { room } from './room.ts';

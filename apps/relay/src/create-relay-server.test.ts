@@ -75,8 +75,8 @@ const joined = async (client: Client, request: object): Promise<string | Uint8Ar
   return client.next();
 };
 
-const host = { v: 1, role: 'host', token: 'tok' };
-const guest = { v: 1, role: 'guest' };
+const host = { v: 2, role: 'host', token: 'tok' };
+const guest = { v: 2, role: 'guest' };
 
 test('serves the PWA with security headers and a SPA fallback', async () => {
   const index = await fetch(`http://127.0.0.1:${port}/`);
@@ -129,7 +129,7 @@ test('join errors are reported then the socket is closed', async () => {
   await joined(g2, guest);
   expect(await joined(g3, guest)).toBe('{"ok":false,"error":"room_full"}');
   const old = await connect();
-  expect(await joined(old, { v: 2, role: 'guest' })).toBe('{"ok":false,"error":"bad_version"}');
+  expect(await joined(old, { v: 1, role: 'guest' })).toBe('{"ok":false,"error":"bad_version"}');
 });
 
 test('a malformed or binary first message ends the connection', async () => {

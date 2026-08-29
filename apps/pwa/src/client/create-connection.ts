@@ -1,5 +1,13 @@
 import type { Bytes, Channel, Ephemeral, FluxEvent, KeyPair } from '@flux/protocol';
-import { ProtocolError, bytes, protocolVersion, relayMessage, room, wire } from '@flux/protocol';
+import {
+  ProtocolError,
+  bytes,
+  protocolVersion,
+  relayEndpoint,
+  relayMessage,
+  room,
+  wire,
+} from '@flux/protocol';
 
 import { ClientError } from './client-error.ts';
 import type { RpcCall } from './create-rpc-client.ts';
@@ -31,6 +39,9 @@ export interface ConnectionOptions {
   onEvent: (event: FluxEvent) => void;
   onEphemeral: (data: Ephemeral) => void;
   onStatus?: (status: ConnectionStatus) => void;
+  // A handshake that cannot succeed until someone acts (the box on another protocol version):
+  // the connection keeps retrying at the full backoff, and this says why to the operator.
+  onError?: (error: ClientError) => void;
   minBackoffMs?: number;
   maxBackoffMs?: number;
   keepaliveMs?: number;
@@ -38,7 +49,7 @@ export interface ConnectionOptions {
 
 interface State {
   options: ConnectionOptions;
-  roomId: string;
+  url: string;
   status: ConnectionStatus;
   socket: Socket | null;
   joined: boolean;
@@ -52,15 +63,6 @@ interface State {
 }
 
 const defaultKeepaliveMs = 60_000;
-
-const wsUrl = (relayUrl: string, roomId: string): string => {
-  const url = new URL(relayUrl);
-  url.protocol =
-    url.protocol === 'http:' ? 'ws:' : url.protocol === 'https:' ? 'wss:' : url.protocol;
-  url.pathname = `/ws/${roomId}`;
-  url.hash = '';
-  return url.toString();
-};
 
 const setStatus = (state: State, status: ConnectionStatus): void => {
   if (state.status === status) return;
@@ -92,8 +94,8 @@ const dropChannel = (state: State, reason: string): void => {
 };
 
 const sendHello = async (state: State): Promise<void> => {
-  const { options, roomId } = state;
-  const hs = await deviceHandshake({ keys: options.keys, boxPub: options.boxPub, roomId });
+  const { options } = state;
+  const hs = await deviceHandshake({ keys: options.keys, boxPub: options.boxPub });
   state.handshake = hs;
   state.socket?.send(hs.frame);
 };
@@ -166,10 +168,20 @@ const scheduleReconnect = (state: State): void => {
   state.backoffMs = Math.min(state.options.maxBackoffMs ?? 30_000, state.backoffMs * 2);
 };
 
+// A handshake the box answered but that cannot complete (its protocol version is not ours)
+// is not transient: report it, back off fully and reconnect, in case the box gets updated.
+const failHandshake = (state: State, socket: Socket, error: unknown): void => {
+  if (error instanceof ClientError && error.code === 'bad_version') {
+    state.options.onError?.(error);
+    state.backoffMs = state.options.maxBackoffMs ?? 30_000;
+  }
+  socket.close();
+};
+
 const open = (state: State): void => {
   setStatus(state, 'connecting');
   state.joined = false;
-  const socket = state.options.socket(wsUrl(state.options.relayUrl, state.roomId));
+  const socket = state.options.socket(state.url);
   state.socket = socket;
   socket.on({
     open: () => {
@@ -178,8 +190,8 @@ const open = (state: State): void => {
     message: (data) => {
       if (typeof data === 'string') onText(state, data);
       else
-        void onBinary(state, data).catch(() => {
-          socket.close();
+        void onBinary(state, data).catch((error: unknown) => {
+          failHandshake(state, socket, error);
         });
     },
     close: () => {
@@ -231,10 +243,22 @@ const connected = (state: State): Promise<void> => {
   });
 };
 
+// The room's WebSocket URL, or `insecure_transport` for a plaintext relay off loopback
+// (protocol.md § 2): a pairing link with such an origin is refused before any socket opens.
+const endpoint = (relayUrl: string, roomId: string): string => {
+  try {
+    return relayEndpoint.websocket(relayUrl, roomId);
+  } catch (error) {
+    if (error instanceof ProtocolError) throw new ClientError(error.code, error.message);
+    throw error;
+  }
+};
+
 export const createConnection = async (options: ConnectionOptions): Promise<Connection> => {
+  const roomId = await room.id(options.boxPub);
   const state: State = {
     options,
-    roomId: await room.id(options.boxPub),
+    url: endpoint(options.relayUrl, roomId),
     status: 'stopped',
     socket: null,
     joined: false,

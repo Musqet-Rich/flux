@@ -6,7 +6,8 @@ export type ProtocolErrorCode =
   | 'bad_nonce'
   | 'bad_key'
   | 'bad_message'
-  | 'decrypt_failed';
+  | 'decrypt_failed'
+  | 'insecure_transport';
 
 export class ProtocolError extends Error {
   readonly code: ProtocolErrorCode;

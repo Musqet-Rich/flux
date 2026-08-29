@@ -64,8 +64,8 @@ test('pair, create a session, talk to the agent, sync the log', async () => {
   const deviceId = await pair(d);
   expect(deviceId).toEqual(expect.any(String));
   expect(daemon.devices()).toHaveLength(1);
-  expect(await call(d, 'hello', { protocol: 1 })).toEqual({
-    protocol: 1,
+  expect(await call(d, 'hello', { protocol: 2 })).toEqual({
+    protocol: 2,
     daemon: 'flux@test',
     sessions: [],
     vapidPublicKey: expect.stringMatching(/^B[\w-]{86}$/u),
