@@ -78,7 +78,8 @@ export interface EventPayloads {
   'comment.sent': { commentIds: string[]; msgSeq: number };
   // Agent signals (Claude Code system lines); `status` and `action` are open sets, the known
   // values are in protocol.md § 5. `agentType` is the Agent call's `subagent_type` when the box
-  // saw the call; `tokens` is the subagent's own usage when the agent reports it.
+  // saw the call; `tokens` is the subagent's own usage when the agent reports it. A
+  // `task.progress` restates what the task is doing right now, for the agents strip.
   'task.started': {
     taskId: string;
     toolUseId: string;
@@ -86,6 +87,7 @@ export interface EventPayloads {
     background: boolean;
     agentType?: string;
   };
+  'task.progress': { taskId: string; description: string; tokens?: number };
   'task.ended': { taskId: string; status: string; summary: string; tokens?: number };
   'pr.published': {
     provider: string;
@@ -191,6 +193,11 @@ export const eventPayloads: PayloadGuards = {
     isString(v['description']) &&
     isBoolean(v['background']) &&
     isOptional(v['agentType'], isString),
+  'task.progress': (v): v is EventPayloads['task.progress'] =>
+    isRecord(v) &&
+    isString(v['taskId']) &&
+    isString(v['description']) &&
+    isOptional(v['tokens'], isInteger),
   'task.ended': (v): v is EventPayloads['task.ended'] =>
     isRecord(v) &&
     isString(v['taskId']) &&

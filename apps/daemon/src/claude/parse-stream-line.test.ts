@@ -301,12 +301,38 @@ test('subagent lines carry their parent, task lines carry the agent type and usa
     tokens: 12070,
     summary: expect.stringMatching(/^File: `/u),
   });
-  // task_progress and task_updated are new to this capture and stay other, like the hooks
-  // and the streaming envelopes around the parent's own replies.
   const other = subagents.filter((l) => l?.kind === 'other');
-  expect(other).toHaveLength(31);
-  expect(other.filter((l) => JSON.stringify(l).includes('"task_progress"'))).toHaveLength(2);
+  expect(other).toHaveLength(29);
   expect(other.filter((l) => JSON.stringify(l).includes('"task_updated"'))).toHaveLength(2);
+});
+
+// task_progress restates what the task is doing, with its usage so far; task_updated is new to
+// this capture and stays other, like the hooks and the streaming envelopes around the parent's
+// own replies.
+test('task_progress lines carry the description and usage so far', () => {
+  expect(subagents.filter((l) => l?.kind === 'task_progress')).toEqual([
+    {
+      kind: 'task_progress',
+      taskId: 'a524a12742a29a90a',
+      description: 'Running List top-level directory contents',
+      tokens: 11720,
+    },
+    {
+      kind: 'task_progress',
+      taskId: 'a11e094b2df159456',
+      description: 'Reading a.txt',
+      tokens: 11717,
+    },
+  ]);
+});
+
+test('a task_progress line without usage has no tokens', () => {
+  const line = { type: 'system', subtype: 'task_progress', task_id: 't', description: 'd' };
+  expect(parseStreamLine(JSON.stringify(line))).toEqual({
+    kind: 'task_progress',
+    taskId: 't',
+    description: 'd',
+  });
 });
 
 test('a top-level user line with text is other, not a subagent prompt', () => {

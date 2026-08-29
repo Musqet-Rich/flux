@@ -277,6 +277,8 @@ test('subagent events carry their parent, top-level events do not', () => {
     'tool.start Agent: Read a.txt contents',
     'rate_limit',
     'task.started',
+    'task.progress',
+    'task.progress',
     'task.ended',
     'tool.end Agent ok',
     'task.ended',
@@ -308,6 +310,18 @@ test('subagent events carry their parent, top-level events do not', () => {
     status: 'completed',
     tokens: 12070,
   });
+});
+
+test('task.progress carries what the task is doing and its usage so far', () => {
+  const { events } = replay(subagents);
+  expect(events.filter((e) => e.type === 'task.progress').map((e) => e.payload)).toEqual([
+    {
+      taskId: 'a524a12742a29a90a',
+      description: 'Running List top-level directory contents',
+      tokens: 11720,
+    },
+    { taskId: 'a11e094b2df159456', description: 'Reading a.txt', tokens: 11717 },
+  ]);
 });
 
 const fresh = (): Pending => ({ tools: new Map(), thinking: null, agents: new Map() });

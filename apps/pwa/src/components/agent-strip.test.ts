@@ -12,6 +12,7 @@ const task = (over: Partial<SessionTask>): SessionTask => ({
   depth: 0,
   agentType: 'Explore',
   description: 'List files',
+  progress: null,
   status: 'running',
   summary: '',
   tokens: null,
@@ -32,6 +33,7 @@ test('lists main then every task with its state glyph, type and description', ()
     task({ taskId: 't2', toolUseId: 'u2', status: 'completed', description: 'Read a.txt' }),
     task({ taskId: 't3', toolUseId: 'u3', status: 'failed', agentType: null, depth: 1 }),
     task({ taskId: 't4', toolUseId: 'u4', status: 'interrupted' }),
+    task({ taskId: 't5', toolUseId: 'u5', progress: 'Running ls' }),
   ];
   const wrapper = mount(AgentStrip, { props: { tasks, active: null, busy: true } });
   const rows = wrapper.findAll('.row');
@@ -41,6 +43,7 @@ test('lists main then every task with its state glyph, type and description', ()
     '○ Explore Read a.txt',
     '✗ agent List files',
     '✗ Explore List files',
+    'Explore Running ls',
   ]);
   // main spins while the session runs, a task while it has not ended.
   expect(rows[0]?.find('.loader').exists()).toBe(true);

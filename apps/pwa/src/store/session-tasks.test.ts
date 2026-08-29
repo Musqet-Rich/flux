@@ -45,6 +45,7 @@ test('opens a row per task.started and closes it with its task.ended', () => {
       depth: 0,
       agentType: 'Explore',
       description: 'List files',
+      progress: null,
       status: 'running',
       summary: '',
       tokens: null,
@@ -56,6 +57,7 @@ test('opens a row per task.started and closes it with its task.ended', () => {
       depth: 0,
       agentType: 'Explore',
       description: 'Read a.txt',
+      progress: null,
       status: 'completed',
       summary: 'alpha',
       tokens: 12070,
@@ -103,6 +105,29 @@ test('nested tasks sit under their parent, one level deeper', () => {
     ['t4', 2, 'u3'],
     ['t2', 0, null],
     ['t5', 0, 'u-unknown'],
+  ]);
+});
+
+const progress = (taskId: string, description: string, tokens?: number): FluxEvent =>
+  ev('task.progress', { taskId, description, ...(tokens === undefined ? {} : { tokens }) });
+
+// A task's progress is what it is doing now: the latest note wins, it carries the usage so
+// far, and it is gone once the task has ended, when the description reads better than a
+// stale "Reading a.txt".
+test('keeps the latest progress and its tokens while a task runs, none once it ended', () => {
+  const tasks = sessionTasks([
+    started('t1', 'u1', 'a'),
+    started('t2', 'u2', 'b'),
+    progress('t1', 'Reading a.txt', 11717),
+    progress('t1', 'Running ls'),
+    progress('t2', 'Searching', 5),
+    progress('nope', 'x'),
+    ended('t2', 'completed', 'done'),
+    progress('t2', 'late'),
+  ]);
+  expect(tasks.map((t) => [t.progress, t.tokens])).toEqual([
+    ['Running ls', 11717],
+    [null, 5],
   ]);
 });
 

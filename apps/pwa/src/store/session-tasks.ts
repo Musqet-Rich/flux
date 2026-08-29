@@ -15,6 +15,8 @@ export interface SessionTask {
   depth: number;
   agentType: string | null;
   description: string;
+  // The latest `task.progress` while the task runs (what it is doing now), else null.
+  progress: string | null;
   // 'running' until ended; then the agent's status ('completed', 'failed', …), or
   // 'interrupted' when the session moved on without one.
   status: string;
@@ -25,9 +27,17 @@ export interface SessionTask {
 // waiting_user is still a running turn: the agent is blocked on an ask, its tasks with it.
 const stopped = new Set(['idle', 'ended']);
 
-const closeOpen = (tasks: SessionTask[]): void => {
-  for (const task of tasks) if (task.status === 'running') task.status = 'interrupted';
+const end = (task: SessionTask, status: string): void => {
+  task.status = status;
+  task.progress = null;
 };
+
+const closeOpen = (tasks: SessionTask[]): void => {
+  for (const task of tasks) if (task.status === 'running') end(task, 'interrupted');
+};
+
+const byId = (tasks: SessionTask[], taskId: string): SessionTask | undefined =>
+  tasks.find((t) => t.taskId === taskId);
 
 const collect = (events: readonly FluxEvent[]): SessionTask[] => {
   const tasks: SessionTask[] = [];
@@ -42,16 +52,23 @@ const collect = (events: readonly FluxEvent[]): SessionTask[] => {
         depth: 0,
         agentType: agentType ?? null,
         description,
+        progress: null,
         status: 'running',
         summary: '',
         tokens: null,
       });
+    } else if (event.type === 'task.progress') {
+      const task = byId(tasks, event.payload.taskId);
+      if (task !== undefined && task.status === 'running') {
+        task.progress = event.payload.description;
+        task.tokens = event.payload.tokens ?? task.tokens;
+      }
     } else if (event.type === 'task.ended') {
-      const task = tasks.find((t) => t.taskId === event.payload.taskId);
+      const task = byId(tasks, event.payload.taskId);
       if (task === undefined) continue;
-      task.status = event.payload.status;
+      end(task, event.payload.status);
       task.summary = event.payload.summary;
-      task.tokens = event.payload.tokens ?? null;
+      task.tokens = event.payload.tokens ?? task.tokens;
     } else if (event.type === 'session.cleared') closeOpen(tasks);
     else if (event.type === 'session.state' && stopped.has(event.payload.state)) closeOpen(tasks);
   }

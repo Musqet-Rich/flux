@@ -68,6 +68,7 @@ test('lists every event type from protocol.md § 5', () => {
       'comment.removed',
       'comment.sent',
       'task.started',
+      'task.progress',
       'task.ended',
       'pr.published',
       'hook.failed',

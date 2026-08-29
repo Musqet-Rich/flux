@@ -17,7 +17,8 @@ const pageSize = 200;
 // Agent lines Flux does not read (`raw`) and rate-limit changes stay in the log for the ask,
 // comment and sync logic, but they are noise on a phone: hooks and streaming envelopes would
 // put half a dozen bare rows around every reply, and the status bar already shows the windows.
-const hiddenTypes = new Set(['raw', 'rate_limit']);
+// `task.progress` only feeds the agents strip.
+const hiddenTypes = new Set(['raw', 'rate_limit', 'task.progress']);
 
 export interface SessionTimeline {
   tasks: ComputedRef<SessionTask[]>;

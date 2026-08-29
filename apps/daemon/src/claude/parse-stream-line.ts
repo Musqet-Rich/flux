@@ -70,6 +70,7 @@ type ClaudeLineBody =
       background: boolean;
       agentType?: string;
     }
+  | { kind: 'task_progress'; taskId: string; description: string; tokens?: number }
   | { kind: 'task_ended'; taskId: string; status: string; summary: string; tokens?: number }
   | {
       kind: 'pr_published';
@@ -140,6 +141,12 @@ const contentOf = (line: Record<string, unknown>): unknown[] => {
 
 // The system signals seen dogfooding 2.1.251 (fixtures/claude/session-thinking-tasks-pr): a
 // task around a tool call, a PR the agent opened itself, a push, a hook that did not succeed.
+const totalTokens = (line: Record<string, unknown>): { tokens?: number } => {
+  const usage = line['usage'];
+  const tokens = isRecord(usage) ? usage['total_tokens'] : undefined;
+  return isInteger(tokens) ? { tokens } : {};
+};
+
 const systemSignal = (line: Record<string, unknown>): ClaudeLine | null => {
   const s = line['subtype'];
   const str = (key: string): string => (isString(line[key]) ? line[key] : '');
@@ -156,15 +163,22 @@ const systemSignal = (line: Record<string, unknown>): ClaudeLine | null => {
       ...(isString(line['subagent_type']) ? { agentType: line['subagent_type'] } : {}),
     };
   }
+  if (s === 'task_progress' && isString(line['task_id'])) {
+    const { tokens } = totalTokens(line);
+    return {
+      kind: 'task_progress',
+      taskId: line['task_id'],
+      description: str('description'),
+      ...(tokens === undefined ? {} : { tokens }),
+    };
+  }
   if (s === 'task_notification' && isString(line['task_id']) && isString(line['status'])) {
-    const usage = line['usage'];
-    const tokens = isRecord(usage) ? usage['total_tokens'] : undefined;
     return {
       kind: 'task_ended',
       taskId: line['task_id'],
       status: line['status'],
       summary: str('summary'),
-      ...(isInteger(tokens) ? { tokens } : {}),
+      ...totalTokens(line),
     };
   }
   if (s === 'code_change_published' && isString(line['url'])) {

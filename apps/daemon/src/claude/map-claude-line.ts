@@ -143,6 +143,11 @@ const signal = (line: ClaudeLine, pending: Pending): Mapped | null => {
     };
     return { events: [{ type: 'task.started', payload }] };
   }
+  if (line.kind === 'task_progress') {
+    const { taskId, description, tokens } = line;
+    const payload = { taskId, description, ...(tokens === undefined ? {} : { tokens }) };
+    return { events: [{ type: 'task.progress', payload }] };
+  }
   if (line.kind === 'task_ended') {
     const { taskId, status, summary, tokens } = line;
     const payload = { taskId, status, summary, ...(tokens === undefined ? {} : { tokens }) };
