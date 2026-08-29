@@ -2,6 +2,7 @@
 import type { Commit, FileStatus } from '@flux/protocol';
 import { computed, onMounted, ref } from 'vue';
 
+import { conventionalCommit } from '../git/conventional-commit.ts';
 import type { Store } from '../store/create-store.ts';
 import { sessionPr } from '../store/session-pr.ts';
 
@@ -27,15 +28,25 @@ const body = ref('');
 const draft = ref(false);
 const busy = ref<Action | null>(null);
 const failure = ref<string | null>(null);
-const last = ref<Commit | null>(null);
+const commits = ref<Commit[]>([]);
+// `git.log` is the branch's history, base included: the device cannot tell where the branch
+// forked, so a fresh branch seeds the title from the base's last commit until the agent commits.
+const logLimit = 20;
 
 const summary = computed(() => props.store.state.sessions.find((s) => s.session === props.session));
 const prUrl = computed(
   () => sessionPr(props.store.state.logs[props.session]?.events ?? [])?.url ?? null,
 );
-// The PR title starts as the session title and becomes whatever the operator types.
+const last = computed(() => commits.value[0] ?? null);
+// The PR title starts as the newest Conventional Commit subject (the squash commit takes the
+// title, so the agent's own subject is the one CI already accepts), else the session title,
+// and becomes whatever the operator types; a refreshed log moves an unedited default along.
 const title = computed({
-  get: () => chosenTitle.value ?? summary.value?.title ?? '',
+  get: () =>
+    chosenTitle.value ??
+    conventionalCommit.latest(commits.value)?.subject ??
+    summary.value?.title ??
+    '',
   set: (value: string) => {
     chosenTitle.value = value;
   },
@@ -43,6 +54,12 @@ const title = computed({
 const idle = computed(() => busy.value === null);
 const canCommit = computed(() => idle.value && message.value.trim() !== '');
 const canPr = computed(() => idle.value && title.value.trim() !== '');
+// A hint, not a gate: other repositories may not check titles at all.
+const titleHint = computed(() =>
+  title.value.trim() === '' || conventionalCommit.matches(title.value.trim())
+    ? ''
+    : "Not a Conventional Commit; the repo's CI may reject it",
+);
 const commitLabel = computed(() =>
   props.selected.length === 0 ? 'Commit all' : `Commit ${props.selected.length} selected`,
 );
@@ -52,8 +69,8 @@ const lastLine = computed(() =>
 
 const loadLog = async (): Promise<void> => {
   try {
-    const result = await props.store.call('git.log', { session: props.session, limit: 1 });
-    last.value = result.commits[0] ?? null;
+    const result = await props.store.call('git.log', { session: props.session, limit: logLimit });
+    commits.value = result.commits;
   } catch {
     // No log yet (or offline); the status bar reports connection trouble.
   }
@@ -135,6 +152,7 @@ onMounted(() => {
         aria-label="Pull request title"
         :disabled="!idle"
       />
+      <p class="hint" aria-live="polite">{{ titleHint }}</p>
       <textarea
         id="pr-body"
         v-model="body"
@@ -206,6 +224,16 @@ onMounted(() => {
 
 .draft input {
   width: auto;
+}
+
+.hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.hint:empty {
+  display: none;
 }
 
 .url {
