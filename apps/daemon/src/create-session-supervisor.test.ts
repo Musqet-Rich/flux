@@ -3,6 +3,7 @@ import { fluxEvent } from '@flux/protocol';
 import { expect, test } from 'vitest';
 
 import { sessionHarness as setup } from '../test/session-harness.ts';
+import type { AgentAdapter, Mapped } from './create-session-supervisor.ts';
 
 // Resolves once an event matching the predicate has been emitted (after the ones already seen).
 const until = (
@@ -14,6 +15,15 @@ const until = (
     const check = (): void => {
       const found = emitted.slice(after).find((e) => match(e));
       if (found) resolve(found);
+      else setImmediate(check);
+    };
+    check();
+  });
+
+const untilLength = (list: unknown[], n: number): Promise<void> =>
+  new Promise((resolve) => {
+    const check = (): void => {
+      if (list.length >= n) resolve();
       else setImmediate(check);
     };
     check();
@@ -93,5 +103,36 @@ test('interrupt kills the agent', async () => {
   supervisor.interrupt();
   const ended = await untilState(emitted, 'ended');
   expect(ended.payload).toEqual({ state: 'ended', reason: 'agent killed' });
+  await supervisor.close();
+});
+
+// The thinking indicator and a git state change are ephemeral (protocol.md § 6): the supervisor
+// sends them on the session and logs nothing. A stub adapter stands in for a mapping the
+// replayed fixture cannot produce on its own.
+const scripted = (): AgentAdapter => {
+  const replies: Mapped[] = [
+    { events: [], thinking: { active: true, estimatedTokens: 120 } },
+    { events: [], vcsChanged: 'push' },
+  ];
+  return {
+    mapLine: () => replies.shift() ?? { events: [], thinking: { active: false }, turnEnded: true },
+    reset: () => {},
+  };
+};
+
+test('thinking and vcs signals go out as ephemerals and never touch the log', async () => {
+  const { supervisor, log, ephemeral } = await setup({}, scripted());
+  await supervisor.send('go');
+  await untilLength(ephemeral, 3);
+  expect(ephemeral.slice(0, 3)).toEqual([
+    { type: 'agent.thinking', session: 's1', active: true, estimatedTokens: 120 },
+    { type: 'vcs.changed', session: 's1', kind: 'push' },
+    { type: 'agent.thinking', session: 's1', active: false },
+  ]);
+  expect(log.read('s1', 0).events.map((e) => e.type)).toEqual([
+    'msg.user',
+    'session.state',
+    'session.state',
+  ]);
   await supervisor.close();
 });

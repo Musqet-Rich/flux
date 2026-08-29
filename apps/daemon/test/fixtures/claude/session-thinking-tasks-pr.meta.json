@@ -1,0 +1,25 @@
+{
+  "code": null,
+  "signal": null,
+  "args": [
+    "-p",
+    "--input-format",
+    "stream-json",
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--include-partial-messages",
+    "--dangerously-skip-permissions",
+    "--mcp-config",
+    "--append-system-prompt",
+    "You are running unattended under Flux. The operator is on a phone. For any material decision (design choices, destructive actions, ambiguous requirements) call flux_ask instead of guessing; call flux_notify with level \"done\" when the task is complete and \"blocked\" when you cannot proceed."
+  ],
+  "agent": "Claude Code",
+  "version": "2.1.251",
+  "capturedAt": "2026-08-29",
+  "source": "Every stdout line the daemon logged as a `raw` event in one real Flux session (payload.data of each `raw` row of /tmp/flux-data/flux.sqlite for the session that carried `system/code_change_published`, in seq order). Lines the adapter already mapped to Flux events at capture time are not included. Present: operator SessionStart hooks (`system/hook_started`, `system/hook_response`), five thinking blocks (`content_block_start` of type thinking, `thinking_delta` with redacted text, `system/thinking_tokens`, `content_block_stop`), four background-capable tasks (`system/task_started`, `system/task_notification`), one `system/vcs_state_changed` push and one `system/code_change_published` for the PR the agent opened with `gh`, plus the `stream_event` envelopes the adapter does not read (message_start, content_block_start/stop for text and tool_use, message_delta, message_stop, input_json_delta). Captured after the session had ended but from the daemon's log rather than the process, so code and signal are null. The secret scanner (.github/scripts/check-secrets.sh) objects to `signature_delta` lines (thinking-block signatures are long base64), so those five lines were dropped from the extraction; nothing else was removed or edited.",
+  "droppedLines": {
+    "count": 5,
+    "reason": "content_block_delta with delta.type signature_delta; flagged by the secret scanner as 40+ base64 characters"
+  }
+}

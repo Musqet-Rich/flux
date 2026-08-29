@@ -66,6 +66,10 @@ test('lists every event type from protocol.md § 5', () => {
       'comment.added',
       'comment.removed',
       'comment.sent',
+      'task.started',
+      'task.ended',
+      'pr.published',
+      'hook.failed',
       'raw',
     ].toSorted(),
   );

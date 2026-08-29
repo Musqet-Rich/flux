@@ -216,6 +216,49 @@ test('opens a session from the cache, syncs it, then applies live events and del
   expect(store.state.sessions[0]).toMatchObject({ lastSeq: 3 });
 });
 
+// The thinking indicator and git-state notices are shown, never logged (protocol.md § 6); a
+// count is kept when a later notice has none, text streaming or the turn ending clears it.
+test('thinking and vcs notices update the view and never touch the log', async () => {
+  const { store, link, relay } = await setup();
+  await store.pair('https://relay.example', link());
+  await store.open('s1');
+  const view = (): { thinking: unknown; changes: number } | undefined => store.state.logs['s1'];
+  await relay.ephemeral({ type: 'agent.thinking', session: 's1', active: true });
+  await until(() => view()?.thinking !== null);
+  expect(view()?.thinking).toEqual({ estimatedTokens: null });
+  await relay.ephemeral({
+    type: 'agent.thinking',
+    session: 's1',
+    active: true,
+    estimatedTokens: 90,
+  });
+  await until(() => JSON.stringify(view()?.thinking) === '{"estimatedTokens":90}');
+  await relay.ephemeral({ type: 'agent.thinking', session: 's1', active: true });
+  await relay.ephemeral({ type: 'vcs.changed', session: 's1', kind: 'push' });
+  await until(() => view()?.changes === 1);
+  expect(view()?.thinking).toEqual({ estimatedTokens: 90 });
+  await relay.ephemeral({ type: 'agent.thinking', session: 's1', active: false });
+  await until(() => view()?.thinking === null);
+  await relay.ephemeral({ type: 'agent.thinking', session: 's1', active: true });
+  await until(() => view()?.thinking !== null);
+  await relay.ephemeral({ type: 'delta', session: 's1', forSeq: 3, text: 'so' });
+  await until(() => view()?.thinking === null);
+  await relay.ephemeral({ type: 'agent.thinking', session: 's1', active: true });
+  await until(() => view()?.thinking !== null);
+  await relay.emit(ev(3, 'session.state', { state: 'idle' }));
+  await until(() => store.state.logs['s1']?.lastSeq === 3);
+  expect(view()?.thinking).toBeNull();
+  expect(store.state.logs['s1']?.events.map((e) => e.type)).toEqual([
+    'session.created',
+    'msg.user',
+    'session.state',
+  ]);
+  // An unopened session's notices are dropped, not crashed on.
+  await relay.ephemeral({ type: 'vcs.changed', session: 's9', kind: 'push' });
+  await relay.ephemeral({ type: 'agent.thinking', session: 's1', active: false });
+  await until(() => view()?.thinking === null);
+});
+
 test('a gap in seq triggers a sync that brings in the missed events and the late one', async () => {
   const { store, link, relay, called } = await setup();
   await store.pair('https://relay.example', link());

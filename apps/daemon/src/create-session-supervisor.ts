@@ -25,6 +25,9 @@ export interface Mapped {
   running?: boolean;
   turnEnded?: boolean;
   filesChanged?: boolean;
+  // Ephemeral signals (protocol.md § 6): the thinking indicator and a git state change.
+  thinking?: { active: boolean; estimatedTokens?: number };
+  vcsChanged?: string;
 }
 
 export interface AgentAdapter {
@@ -99,6 +102,12 @@ const handleLine = async (ctx: Context, line: string): Promise<void> => {
   if (mapped.delta !== undefined) {
     const forSeq = ctx.log.lastSeq(ctx.session) + 1;
     ctx.emitEphemeral({ type: 'delta', session: ctx.session, forSeq, text: mapped.delta });
+  }
+  if (mapped.thinking !== undefined) {
+    ctx.emitEphemeral({ type: 'agent.thinking', session: ctx.session, ...mapped.thinking });
+  }
+  if (mapped.vcsChanged !== undefined) {
+    ctx.emitEphemeral({ type: 'vcs.changed', session: ctx.session, kind: mapped.vcsChanged });
   }
   for (const event of mapped.events) append(ctx, event);
   if (mapped.filesChanged === true) {

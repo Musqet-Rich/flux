@@ -74,6 +74,18 @@ export interface EventPayloads {
   'comment.added': { commentId: string; ref: CodeRef; text: string };
   'comment.removed': { commentId: string };
   'comment.sent': { commentIds: string[]; msgSeq: number };
+  // Agent signals (Claude Code system lines); `status` and `action` are open sets, the known
+  // values are in protocol.md § 5.
+  'task.started': { taskId: string; toolUseId: string; description: string; background: boolean };
+  'task.ended': { taskId: string; status: string; summary: string };
+  'pr.published': {
+    provider: string;
+    url: string;
+    repo: string;
+    identifier: string;
+    action: string;
+  };
+  'hook.failed': { hookName: string; hookEvent: string; exitCode?: number; stderr: string };
   raw: { agent: string; data: unknown };
 }
 
@@ -162,5 +174,26 @@ export const eventPayloads: PayloadGuards = {
     isRecord(v) && isString(v['commentId']),
   'comment.sent': (v): v is EventPayloads['comment.sent'] =>
     isRecord(v) && isStrings(v['commentIds']) && isInteger(v['msgSeq'], 1),
+  'task.started': (v): v is EventPayloads['task.started'] =>
+    isRecord(v) &&
+    isString(v['taskId']) &&
+    isString(v['toolUseId']) &&
+    isString(v['description']) &&
+    isBoolean(v['background']),
+  'task.ended': (v): v is EventPayloads['task.ended'] =>
+    isRecord(v) && isString(v['taskId']) && isString(v['status']) && isString(v['summary']),
+  'pr.published': (v): v is EventPayloads['pr.published'] =>
+    isRecord(v) &&
+    isString(v['provider']) &&
+    isString(v['url']) &&
+    isString(v['repo']) &&
+    isString(v['identifier']) &&
+    isString(v['action']),
+  'hook.failed': (v): v is EventPayloads['hook.failed'] =>
+    isRecord(v) &&
+    isString(v['hookName']) &&
+    isString(v['hookEvent']) &&
+    isOptional(v['exitCode'], isInteger) &&
+    isString(v['stderr']),
   raw: (v): v is EventPayloads['raw'] => isRecord(v) && isString(v['agent']) && 'data' in v,
 };

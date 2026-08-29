@@ -6,7 +6,11 @@ import { spawnClaude } from '../src/claude/spawn-claude.ts';
 import { createEventLog } from '../src/create-event-log.ts';
 import { createGitService } from '../src/create-git-service.ts';
 import { createSessionStore } from '../src/create-session-store.ts';
-import type { SessionSupervisor, SpawnRequest } from '../src/create-session-supervisor.ts';
+import type {
+  AgentAdapter,
+  SessionSupervisor,
+  SpawnRequest,
+} from '../src/create-session-supervisor.ts';
 import { createSessionSupervisor } from '../src/create-session-supervisor.ts';
 import type { EventLog } from '../src/create-event-log.ts';
 import type { SessionStore } from '../src/create-session-store.ts';
@@ -30,7 +34,12 @@ export interface SessionHarness {
   worktree: string;
 }
 
-export const sessionHarness = async (extraEnv: NodeJS.ProcessEnv = {}): Promise<SessionHarness> => {
+// `adapter` replaces the real Claude read side, for tests of what the supervisor does with a
+// mapping the fixtures cannot produce.
+export const sessionHarness = async (
+  extraEnv: NodeJS.ProcessEnv = {},
+  adapter?: AgentAdapter,
+): Promise<SessionHarness> => {
   const worktree = await tempWorktree();
   const db = openDatabase(':memory:');
   const log = createEventLog({ db });
@@ -52,7 +61,7 @@ export const sessionHarness = async (extraEnv: NodeJS.ProcessEnv = {}): Promise<
     log,
     sessions,
     git: createGitService(),
-    adapter: claudeAdapter(worktree),
+    adapter: adapter ?? claudeAdapter(worktree),
     spawn: (request) => {
       spawns.push(request);
       return spawnClaude({

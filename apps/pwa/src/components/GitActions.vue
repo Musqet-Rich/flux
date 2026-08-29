@@ -3,9 +3,12 @@ import type { Commit, FileStatus } from '@flux/protocol';
 import { computed, onMounted, ref } from 'vue';
 
 import type { Store } from '../store/create-store.ts';
+import { sessionPr } from '../store/session-pr.ts';
 
 // Commit, push and open a PR from the changes screen (prd.md § P2). One action at a time; a
 // failure shows here and in the status bar; `done` tells the parent to refresh the file list.
+// The PR link comes from the log (`pr.published`), which the box writes whether this screen or
+// the agent opened it, so both paths show the same thing.
 
 // `selected` is the ticked files; a rename among them commits under both its paths, or the
 // deletion of the old one would be left behind.
@@ -24,10 +27,12 @@ const body = ref('');
 const draft = ref(false);
 const busy = ref<Action | null>(null);
 const failure = ref<string | null>(null);
-const prUrl = ref<string | null>(null);
 const last = ref<Commit | null>(null);
 
 const summary = computed(() => props.store.state.sessions.find((s) => s.session === props.session));
+const prUrl = computed(
+  () => sessionPr(props.store.state.logs[props.session]?.events ?? [])?.url ?? null,
+);
 // The PR title starts as the session title and becomes whatever the operator types.
 const title = computed({
   get: () => chosenTitle.value ?? summary.value?.title ?? '',
@@ -94,9 +99,7 @@ const openPr = (): Promise<void> =>
       ...(text === '' ? {} : { body: text }),
       ...(draft.value ? { draft: true } : {}),
     });
-    if (url === null) return false;
-    prUrl.value = url;
-    return true;
+    return url !== null;
   });
 
 onMounted(() => {
@@ -147,7 +150,7 @@ onMounted(() => {
         <button type="button" class="open-pr" :disabled="!canPr" @click="openPr">Open PR</button>
       </div>
       <p v-if="prUrl !== null" class="url">
-        <a :href="prUrl" target="_blank" rel="noopener">{{ prUrl }}</a>
+        <a :href="prUrl" target="_blank" rel="noopener noreferrer">{{ prUrl }}</a>
       </p>
     </details>
     <p v-if="failure !== null" class="error">{{ failure }}</p>

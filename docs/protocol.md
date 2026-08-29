@@ -196,6 +196,21 @@ type FluxEvent =
   | Envelope<'comment.removed', { commentId: string }>
   | Envelope<'comment.sent', { commentIds: string[]; msgSeq: number }>
 
+  // agent signals (Claude Code system lines, architecture.md § Adapter)
+  | Envelope<
+      'task.started',
+      { taskId: string; toolUseId: string; description: string; background: boolean }
+    >
+  | Envelope<'task.ended', { taskId: string; status: string; summary: string }> // status: 'completed' | 'failed' | whatever the agent adds next
+  | Envelope<
+      'pr.published',
+      { provider: string; url: string; repo: string; identifier: string; action: string }
+    > // action: 'created' from the agent; the box's own git.pr logs 'created' or 'existing'
+  | Envelope<
+      'hook.failed',
+      { hookName: string; hookEvent: string; exitCode?: number; stderr: string }
+    >
+
   // escape hatch
   | Envelope<'raw', { agent: string; data: unknown }>
 
@@ -236,6 +251,9 @@ Rules:
 - `files.changed` is emitted by the daemon after any `tool.end` whose adapter flags a filesystem write, computed from `git status --porcelain` in the worktree. It reflects the full current set, not a delta.
 - A `type` the receiver does not know is accepted with its payload untouched and kept in the log (§ 8).
 - `msg.user.refs` are the code references rendered into the text sent to the agent. The daemon renders each ref as a fenced block with path and line range plus the referenced lines, so the agent sees the actual code.
+- `task.started` / `task.ended` bracket a tool call the agent runs as a task (`toolUseId` is that call's `tool.start.toolId`); `background` says the agent did not wait for it. `status` and `pr.published.action` are open sets: the receiver shows the string it gets and styles only the values it knows.
+- `pr.published` is logged when the agent opens a pull request itself and when the operator opens one through `git.pr`, so a session's PR is always the latest `pr.published` in its log. `repo` and `identifier` are empty strings when the URL is not a GitHub pull request URL.
+- `hook.failed` is logged only for a hook whose outcome is not `success`; `stderr` is capped at 2 KiB by the adapter. `exitCode` is absent when the agent did not report one.
 
 ## 6. Ephemeral messages
 
@@ -246,8 +264,12 @@ type Ephemeral =
   | { type: 'delta'; session: string; forSeq: number; text: string } // streaming assistant text; forSeq is the seq the final msg.assistant will take
   | { type: 'typing'; session: string; deviceId: string } // optional, P2
   | { type: 'agent.status'; session: string; status: 'thinking' | 'tool' | 'idle' }
+  | { type: 'agent.thinking'; session: string; active: boolean; estimatedTokens?: number } // a thinking block is open; the count is the agent's running estimate
+  | { type: 'vcs.changed'; session: string; kind: string } // the agent changed git state (kind: 'push', …); the device refetches its changes data
   | { type: 'device.revoked'; deviceId: string }; // box → the device being revoked, then the box forgets its channel
 ```
+
+`agent.thinking` is sent with `active: true` when a thinking block starts, again with `estimatedTokens` as the agent reports progress (the box sends at most one report per 500 ms or per 100-token change), and with `active: false` when the block ends. The device shows the indicator while active and drops it on `active: false`, on the first streamed text, and when the session leaves `running`, since a turn that ends mid-thought never sends the stop.
 
 `device.revoked` is the one ephemeral without a session. The box sends it on the channel of a device that has just been removed (`devices.remove`, or `flux devices rm` on the box) and then drops that channel: later frames from it are ignored, and a fresh handshake is treated as a stranger's (§ 3). A device that removed itself gets its `rpc.result` first, then the notice. On receipt the device forgets its keys and returns to pairing.
 
@@ -355,7 +377,7 @@ interface FileContent {
 
 Error codes: `bad_params`, `not_found`, `not_paired`, `agent_unavailable`, `git_error`, `gh_error`, `conflict`, `internal`. `conflict` is returned by `fs.write` when `ifMatch` does not match the current file.
 
-`git_error` and `gh_error` carry the tool's own stderr (or stdout when stderr is empty, as for "nothing to commit") as the message, so the device shows what git or gh said. `gh_error` also covers `gh` missing from the box's PATH, with the message `gh not found on PATH`. Git actions emit no events: the device refreshes `git.status` and `git.log` after each one (`adr/0014`).
+`git_error` and `gh_error` carry the tool's own stderr (or stdout when stderr is empty, as for "nothing to commit") as the message, so the device shows what git or gh said. `gh_error` also covers `gh` missing from the box's PATH, with the message `gh not found on PATH`. Git actions emit no events, except that `git.pr` logs `pr.published` (§ 5) so the session's PR has one source; the device refreshes `git.status` and `git.log` after each one (`adr/0014`).
 
 ## 8. Versioning
 

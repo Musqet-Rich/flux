@@ -7,7 +7,7 @@ import type { SessionLog } from '../client/create-session-log.ts';
 import { pairedBox } from '../client/paired-box.ts';
 import { syncSession } from '../client/sync-session.ts';
 import { logCache } from './log-cache.ts';
-import type { StoreInternals } from './store-state.ts';
+import type { LogView, StoreInternals } from './store-state.ts';
 
 // The store's side of the connection (architecture.md § Sync model): what to do when the channel
 // comes up, when an event or delta arrives, and when a call fails. Everything here mutates
@@ -146,12 +146,35 @@ const onEvent = (i: StoreInternals, event: FluxEvent): void => {
   patchSummary(i, event);
   const log = i.logs.get(event.session);
   if (log === undefined) return;
+  // A turn that ends mid-thought (interrupt, crash) never sends the block's stop.
+  if (
+    fluxEvent.isKnown(event) &&
+    event.type === 'session.state' &&
+    event.payload.state !== 'running'
+  ) {
+    const view = i.state.logs[event.session];
+    if (view !== undefined) view.thinking = null;
+  }
   const receipt = log.receive(event);
   if (receipt === 'applied') logCache.publish(i, log);
   else if (receipt === 'gap') {
     void syncLog(i, log).catch((error: unknown) => {
       reportError(i, error);
     });
+  }
+};
+
+// Signals about a session that are shown, not logged (protocol.md § 6). Text arriving ends
+// the thinking indicator even without the block's stop, since the reply is what it was for.
+const onNotice = (view: LogView, data: Ephemeral): void => {
+  if (data.type === 'agent.thinking') {
+    view.thinking = data.active
+      ? { estimatedTokens: data.estimatedTokens ?? view.thinking?.estimatedTokens ?? null }
+      : null;
+  } else if (data.type === 'vcs.changed') {
+    view.changes += 1;
+  } else if (data.type === 'delta' && data.text !== '') {
+    view.thinking = null;
   }
 };
 
@@ -165,6 +188,7 @@ const onEphemeral = (i: StoreInternals, data: Ephemeral): void => {
   if (log === undefined || view === undefined) return;
   log.delta(data);
   view.streaming = log.streaming();
+  onNotice(view, data);
 };
 
 const onStatus = (i: StoreInternals, status: StoreInternals['state']['status']): void => {

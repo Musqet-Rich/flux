@@ -82,11 +82,26 @@ test('opens a PR with the session title prefilled and links to the result', asyn
   await wrapper.find('#pr-body').setValue('  Because.  ');
   await wrapper.find('.draft input').setValue(true);
   await wrapper.find('.open-pr').trigger('click');
-  await until(() => Reflect.get(wrapper.vm, 'prUrl') !== null);
+  await until(() => box.calls('git.pr').length === 1);
+  await until(() => Reflect.get(wrapper.vm, 'busy') === null);
   await flushPromises();
   expect(box.calls('git.pr')).toEqual([
     { session: 's1', title: 'Ship it', body: 'Because.', draft: true },
   ]);
+  // The link is the log's, not the call's: the box logs pr.published for its own git.pr too.
+  expect(wrapper.find('.url').exists()).toBe(false);
+  await box.store.open('s1');
+  await box.relay.emit(
+    box.event(1, 'pr.published', {
+      provider: 'github',
+      url: 'https://github.com/o/r/pull/true',
+      repo: 'o/r',
+      identifier: 'true',
+      action: 'created',
+    }),
+  );
+  await until(() => box.store.state.logs['s1']?.lastSeq === 1);
+  await flushPromises();
   const link = wrapper.find('.url a');
   expect(link.attributes('href')).toBe('https://github.com/o/r/pull/true');
   expect(link.text()).toBe('https://github.com/o/r/pull/true');
