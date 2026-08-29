@@ -1,0 +1,2 @@
+Warning: No project session found with id '55555555-5555-4555-8555-555555555555'; creating a new session with that id.
+Warning: Model "no-such-model" not found for provider "anthropic". Using custom model id.

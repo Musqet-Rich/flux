@@ -58,7 +58,8 @@ const changed = computed((): Partial<FluxSettings> => {
 });
 const dirty = computed(() => Object.keys(changed.value).length > 0);
 
-const agents: AgentKind[] = ['claude', 'pi'];
+// Only agents the box found (`hello.agents`); the box refuses the others.
+const agents = computed((): AgentKind[] => props.store.state.agents);
 const triggers = [
   { field: 'notifyOnAsk', text: 'the agent asks a question' },
   { field: 'notifyOnIdle', text: 'the agent goes idle' },

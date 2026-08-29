@@ -181,7 +181,10 @@ type FluxEvent =
 
   // operator interaction, owned by flux tools
   | Envelope<'ask', { askId: string; question: string; options?: string[]; timeoutAt: string }>
-  | Envelope<'ask.answered', { askId: string; answer: string; by: 'device' | 'timeout' }>
+  | Envelope<
+      'ask.answered',
+      { askId: string; answer: string; by: 'device' | 'timeout' | 'aborted' }
+    > // aborted: the agent gave up waiting (operator interrupt), answer is ''
   | Envelope<'notify', { level: 'info' | 'done' | 'blocked'; summary: string }>
 
   // code
@@ -256,7 +259,7 @@ Device → box. Params are validated by type guards on the box (`rpcMethods`), r
 
 | method             | params                                                           | result                                                                                                                                                                                                                                                                          |
 | ------------------ | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `hello`            | `{ protocol: 1; client: string }`                                | `{ protocol: 1; daemon: string; sessions: SessionSummary[]; vapidPublicKey?: string }`                                                                                                                                                                                          |
+| `hello`            | `{ protocol: 1; client: string }`                                | `{ protocol: 1; daemon: string; sessions: SessionSummary[]; vapidPublicKey?: string; agents?: ('claude' \| 'pi')[] }` (`agents`: the agent binaries the box found at start; absent means claude only)                                                                           |
 | `events.sync`      | `{ session; since: number }`                                     | `{ events: FluxEvent[]; complete: boolean }` (paged, 500 per call)                                                                                                                                                                                                              |
 | `sessions.list`    | `{}`                                                             | `SessionSummary[]`                                                                                                                                                                                                                                                              |
 | `sessions.cost`    | `{ session }`                                                    | `{ costUsd: number; usage: TokenUsage; turns: number }` (aggregated from `turn.ended`)                                                                                                                                                                                          |
@@ -284,7 +287,7 @@ Device → box. Params are validated by type guards on the box (`rpcMethods`), r
 | `devices.list`     | `{}`                                                             | `Device[]` (`current` marks the caller)                                                                                                                                                                                                                                         |
 | `devices.remove`   | `{ deviceId }`                                                   | `{}` (`not_found` if unknown; the device is told and cut off, § 6; self-removal allowed)                                                                                                                                                                                        |
 | `settings.get`     | `{}`                                                             | `Settings`                                                                                                                                                                                                                                                                      |
-| `settings.set`     | `{ flux?: Partial<FluxSettings>; agent?: Partial<AgentConfig> }` | `Settings` (the whole state after the patch; `bad_params` and nothing written if any part is invalid, including an unknown key)                                                                                                                                                 |
+| `settings.set`     | `{ flux?: Partial<FluxSettings>; agent?: Partial<AgentConfig> }` | `Settings` (the whole state after the patch; `bad_params` and nothing written if any part is invalid, including an unknown key; `agent_unavailable` when `flux.defaultAgent` names an agent the box did not find, see `hello.agents`)                                           |
 
 ```ts
 interface SessionSummary {
@@ -314,7 +317,7 @@ interface Settings {
 
 interface FluxSettings {
   reposDir: string; // absolute; where `repos.list` and `sessions.create` look
-  defaultAgent: 'claude' | 'pi';
+  defaultAgent: 'claude' | 'pi'; // must be in hello.agents; settings.set answers agent_unavailable otherwise
   notifyOnAsk: boolean; // push on `ask`
   notifyOnIdle: boolean; // push on running → idle
   notifyOnDone: boolean; // push on `notify` done | blocked

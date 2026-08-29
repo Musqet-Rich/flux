@@ -1,4 +1,4 @@
-import type { EnvSettings } from '@flux/protocol';
+import type { AgentKind, EnvSettings } from '@flux/protocol';
 
 import type { SessionRecord } from './create-session-store.ts';
 import type { SessionSupervisor } from './create-session-supervisor.ts';
@@ -13,6 +13,8 @@ export interface HandlerContext {
   vapidPublicKey: string;
   // What only the environment sets; reported read-only by `settings.get`.
   env: EnvSettings;
+  // Agents whose binary was found at start (detect-agents.ts); the rest are `agent_unavailable`.
+  agents: AgentKind[];
   worktreesDir: string;
   log: Services['log'];
   sessions: Services['sessions'];
@@ -25,6 +27,8 @@ export interface HandlerContext {
   git: Services['git'];
   supervisor: (record: SessionRecord) => SessionSupervisor;
   closeSupervisor: (session: string) => Promise<void>;
+  // Drops the agent's own state for an archived session (create-agent-commands.ts).
+  forgetAgentSession: (session: string) => void;
   // Forgets a device everywhere: trust list, push subscriptions, live channels.
   revokeDevice: (deviceId: string) => Promise<void>;
 }

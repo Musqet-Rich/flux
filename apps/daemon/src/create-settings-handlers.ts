@@ -51,6 +51,10 @@ export const createSettingsHandlers = (ctx: HandlerContext): SettingsHandlers =>
     // write then leaves the database untouched too.
     if (p.agent !== undefined) ctx.agentConfig.check(p.agent);
     if (p.flux !== undefined) ctx.settings.check(p.flux);
+    const agent = p.flux?.defaultAgent;
+    if (agent !== undefined && !ctx.agents.includes(agent)) {
+      throw new DaemonError('agent_unavailable', `${agent} is not installed on the box`);
+    }
     if (p.agent !== undefined) await ctx.agentConfig.write(p.agent);
     if (p.flux !== undefined) ctx.settings.set(p.flux);
     return readSettings(ctx);

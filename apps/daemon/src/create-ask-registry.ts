@@ -4,11 +4,13 @@
 
 export interface Answer {
   answer: string;
-  by: 'device' | 'timeout';
+  by: 'device' | 'timeout' | 'aborted';
 }
 
 export interface AskRegistry {
-  ask: (askId: string, timeoutMs: number) => Promise<Answer>;
+  // `signal` is the asking connection: when it goes away (the agent was interrupted mid-ask),
+  // the ask settles as aborted so the operator's card closes.
+  ask: (askId: string, timeoutMs: number, signal?: AbortSignal) => Promise<Answer>;
   answer: (askId: string, answer: string) => boolean;
   pending: () => string[];
   close: () => void;
@@ -32,12 +34,19 @@ export const createAskRegistry = (): AskRegistry => {
   };
 
   return {
-    ask: (askId, timeoutMs) =>
+    ask: (askId, timeoutMs, signal) =>
       new Promise((resolve) => {
         const timer = setTimeout(() => {
           settle(askId, { answer: '', by: 'timeout' });
         }, timeoutMs);
         pending.set(askId, { resolve, timer });
+        signal?.addEventListener(
+          'abort',
+          () => {
+            settle(askId, { answer: '', by: 'aborted' });
+          },
+          { once: true },
+        );
       }),
     answer: (askId, answer) => settle(askId, { answer, by: 'device' }),
     pending: () => [...pending.keys()],

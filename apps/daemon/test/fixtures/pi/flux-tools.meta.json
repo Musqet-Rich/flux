@@ -1,0 +1,21 @@
+{
+  "code": 0,
+  "signal": null,
+  "args": [
+    "--mode",
+    "rpc",
+    "--provider",
+    "anthropic",
+    "--model",
+    "claude-haiku-4-5",
+    "--session-dir",
+    "--session-id",
+    "33333333-3333-4333-8333-333333333333",
+    "--no-approve",
+    "--thinking",
+    "off",
+    "--extension",
+    "--append-system-prompt",
+    "You are running unattended under Flux. The operator is on a phone. For any material decision (design choices, destructive actions, ambiguous requirements) call flux_ask instead of guessing; call flux_notify with level \"done\" when the task is complete and \"blocked\" when you cannot proceed."
+  ]
+}

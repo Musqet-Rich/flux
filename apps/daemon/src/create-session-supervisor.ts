@@ -1,8 +1,5 @@
 import type { ChangedFile, CodeRef, Ephemeral, FluxEvent, SessionState } from '@flux/protocol';
 
-import type { Pending } from './claude/map-claude-line.ts';
-import { mapClaudeLine } from './claude/map-claude-line.ts';
-import { parseStreamLine } from './claude/parse-stream-line.ts';
 import type { AgentProcess } from './claude/spawn-claude.ts';
 import type { EventInput, EventLog } from './create-event-log.ts';
 import type { GitService } from './create-git-service.ts';
@@ -10,11 +7,31 @@ import type { SessionRecord, SessionStore } from './create-session-store.ts';
 import { renderRefs } from './render-refs.ts';
 
 // One session = one agent process + one worktree + one event stream (architecture.md § Daemon).
-// The supervisor owns the process lifecycle and is the only writer to this session's log.
+// The supervisor owns the process lifecycle and is the only writer to this session's log. Which
+// agent it is speaking to is the adapter's business: a stateful line mapper (read side) and a
+// spawn function (write side), both chosen by the pool from the session's agent kind.
 
 export interface SpawnRequest {
   cwd: string;
+  session: string;
   resume?: string;
+}
+
+// What one agent line means to the supervisor, whichever agent produced it.
+export interface Mapped {
+  events: EventInput[];
+  delta?: string;
+  agentSessionId?: string;
+  running?: boolean;
+  turnEnded?: boolean;
+  filesChanged?: boolean;
+}
+
+export interface AgentAdapter {
+  // Null for a line that is not JSON; the supervisor drops those.
+  mapLine: (line: string) => Mapped | null;
+  // Forget in-flight state when the process is gone.
+  reset: () => void;
 }
 
 export interface SessionSupervisor {
@@ -32,6 +49,7 @@ export interface SupervisorOptions {
   sessions: SessionStore;
   git: GitService;
   spawn: (request: SpawnRequest) => AgentProcess;
+  adapter: AgentAdapter;
   emit: (event: FluxEvent) => void;
   emitEphemeral: (message: Ephemeral) => void;
 }
@@ -43,7 +61,6 @@ interface Context extends SupervisorOptions {
   agentSessionId: string | null;
   agent: AgentProcess | null;
   closing: boolean;
-  pending: Pending;
   // Lines are handled strictly in order even though some handlers await git.
   queue: Promise<void>;
 }
@@ -72,9 +89,8 @@ const setState = (ctx: Context, next: SessionState, reason?: string): void => {
 };
 
 const handleLine = async (ctx: Context, line: string): Promise<void> => {
-  const parsed = parseStreamLine(line);
-  if (parsed === null) return;
-  const mapped = mapClaudeLine(parsed, ctx.pending, ctx.worktree);
+  const mapped = ctx.adapter.mapLine(line);
+  if (mapped === null) return;
   if (mapped.agentSessionId !== undefined && mapped.agentSessionId !== ctx.agentSessionId) {
     ctx.agentSessionId = mapped.agentSessionId;
     ctx.sessions.setAgentSessionId(ctx.session, ctx.agentSessionId);
@@ -93,11 +109,12 @@ const handleLine = async (ctx: Context, line: string): Promise<void> => {
 };
 
 // Returns a promise so it chains on the line queue like handleLine does.
-const handleExit = (ctx: Context, code: number | null): Promise<void> => {
+const handleExit = (ctx: Context, code: number | null, stderr: string): Promise<void> => {
   ctx.agent = null;
-  ctx.pending.tools.clear();
+  ctx.adapter.reset();
   if (!ctx.closing) {
-    setState(ctx, 'ended', code === null ? 'agent killed' : `agent exited with ${code}`);
+    const why = code === null ? 'agent killed' : `agent exited with ${code}`;
+    setState(ctx, 'ended', stderr === '' ? why : `${why}: ${stderr}`);
   }
   return Promise.resolve();
 };
@@ -105,12 +122,13 @@ const handleExit = (ctx: Context, code: number | null): Promise<void> => {
 const ensureAgent = (ctx: Context): AgentProcess => {
   if (ctx.agent !== null) return ctx.agent;
   const resume = ctx.agentSessionId === null ? {} : { resume: ctx.agentSessionId };
-  const agent = ctx.spawn({ cwd: ctx.worktree, ...resume });
+  const agent = ctx.spawn({ cwd: ctx.worktree, session: ctx.session, ...resume });
   agent.onLine((line) => {
     ctx.queue = ctx.queue.then(() => handleLine(ctx, line));
   });
   agent.onExit((code) => {
-    ctx.queue = ctx.queue.then(() => handleExit(ctx, code));
+    const stderr = agent.stderr();
+    ctx.queue = ctx.queue.then(() => handleExit(ctx, code, stderr));
   });
   ctx.agent = agent;
   return agent;
@@ -149,7 +167,6 @@ export const createSessionSupervisor = (options: SupervisorOptions): SessionSupe
     agentSessionId: options.record.agentSessionId,
     agent: null,
     closing: false,
-    pending: { tools: new Map() },
     queue: Promise.resolve(),
   };
   return {
@@ -158,7 +175,7 @@ export const createSessionSupervisor = (options: SupervisorOptions): SessionSupe
       setState(ctx, on ? 'waiting_user' : 'running');
     },
     interrupt: () => {
-      ctx.agent?.kill();
+      ctx.agent?.interrupt();
     },
     close: async () => {
       ctx.closing = true;

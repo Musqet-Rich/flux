@@ -55,6 +55,9 @@ const createSession = async (
   ctx: HandlerContext,
   params: { repo: string; branch: string; base?: string; agent: 'claude' | 'pi'; title?: string },
 ): Promise<SessionSummary> => {
+  if (!ctx.agents.includes(params.agent)) {
+    throw new DaemonError('agent_unavailable', `${params.agent} is not installed on the box`);
+  }
   const repo = inside(ctx.settings.get().reposDir, params.repo);
   const exists = (await ctx.git.branches(repo)).includes(params.branch);
   const base = await ctx.git.revParse(repo, params.base ?? (exists ? params.branch : 'HEAD'));
@@ -104,6 +107,7 @@ export const createSessionHandlers = (ctx: HandlerContext): SessionHandlers => (
       daemon: ctx.daemonName,
       sessions: ctx.sessions.list(),
       vapidPublicKey: ctx.vapidPublicKey,
+      agents: ctx.agents,
     });
   },
   'events.sync': (p) => Promise.resolve(ctx.log.read(p.session, p.since)),
@@ -114,6 +118,7 @@ export const createSessionHandlers = (ctx: HandlerContext): SessionHandlers => (
     ctx.sessions.get(p.session);
     await ctx.closeSupervisor(p.session);
     ctx.sessions.setArchived(p.session, true);
+    ctx.forgetAgentSession(p.session);
     return {};
   },
   'sessions.restart': async (p) => {

@@ -7,10 +7,14 @@ import { createInterface } from 'node:readline';
 
 export interface AgentProcess {
   send: (text: string) => void;
+  // Stops the current run. Claude has no in-band abort, so this ends the process; pi keeps it.
+  interrupt: () => void;
   onLine: (listener: (line: string) => void) => void;
   onExit: (listener: (code: number | null) => void) => void;
   close: () => Promise<number | null>;
   kill: () => void;
+  // The tail of what the agent wrote to stderr, for the reason a session ended.
+  stderr: () => string;
 }
 
 export interface SpawnClaudeOptions {
@@ -39,15 +43,16 @@ const fluxPrompt =
   '(design choices, destructive actions, ambiguous requirements) call flux_ask instead of guessing; ' +
   'call flux_notify with level "done" when the task is complete and "blocked" when you cannot proceed.';
 
+const claudeArgs = (options: SpawnClaudeOptions): string[] => [
+  ...baseArgs,
+  ...(options.resume === undefined ? [] : ['--resume', options.resume]),
+  ...(options.mcpConfig === undefined
+    ? []
+    : ['--mcp-config', options.mcpConfig, '--append-system-prompt', fluxPrompt]),
+];
+
 export const spawnClaude = (options: SpawnClaudeOptions): AgentProcess => {
-  const args = [
-    ...baseArgs,
-    ...(options.resume === undefined ? [] : ['--resume', options.resume]),
-    ...(options.mcpConfig === undefined
-      ? []
-      : ['--mcp-config', options.mcpConfig, '--append-system-prompt', fluxPrompt]),
-  ];
-  const child = spawn(options.command ?? 'claude', args, {
+  const child = spawn(options.command ?? 'claude', claudeArgs(options), {
     cwd: options.cwd,
     env: options.env ?? process.env,
     stdio: ['pipe', 'pipe', 'ignore'],
@@ -74,6 +79,9 @@ export const spawnClaude = (options: SpawnClaudeOptions): AgentProcess => {
       const message = { type: 'user', message: { role: 'user', content: text } };
       child.stdin.write(`${JSON.stringify(message)}\n`);
     },
+    interrupt: () => {
+      child.kill('SIGTERM');
+    },
     onLine: (listener) => {
       lineListeners.push(listener);
     },
@@ -87,5 +95,7 @@ export const spawnClaude = (options: SpawnClaudeOptions): AgentProcess => {
     kill: () => {
       child.kill('SIGTERM');
     },
+    // Claude's stderr is not captured (ADR 0007): its failures arrive as `result` lines.
+    stderr: () => '',
   };
 };
