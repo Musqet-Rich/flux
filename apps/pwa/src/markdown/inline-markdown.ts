@@ -32,6 +32,12 @@ interface Hit {
   end: number;
 }
 
+interface Miss {
+  until: number;
+}
+
+const isHit = (result: Hit | Miss): result is Hit => 'node' in result;
+
 const safeHref = (href: string): string | null => {
   try {
     const url = new URL(href);
@@ -64,25 +70,30 @@ const strongAt = (text: string, at: number): Hit | null => {
   return { node: { kind: 'strong', children }, end: close + 2 };
 };
 
-const linkAt = (text: string, at: number): Hit | null => {
+// A `[` that does not open a link is dead up to its first `]`: every `[` before that `]` finds
+// the same `]`, the same `(` and the same URL, so it fails the same way. Reporting that span
+// lets the scan skip them instead of rescanning to the `]` from each one, which on a 200 KB
+// message of brackets is the difference between quadratic and linear.
+const linkAt = (text: string, at: number): Hit | Miss => {
   const close = text.indexOf(']', at + 1);
-  if (close < 0 || text.charAt(close + 1) !== '(') return null;
+  if (close < 0) return { until: text.length };
+  if (text.charAt(close + 1) !== '(') return { until: close };
   const end = text.indexOf(')', close + 2);
-  if (end < 0) return null;
+  if (end < 0) return { until: text.length };
   const href = safeHref(text.slice(close + 2, end).trim());
-  if (href === null) return null;
+  if (href === null) return { until: close };
   const children = inlineMarkdown(text.slice(at + 1, close));
   return { node: { kind: 'link', href, children }, end: end + 1 };
 };
 
-const hitAt = (text: string, at: number): Hit | null => {
+const hitAt = (text: string, at: number, deadBracket: number): Hit | Miss | null => {
   switch (text.charAt(at)) {
     case '`':
       return codeAt(text, at);
     case '*':
       return strongAt(text, at);
     case '[':
-      return linkAt(text, at);
+      return at < deadBracket ? null : linkAt(text, at);
     default:
       return null;
   }
@@ -91,10 +102,12 @@ const hitAt = (text: string, at: number): Hit | null => {
 export const inlineMarkdown = (text: string): InlineNode[] => {
   const nodes: InlineNode[] = [];
   let plain = '';
+  let deadBracket = 0;
   let i = 0;
   while (i < text.length) {
-    const hit = hitAt(text, i);
-    if (hit === null) {
+    const hit = hitAt(text, i, deadBracket);
+    if (hit !== null && !isHit(hit)) deadBracket = hit.until;
+    if (hit === null || !isHit(hit)) {
       plain += text.charAt(i);
       i += 1;
       continue;

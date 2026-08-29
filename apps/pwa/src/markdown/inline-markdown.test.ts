@@ -53,8 +53,35 @@ const cases: [string, string, InlineNode[]][] = [
     [{ kind: 'link', href: 'https://x/%22%20onclick=%22y', children: [text('a')] }],
   ],
   ['html is text', '<script>alert(1)</script>', [text('<script>alert(1)</script>')]],
+  [
+    'a dead bracket does not hide a later link',
+    '[a] [b](https://x/)',
+    [text('[a] '), { kind: 'link', href: 'https://x/', children: [text('b')] }],
+  ],
+  [
+    'a bracket inside a label is part of the label',
+    '[a [b](https://x/)',
+    [{ kind: 'link', href: 'https://x/', children: [text('a [b')] }],
+  ],
+  [
+    'a label cannot hold a link',
+    '[[b](https://x/)](https://y/)',
+    [{ kind: 'link', href: 'https://x/', children: [text('[b')] }, text('](https://y/)')],
+  ],
 ];
 
 test.each(cases)('%s', (_name, input, expected) => {
   expect(inlineMarkdown(input)).toEqual(expected);
+});
+
+// Brackets that never close, or close without a URL, must not make the scan rescan to the same
+// `]` from every `[`: 200 KB of them is one text run, found in one pass.
+test('a wall of brackets is one text run', () => {
+  for (const wall of [
+    '['.repeat(200 * 1024),
+    '[x]('.repeat(50 * 1024),
+    `${'['.repeat(200 * 1024)}]`,
+  ]) {
+    expect(inlineMarkdown(wall)).toEqual([text(wall)]);
+  }
 });

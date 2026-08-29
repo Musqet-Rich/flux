@@ -86,6 +86,80 @@ test.each(injections)('%s comes out inert', (_name, input, escaped) => {
   for (const a of wrapper.findAll('a')) expect(a.attributes('href')?.startsWith('http')).toBe(true);
 });
 
+// Whatever the agent writes, the tree holds only these tags, and the only attributes are the
+// renderer's own classes and a link's `http(s)` URL: the CSP has no `unsafe-inline`, so an
+// unexpected tag or attribute here is the one thing that could ever run agent text.
+const allowedTags = new Set([
+  'DIV',
+  'P',
+  'UL',
+  'OL',
+  'LI',
+  'PRE',
+  'CODE',
+  'STRONG',
+  'EM',
+  'A',
+  'BLOCKQUOTE',
+  'BR',
+]);
+const classAllowed: Record<string, RegExp> = {
+  DIV: /^markdown$/u,
+  P: /^heading h[123]$/u,
+  PRE: /^open$/u,
+  CODE: /^language-[\w+#.-]+$/u,
+};
+const attributesAllowed = (el: Element): boolean =>
+  [...el.attributes].every(({ name, value }) => {
+    if (name === 'class') return classAllowed[el.tagName]?.test(value) === true;
+    if (el.tagName !== 'A') return false;
+    if (name === 'href') return /^https?:\/\//u.test(value);
+    return (
+      (name === 'rel' && value === 'noopener noreferrer') ||
+      (name === 'target' && value === '_blank')
+    );
+  });
+
+const probes = [
+  '<script>alert(1)</script>',
+  '<img src=x onerror=alert(1)>',
+  '[x](javascript:alert(1))',
+  '[x](JAVASCRIPT:alert(1))',
+  '[x](  javascript:alert(1))',
+  '[x](java\nscript:alert(1))',
+  '[x](data:text/html,<script>alert(1)</script>)',
+  '[x](vbscript:msgbox)',
+  '[x](//evil/)',
+  '[x](https://a.b" onclick="alert(1))',
+  '[x](https://a.b/?q=1) onclick=alert(1)',
+  '![img](https://x/y.png)',
+  '<a href="https://x/">x</a> inline',
+  '&lt;script&gt;alert(1)&lt;/script&gt;',
+  '&#60;script&#62;',
+  '**[**x**](https://u/)**',
+  '```html\n</code></pre><script>alert(1)</script>\n```',
+  '```\n</code></pre><script>alert(1)</script>',
+  '[x](https://x/a(b)c)',
+  '[x](https://x/\u202E\u200B\u0000)',
+  '\u202E<script>\u200B</script>',
+  '# <svg onload=alert(1)>',
+  '> <iframe src=x>',
+  '- <b onmouseover=alert(1)>x</b>',
+  '`</code><script>alert(1)</script>`',
+  '[<script>x</script>](https://x/)',
+  '<script>'.repeat(20 * 1024),
+  '[x](https://x/)'.repeat(15 * 1024),
+];
+
+test.each(probes)('%s never becomes markup', (input) => {
+  const wrapper = render(input);
+  for (const { element } of wrapper.findAll('*')) {
+    expect(allowedTags.has(element.tagName)).toBe(true);
+    expect(attributesAllowed(element)).toBe(true);
+  }
+  expect(wrapper.text().length).toBeGreaterThan(0);
+});
+
 // A long reply must render synchronously (mount is synchronous, so a stall here is a hang).
 test('a 20 KB message renders in one pass', () => {
   const chunk =
