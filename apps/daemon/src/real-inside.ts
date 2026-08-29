@@ -6,9 +6,11 @@ import { inside } from './inside.ts';
 
 // `inside` for a path that will be read or written: the lexical check first, then the path is
 // resolved through its symlinks and must still be under the worktree's real path. The file
-// itself may not exist yet (a write creates it), but its directory must. `.git` is refused:
-// editing the repository's own metadata from a phone can break the worktree or, via
-// `core.hooksPath` and friends, run code on the box.
+// itself may not exist yet (a write creates it), but its directory must. A `.git` segment at
+// any depth (a submodule's too) is refused, on the path as given and again on the resolved
+// one, since a case-insensitive filesystem lets `.GIT` reach the real thing: editing the
+// repository's own metadata from a phone can break the worktree or, via `core.hooksPath` and
+// friends, run code on the box.
 
 export interface RealPath {
   // The path as resolved lexically under the worktree; what the caller asked for.
@@ -32,6 +34,14 @@ const resolve = async (path: string): Promise<{ real: string | null; code: strin
 
 const escape = (root: string): DaemonError => new DaemonError('bad_params', `path escapes ${root}`);
 
+const touchesGit = (root: string, path: string): boolean =>
+  relative(root, path)
+    .split(sep)
+    .some((segment) => segment.toLowerCase() === '.git');
+
+const offLimits = (): DaemonError =>
+  new DaemonError('bad_params', 'the .git directory is off limits');
+
 // A file that does not exist yet resolves as its (existing) directory plus its name.
 const resolveNew = async (root: string, full: string, code: string): Promise<string> => {
   if (code === 'ENOTDIR') throw new DaemonError('bad_params', `not a directory on the way`);
@@ -44,14 +54,12 @@ const resolveNew = async (root: string, full: string, code: string): Promise<str
 
 export const realInside = async (root: string, path: string): Promise<RealPath> => {
   const full = inside(root, path);
-  const first = relative(root, full).split(sep).at(0);
-  if (first === '.git') throw new DaemonError('bad_params', 'the .git directory is off limits');
+  if (touchesGit(root, full)) throw offLimits();
   const rootReal = (await resolve(root)).real;
   if (rootReal === null) throw new DaemonError('not_found', `no such worktree ${root}`);
   const file = await resolve(full);
-  if (file.real !== null) {
-    if (!under(rootReal, file.real)) throw escape(root);
-    return { path: full, real: file.real };
-  }
-  return { path: full, real: await resolveNew(rootReal, full, file.code) };
+  const real = file.real ?? (await resolveNew(rootReal, full, file.code));
+  if (!under(rootReal, real)) throw escape(root);
+  if (touchesGit(rootReal, real)) throw offLimits();
+  return { path: full, real };
 };

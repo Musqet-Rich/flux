@@ -19,6 +19,9 @@ beforeEach(async () => {
   await mkdir(join(target, 'src'), { recursive: true });
   await mkdir(join(target, '.git'));
   await writeFile(join(target, '.git', 'config'), '');
+  await mkdir(join(target, 'sub', '.git'), { recursive: true });
+  await writeFile(join(target, 'sub', '.git', 'HEAD'), '');
+  await symlink(join(target, '.git', 'config'), join(target, 'cfg'));
   await writeFile(join(target, 'a.txt'), 'a');
   await writeFile(join(root, 'outside.txt'), 'o');
   await symlink(join(root, 'outside.txt'), join(target, 'escape.txt'));
@@ -64,13 +67,22 @@ test('refuses a symlinked file or directory that leaves the worktree', async () 
   await expect(realInside(worktree, 'up/new.txt')).rejects.toMatchObject({ code: 'bad_params' });
 });
 
-test('refuses anything under .git', async () => {
-  await expect(realInside(worktree, '.git')).rejects.toMatchObject({ code: 'bad_params' });
-  await expect(realInside(worktree, '.git/config')).rejects.toMatchObject({ code: 'bad_params' });
-  await expect(realInside(worktree, 'src/../.git/hooks')).rejects.toMatchObject({
-    code: 'bad_params',
-  });
+test('refuses a .git segment at any depth, in any case, as given or once resolved', async () => {
+  const refused = [
+    '.git',
+    '.git/config',
+    'src/../.git/hooks',
+    '.GIT/config',
+    'sub/.git/HEAD',
+    'cfg',
+  ];
+  await Promise.all(
+    refused.map((path) =>
+      expect(realInside(worktree, path)).rejects.toMatchObject({ code: 'bad_params' }),
+    ),
+  );
   expect((await realInside(worktree, '.gitignore')).path).toBe(join(worktree, '.gitignore'));
+  expect((await realInside(worktree, 'sub/x.txt')).path).toBe(join(worktree, 'sub/x.txt'));
 });
 
 test('a missing directory is not_found; a file in the way is bad_params', async () => {

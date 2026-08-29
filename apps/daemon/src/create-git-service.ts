@@ -2,7 +2,6 @@ import type { Commit, FileContent, FileStatus, Repo } from '@flux/protocol';
 import { readdir, stat } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 
-import { DaemonError } from './daemon-error.ts';
 import { fileContent } from './file-content.ts';
 import type { GitActions, Runner } from './git-actions.ts';
 import { gitActions } from './git-actions.ts';

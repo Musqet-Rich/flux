@@ -105,7 +105,8 @@ const saveFile = async (
   content: string,
   ifMatch: string | null,
 ): Promise<SaveOutcome> => {
-  const params = ifMatch === null ? { session, path, content } : { session, path, content, ifMatch };
+  const params =
+    ifMatch === null ? { session, path, content } : { session, path, content, ifMatch };
   try {
     const { hash } = await boxLink.call(i, 'fs.write', params);
     return { ok: true, hash };

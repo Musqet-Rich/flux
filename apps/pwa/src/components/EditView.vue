@@ -11,6 +11,7 @@ import type { Store } from '../store/create-store.ts';
 //
 // CodeMirror keeps lines, not line endings: a CRLF file comes back joined with LF, so the
 // ending seen at load is put back on save and the file's bytes only change where it was edited.
+// A file with mixed endings becomes uniform on save (CRLF if any line had it, else LF).
 
 const props = defineProps<{ store: Store; session: string; path: string }>();
 const emit = defineEmits<{ back: [] }>();
@@ -23,6 +24,7 @@ const dirty = ref(false);
 const saving = ref(false);
 const conflict = ref(false);
 const restored = ref(false);
+const dropped = ref(false);
 let hash: string | null = null;
 let eol = '\n';
 let saved = '';
@@ -72,16 +74,19 @@ const mount = async (parent: HTMLElement, doc: string): Promise<void> => {
     readOnly: readOnly.value !== null,
     onChange: changed,
     onSave: () => {
-      void save(hash);
+      if (canSave.value) void save(hash);
     },
   });
 };
 
-// A draft typed over this same version of the file comes back on the screen.
+// A draft typed over this same version of the file comes back on the screen; one typed over
+// an older version is dropped, and the operator is told rather than left to wonder.
 const draftFor = (fileHash: string | null, content: string): string => {
   const draft = props.store.state.drafts[draftKey.value];
-  restored.value = draft !== undefined && draft.hash === fileHash;
-  return restored.value && draft !== undefined ? draft.text : content;
+  if (draft === undefined) return content;
+  restored.value = draft.hash === fileHash;
+  dropped.value = !restored.value;
+  return restored.value ? draft.text : content;
 };
 
 // Reads the file; on a reload the editor takes the fresh text and forgets the local edits.
@@ -146,6 +151,9 @@ onUnmounted(() => {
     <p v-else-if="failure !== null" class="notice">{{ failure }}</p>
     <p v-else-if="readOnly !== null" class="banner">{{ readOnly }}</p>
     <p v-else-if="restored && dirty" class="banner">Unsaved edits restored.</p>
+    <p v-else-if="dropped" class="banner">
+      Older unsaved edits were dropped: the file changed on the box since they were typed.
+    </p>
     <div v-if="conflict" class="banner conflict">
       <span>Changed on the box since you opened it.</span>
       <button type="button" class="secondary" @click="load">Reload</button>

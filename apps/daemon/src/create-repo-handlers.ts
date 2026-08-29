@@ -69,20 +69,38 @@ const listDir = async (worktree: string, path: string) => {
     .map((e) => ({ name: e.name, kind: e.isDirectory() ? ('dir' as const) : ('file' as const) }));
 };
 
+type WorktreeOf = (session: string) => { worktree: string; base: string };
+
+// The worktree file methods. Every path a device names is resolved through its symlinks and
+// must stay inside the worktree; `git.show` at a rev is git's own lookup and needs no path check.
+const fileHandlers = (
+  ctx: HandlerContext,
+  worktreeOf: WorktreeOf,
+): Pick<RepoHandlers, 'git.show' | 'fs.read' | 'fs.write' | 'fs.list'> => ({
+  'git.show': async (p) => {
+    const { worktree } = worktreeOf(p.session);
+    if (p.rev !== 'worktree') return ctx.git.show(worktree, p.path, p.rev);
+    const { real } = await realInside(worktree, p.path);
+    return fileContent.read(real);
+  },
+  'fs.read': async (p) => {
+    const { real } = await realInside(worktreeOf(p.session).worktree, p.path);
+    return fileContent.read(real);
+  },
+  'fs.write': async (p) => {
+    const { real } = await realInside(worktreeOf(p.session).worktree, p.path);
+    return { hash: await fileContent.write(real, p.content, p.ifMatch ?? null) };
+  },
+  'fs.list': async (p) => ({ entries: await listDir(worktreeOf(p.session).worktree, p.path) }),
+});
+
 export const createRepoHandlers = (ctx: HandlerContext): RepoHandlers => {
-  const worktreeOf = (session: string): { worktree: string; base: string } =>
-    ctx.sessions.get(session);
+  const worktreeOf: WorktreeOf = (session) => ctx.sessions.get(session);
   return {
     'git.status': async (p) => ({ files: await ctx.git.status(worktreeOf(p.session).worktree) }),
     'git.diff': async (p) => {
       const record = worktreeOf(p.session);
       return { diff: await ctx.git.diff(record.worktree, record.base, diffOptions(p)) };
-    },
-    'git.show': async (p) => {
-      const { worktree } = worktreeOf(p.session);
-      if (p.rev !== 'worktree') return ctx.git.show(worktree, p.path, p.rev);
-      const { real } = await realInside(worktree, p.path);
-      return fileContent.read(real);
     },
     'git.log': async (p) => ({
       commits: await ctx.git.log(worktreeOf(p.session).worktree, p.limit ?? 50),
@@ -96,15 +114,7 @@ export const createRepoHandlers = (ctx: HandlerContext): RepoHandlers => {
       const base = await prBase(ctx, record, p.base);
       return { url: await ctx.git.pr(record.worktree, prOptions(p, base)) };
     },
-    'fs.read': async (p) => {
-      const { real } = await realInside(worktreeOf(p.session).worktree, p.path);
-      return fileContent.read(real);
-    },
-    'fs.write': async (p) => {
-      const { real } = await realInside(worktreeOf(p.session).worktree, p.path);
-      return { hash: await fileContent.write(real, p.content, p.ifMatch ?? null) };
-    },
-    'fs.list': async (p) => ({ entries: await listDir(worktreeOf(p.session).worktree, p.path) }),
+    ...fileHandlers(ctx, worktreeOf),
     'repos.list': async () => ({ repos: await ctx.git.listRepos(ctx.reposDir) }),
     'pair.request': async (p, peer) => {
       const devPub = base64url.decode(p.devPub);

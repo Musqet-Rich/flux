@@ -219,6 +219,16 @@ test('file access stays inside the worktree and out of .git', async () => {
       expect(call(d.channel, 'fs.read', { session, path })).rejects.toThrow('bad_params'),
     ),
   );
+  await Promise.all(
+    escapes.map((path) =>
+      expect(call(d.channel, 'git.show', { session, path, rev: 'worktree' })).rejects.toThrow(
+        'bad_params',
+      ),
+    ),
+  );
+  expect(
+    await call(d.channel, 'git.show', { session, path: 'README.md', rev: 'worktree' }),
+  ).toMatchObject({ content: '# app\n', binary: false });
   await expect(call(d.channel, 'fs.list', { session, path: '.git' })).rejects.toThrow('bad_params');
   expect(await readFile(join(repo, 'README.md'), 'utf8')).toBe('# app\n');
   // A symlink that stays inside is written through: the link survives, the target changes.

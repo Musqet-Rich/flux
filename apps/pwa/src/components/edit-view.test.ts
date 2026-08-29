@@ -180,6 +180,11 @@ test('a truncated file is read-only with a notice, a binary file is refused', as
   expect(big.find('.banner').text()).toContain('read-only');
   const content = big.find('.editor').element.shadowRoot?.querySelector('.cm-content');
   expect(content?.getAttribute('contenteditable')).toBe('false');
+  // The save shortcut is gated the same way as the button.
+  content?.dispatchEvent(new KeyboardEvent('keydown', { key: 's', metaKey: true, bubbles: true }));
+  content?.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true, bubbles: true }));
+  await flushPromises();
+  expect(box.calls('fs.write')).toEqual([]);
   big.unmount();
   const image = open(box, 'img.png');
   await loaded(image);
@@ -210,12 +215,14 @@ test('leaving keeps a draft that comes back for the same file version, and warns
   expect(second.find('.dirty').exists()).toBe(true);
   expect(second.find('.banner').text()).toBe('Unsaved edits restored.');
   second.unmount();
-  // The box moved on: the draft was typed over an older version and is not applied.
+  // The box moved on: the draft was typed over an older version, is dropped, and says so.
   hash = 'h9';
   const third = open(box);
   await ready(third);
   expect(editorOf(third).doc()).toBe('a');
   expect(third.find('.dirty').exists()).toBe(false);
+  expect(third.find('.banner').text()).toContain('Older unsaved edits were dropped');
+  expect(box.store.state.drafts).toEqual({});
   third.unmount();
   box.store.stop();
 });
