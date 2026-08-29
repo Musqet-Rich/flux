@@ -61,7 +61,7 @@ test('pushes, and shows a failure inline and in the status bar', async () => {
   await until(() => Reflect.get(wrapper.vm, 'failure') !== null);
   await flushPromises();
   expect(wrapper.find('.error').text()).toBe('no git.commit');
-  expect(box.store.state.error).toBe('no git.commit');
+  expect(box.store.state.error?.message).toBe('no git.commit');
   expect(wrapper.emitted('done')).toHaveLength(1);
   box.store.stop();
 });

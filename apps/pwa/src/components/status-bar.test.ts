@@ -15,8 +15,21 @@ test('names the connection state, the daemon, rate windows and the last error', 
   expect(wrapper.find('.status').text()).toBe('Connected to box');
   expect(wrapper.findAll('.window').map((w) => w.text())).toEqual(['5h 42%', '7d 90%']);
   expect(wrapper.findAll('.window.high').length).toBe(1);
-  expect(wrapper.find('.error').text()).toBe('oops');
+  expect(wrapper.find('.error').text()).toContain('oops');
   expect(wrapper.find('.push').exists()).toBe(false);
+});
+
+test('the error carries a labelled button that asks to dismiss it', async () => {
+  const wrapper = mount(StatusBar, {
+    props: { status: 'connected', daemon: null, error: 'oops', push: 'on', rateWindows: [] },
+  });
+  expect(wrapper.find('.error [role="alert"]').text()).toBe('oops');
+  const dismiss = wrapper.find('.error button');
+  expect(dismiss.attributes('aria-label')).toBe('Dismiss error');
+  await dismiss.trigger('click');
+  expect(wrapper.emitted('dismiss')).toEqual([[]]);
+  await wrapper.setProps({ error: null });
+  expect(wrapper.find('.error').exists()).toBe(false);
 });
 
 // Claude also reports windows like `seven_day_overage_included`; on a phone there is room for

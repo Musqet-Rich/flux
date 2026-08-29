@@ -7,7 +7,8 @@ import type { PushState, SessionContext } from '../store/store-state.ts';
 import { formatRenewal } from './format-renewal.ts';
 
 // Connection state, the open session's context-window usage, the agent's rate-limit windows and
-// their renewal times, and the way to turn notifications on, always visible at the bottom.
+// their renewal times, the way to turn notifications on and the last error with a × to dismiss
+// it, always visible at the bottom.
 
 const props = withDefaults(
   defineProps<{
@@ -21,7 +22,7 @@ const props = withDefaults(
   }>(),
   { context: null },
 );
-defineEmits<{ enablePush: [] }>();
+defineEmits<{ enablePush: []; dismiss: [] }>();
 
 const labels: Record<ConnectionStatus, string> = {
   stopped: 'Offline',
@@ -124,7 +125,12 @@ const absolute = computed(() =>
     <button v-if="push === 'off'" type="button" class="secondary push" @click="$emit('enablePush')">
       Enable notifications
     </button>
-    <span v-if="error !== null" class="error">{{ error }}</span>
+    <span v-if="error !== null" class="error">
+      <span role="alert">{{ error }}</span>
+      <button type="button" class="dismiss" aria-label="Dismiss error" @click="$emit('dismiss')">
+        ×
+      </button>
+    </span>
   </footer>
 </template>
 
@@ -209,5 +215,16 @@ const absolute = computed(() =>
 .error {
   color: var(--danger);
   margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.dismiss {
+  background: transparent;
+  color: inherit;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0 0.3rem;
 }
 </style>

@@ -69,7 +69,7 @@ test('shows the box error when a save is refused', async () => {
   const wrapper = mount(AgentConfigEditor, { props: { store: box.store } });
   await wrapper.find('#agent-md').setValue('changed');
   await wrapper.find('form').trigger('submit');
-  await until(() => box.store.state.error === 'no settings.set');
+  await until(() => box.store.state.error?.message === 'no settings.set');
   await flushPromises();
   expect(wrapper.find('.error').text()).toBe('no settings.set');
   box.store.stop();

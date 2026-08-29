@@ -58,7 +58,7 @@ const save = async (): Promise<void> => {
     ...(jsonDirty.value ? { settingsJson: settingsJson.value } : {}),
   };
   const ok = await props.store.saveSettings({ agent: patch });
-  if (!ok) failure.value = props.store.state.error;
+  if (!ok) failure.value = props.store.state.error?.message ?? null;
   busy.value = false;
 };
 </script>

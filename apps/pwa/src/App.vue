@@ -13,6 +13,7 @@ import { appStore } from './store/app-store.ts';
 const store = appStore;
 const router = createRouter(browserHistory);
 const paired = computed(() => store.state.phase === 'paired');
+const error = computed(() => store.state.error?.message ?? null);
 
 // A pairing link lands here with its payload in the fragment (protocol.md § 1); it is cleared
 // before anything else reads the URL so it never survives a reload.
@@ -32,7 +33,7 @@ onMounted(() => {
 <template>
   <div class="app">
     <Shell v-if="paired" :store="store" :router="router" />
-    <Pair v-else :phase="store.state.phase" :error="store.state.error" @pair="store.pair" />
+    <Pair v-else :phase="store.state.phase" :error="error" @pair="store.pair" />
   </div>
 </template>
 
