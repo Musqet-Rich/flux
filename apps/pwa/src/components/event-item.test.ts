@@ -4,8 +4,13 @@ import { expect, test } from 'vitest';
 
 import EventItem from './EventItem.vue';
 
-const ev = (type: string, payload: unknown): FluxEvent =>
-  ({ seq: 1, ts: '2026-01-01T00:00:00Z', session: 's1', type, payload }) as FluxEvent;
+const ev = (type: string, payload: unknown): FluxEvent => ({
+  seq: 1,
+  ts: '2026-01-01T00:00:00Z',
+  session: 's1',
+  type,
+  payload,
+});
 
 test('renders messages as bubbles on the right side', () => {
   const user = mount(EventItem, { props: { event: ev('msg.user', { text: 'hello' }) } });
@@ -42,9 +47,35 @@ test('everything else is a one-line note', () => {
     [ev('notify', { level: 'blocked', summary: 'stuck' }), 'stuck'],
     [ev('files.changed', { files: [{ path: 'a', status: 'M' }] }), '1 file(s) changed'],
     [ev('comment.sent', { commentIds: ['a', 'b'], msgSeq: 3 }), '2 comment(s) sent'],
-    [ev('raw', { agent: 'claude', data: null }), 'raw event'],
   ];
   for (const [event, text] of notes) {
     expect(mount(EventItem, { props: { event } }).find('.note').text()).toBe(text);
   }
+});
+
+// A newer box may log types this build does not know (protocol.md § 8); they render like raw.
+test('raw and unknown types show their name with the payload behind a tap', async () => {
+  const raw = mount(EventItem, {
+    props: { event: ev('raw', { agent: 'claude', data: { k: 1 } }) },
+  });
+  expect(raw.find('.summary').text()).toBe('raw event');
+  await raw.find('.summary').trigger('click');
+  expect(raw.find('.detail').text()).toContain('"k": 1');
+  expect(raw.find('.detail').text()).toContain('"agent": "claude"');
+  const future = mount(EventItem, { props: { event: ev('msg.future', { any: 'thing' }) } });
+  expect(future.find('.summary').text()).toBe('msg.future event');
+  expect(future.find('.detail').exists()).toBe(false);
+  await future.find('.summary').trigger('click');
+  expect(future.find('.detail').text()).toContain('"any": "thing"');
+});
+
+// Tool output and raw agent lines can run to hundreds of KB; the detail is cut at 64 KiB.
+test('a long detail is truncated with a marker', async () => {
+  const wrapper = mount(EventItem, {
+    props: { event: ev('raw', { agent: 'claude', data: 'x'.repeat(100 * 1024) }) },
+  });
+  await wrapper.find('.summary').trigger('click');
+  const text = wrapper.find('.detail').text();
+  expect(text.length).toBeLessThan(65 * 1024);
+  expect(text.endsWith('… truncated at 64 KiB')).toBe(true);
 });

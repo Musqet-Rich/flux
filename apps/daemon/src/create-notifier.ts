@@ -1,5 +1,5 @@
 import type { FluxEvent } from '@flux/protocol';
-import { base64url } from '@flux/protocol';
+import { base64url, fluxEvent } from '@flux/protocol';
 
 import type { PushStore } from './create-push-store.ts';
 import type { VapidKeys } from './web-push/vapid-token.ts';
@@ -34,6 +34,7 @@ const messageFor = (
   event: FluxEvent,
   wasRunning: (session: string) => boolean,
 ): PushMessage | null => {
+  if (!fluxEvent.isKnown(event)) return null;
   const base = { session: event.session, type: event.type };
   if (event.type === 'ask') return { ...base, summary: event.payload.question };
   if (event.type === 'notify' && event.payload.level !== 'info') {
@@ -54,7 +55,7 @@ export const createNotifier = async (options: NotifierOptions): Promise<Notifier
   const running = new Set<string>();
   const track = (event: FluxEvent): boolean => {
     const was = running.has(event.session);
-    if (event.type === 'session.state') {
+    if (fluxEvent.isKnown(event) && event.type === 'session.state') {
       if (event.payload.state === 'running') running.add(event.session);
       else running.delete(event.session);
     }

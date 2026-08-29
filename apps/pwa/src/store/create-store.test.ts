@@ -21,8 +21,13 @@ const summary = (session: string, extra: Partial<SessionSummary> = {}): SessionS
   ...extra,
 });
 
-const ev = (seq: number, type: string, payload: unknown, session = 's1'): FluxEvent =>
-  ({ seq, ts: '2026-01-01T00:00:00Z', session, type, payload }) as FluxEvent;
+const ev = (seq: number, type: string, payload: unknown, session = 's1'): FluxEvent => ({
+  seq,
+  ts: '2026-01-01T00:00:00Z',
+  session,
+  type,
+  payload,
+});
 
 const boxLog: FluxEvent[] = [
   ev(1, 'session.created', {
@@ -166,6 +171,31 @@ test('a gap in seq triggers a sync that brings in the missed events and the late
   await relay.emit(ev(4, 'session.state', { state: 'idle' }));
   await until(() => store.state.logs['s1']?.lastSeq === 4);
   expect(called('events.sync').length).toBe(syncsBefore + 1);
+  boxLog.splice(2);
+});
+
+// A newer box may emit types this build does not know (protocol.md § 8). One arriving live is
+// applied like any other so seq stays gapless; one inside a sync page does not poison the page.
+test('unknown event types are applied live and accepted from a sync page', async () => {
+  const { store, link, relay, called } = await setup();
+  await store.pair('https://relay.example', link());
+  await store.open('s1');
+  const syncsBefore = called('events.sync').length;
+  const live = ev(3, 'msg.future', { any: 'thing' });
+  boxLog.push(live);
+  await relay.emit(live);
+  await until(() => store.state.logs['s1']?.lastSeq === 3);
+  expect(called('events.sync').length).toBe(syncsBefore);
+  boxLog.push(ev(4, 'tool.future', null), ev(5, 'session.state', { state: 'running' }));
+  await relay.emit(ev(6, 'msg.assistant', { text: 'after' }));
+  await until(() => store.state.logs['s1']?.lastSeq === 5);
+  expect(store.state.logs['s1']?.events.map((e) => e.type)).toEqual([
+    'session.created',
+    'msg.user',
+    'msg.future',
+    'tool.future',
+    'session.state',
+  ]);
   boxLog.splice(2);
 });
 

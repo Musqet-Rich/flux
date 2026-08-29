@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { LineRange } from '@flux/protocol';
+import { fluxEvent } from '@flux/protocol';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 
 import { ClientError } from '../client/client-error.ts';
@@ -38,7 +39,9 @@ const lines = computed(() => {
 const baseRev = (): string | null => {
   const events = props.store.state.logs[props.session]?.events ?? [];
   const created = events.find((e) => e.type === 'session.created');
-  return created?.type === 'session.created' ? created.payload.base : null;
+  return created !== undefined && fluxEvent.isKnown(created) && created.type === 'session.created'
+    ? created.payload.base
+    : null;
 };
 
 // Only "the base has no such file" is an addition; any other failure is shown as one.

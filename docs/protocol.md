@@ -194,7 +194,18 @@ type FluxEvent =
   | Envelope<'comment.sent', { commentIds: string[]; msgSeq: number }>
 
   // escape hatch
-  | Envelope<'raw', { agent: string; data: unknown }>;
+  | Envelope<'raw', { agent: string; data: unknown }>
+
+  // any type added after this build shipped (§ 8); payload is opaque
+  | UnknownEvent;
+
+interface UnknownEvent {
+  seq: number;
+  ts: string;
+  session: string;
+  type: string; // none of the types above
+  payload: unknown;
+}
 
 interface TokenUsage {
   input: number;
@@ -220,6 +231,7 @@ Rules:
 - `summary` on `tool.start` / `tool.end` is a one-line, human-readable string produced by the adapter (for example `Write src/foo.ts`, `Bash: pnpm test (exit 0)`). The PWA renders summaries and only fetches `input` / `output` on expand.
 - `output` on `tool.end` is capped at 64 KiB by the adapter; longer output is truncated with a marker. Full output is available via the agent's transcript on the box if ever needed.
 - `files.changed` is emitted by the daemon after any `tool.end` whose adapter flags a filesystem write, computed from `git status --porcelain` in the worktree. It reflects the full current set, not a delta.
+- A `type` the receiver does not know is accepted with its payload untouched and kept in the log (§ 8).
 - `msg.user.refs` are the code references rendered into the text sent to the agent. The daemon renders each ref as a fenced block with path and line range plus the referenced lines, so the agent sees the actual code.
 
 ## 6. Ephemeral messages
@@ -283,4 +295,6 @@ Error codes: `bad_params`, `not_found`, `not_paired`, `agent_unavailable`, `git_
 
 ## 8. Versioning
 
-`protocol: 1` is exchanged in `hello` and in the relay's first message. Additive changes (new event types, new optional fields, new RPC methods) do not bump the version; clients must ignore unknown event types and render them as `raw`. Removing or changing the meaning of anything bumps the version.
+`protocol: 1` is exchanged in `hello` and in the relay's first message. Additive changes (new event types, new optional fields, new RPC methods) do not bump the version. Removing or changing the meaning of anything bumps the version.
+
+Unknown event types are version skew, not corruption. A receiver accepts any envelope whose `type` is a string it does not know, with whatever `payload` it carries, both as a live `event` message and inside an `events.sync` page; dropping it would leave a gap in `seq` and force a sync that can never complete. The event is kept in the log and rendered like `raw`: the type name and the payload as opaque JSON. A known type whose payload fails its guard is still rejected.

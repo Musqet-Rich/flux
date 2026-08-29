@@ -1,4 +1,5 @@
 import type { CodeRef, RpcMethods, SessionSummary, TokenUsage } from '@flux/protocol';
+import { fluxEvent } from '@flux/protocol';
 import { join } from 'node:path';
 
 import { DaemonError } from './daemon-error.ts';
@@ -35,7 +36,7 @@ const cost = (ctx: HandlerContext, session: string) => {
   for (;;) {
     const page = ctx.log.read(session, since);
     for (const event of page.events) {
-      if (event.type !== 'turn.ended') continue;
+      if (!fluxEvent.isKnown(event) || event.type !== 'turn.ended') continue;
       turns += 1;
       costUsd += event.payload.costUsd ?? 0;
       for (const key of usageKeys) usage[key] += event.payload.usage?.[key] ?? 0;

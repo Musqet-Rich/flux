@@ -1,5 +1,5 @@
 import type { Ephemeral, FluxEvent, RpcMethods } from '@flux/protocol';
-import { guards, protocolVersion } from '@flux/protocol';
+import { fluxEvent, guards, protocolVersion } from '@flux/protocol';
 
 import { ClientError } from '../client/client-error.ts';
 import type { Connection, ConnectionOptions } from '../client/create-connection.ts';
@@ -95,6 +95,7 @@ const patchSummary = (i: StoreInternals, event: FluxEvent): void => {
   }
   summary.lastSeq = Math.max(summary.lastSeq, event.seq);
   summary.updatedAt = event.ts;
+  if (!fluxEvent.isKnown(event)) return;
   if (event.type === 'session.state') summary.state = event.payload.state;
   else if (event.type === 'session.renamed') summary.title = event.payload.title;
 };
@@ -103,7 +104,9 @@ const onEvent = (i: StoreInternals, event: FluxEvent): void => {
   // Before the connection is adopted (mid-pairing) nothing can be asked back; hello will bring
   // the session list and every open log syncs after it.
   if (i.connection === null) return;
-  if (event.type === 'rate_limit') i.state.rateWindows = event.payload.windows;
+  if (fluxEvent.isKnown(event) && event.type === 'rate_limit') {
+    i.state.rateWindows = event.payload.windows;
+  }
   patchSummary(i, event);
   const log = i.logs.get(event.session);
   if (log === undefined) return;

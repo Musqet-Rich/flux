@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { FileStatus } from '@flux/protocol';
+import { fluxEvent } from '@flux/protocol';
 import { computed, onMounted, ref } from 'vue';
 
 import type { Store } from '../store/create-store.ts';
@@ -17,7 +18,9 @@ const loading = ref(false);
 const fromLog = computed((): FileStatus[] => {
   const events = props.store.state.logs[props.session]?.events ?? [];
   const last = events.findLast((e) => e.type === 'files.changed');
-  return last?.type === 'files.changed' ? last.payload.files : [];
+  return last !== undefined && fluxEvent.isKnown(last) && last.type === 'files.changed'
+    ? last.payload.files
+    : [];
 });
 const files = computed(() => fresh.value ?? fromLog.value);
 
