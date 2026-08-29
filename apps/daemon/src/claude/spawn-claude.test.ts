@@ -12,11 +12,14 @@ const fixture = fileURLToPath(
   new URL('../../test/fixtures/claude/session-two-turns.jsonl', import.meta.url),
 );
 
-const start = (extra: NodeJS.ProcessEnv = {}): AgentProcess =>
+const stubborn = fileURLToPath(new URL('../../test/stubborn-agent.ts', import.meta.url));
+
+const start = (extra: NodeJS.ProcessEnv = {}, command = fake): AgentProcess =>
   spawnClaude({
     cwd: process.cwd(),
-    command: fake,
+    command,
     env: { ...process.env, FLUX_FAKE_FIXTURE: fixture, ...extra },
+    close: { graceMs: 100 },
   });
 
 // Collects lines until a `result` line arrives, which ends a turn.
@@ -55,5 +58,15 @@ test('kill ends the process', async () => {
     agent.onExit(resolve);
   });
   agent.kill();
+  expect(await exit).toBeNull();
+});
+
+// An agent blocked inside an MCP call ignores stdin EOF and SIGTERM; close still returns.
+test('close ends an agent that ignores EOF and SIGTERM', async () => {
+  const agent = start({}, stubborn);
+  const exit = new Promise<number | null>((resolve) => {
+    agent.onExit(resolve);
+  });
+  expect(await agent.close()).toBeNull();
   expect(await exit).toBeNull();
 });

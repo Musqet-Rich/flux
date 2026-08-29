@@ -21,15 +21,16 @@ test('a timeout resolves the ask with an empty answer', async () => {
   vi.useRealTimers();
 });
 
-test('close settles everything still pending', async () => {
+test('close settles everything still pending as aborted', async () => {
   const asks = createAskRegistry();
   const a = asks.ask('x', 60_000);
   const b = asks.ask('y', 60_000);
   asks.close();
   expect(await Promise.all([a, b])).toEqual([
-    { answer: '', by: 'timeout' },
-    { answer: '', by: 'timeout' },
+    { answer: '', by: 'aborted' },
+    { answer: '', by: 'aborted' },
   ]);
+  expect(asks.pending()).toEqual([]);
 });
 
 test('an aborted signal settles the ask as aborted, and a late answer is refused', async () => {

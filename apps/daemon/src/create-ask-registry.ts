@@ -1,6 +1,7 @@
 // Pending `flux_ask` questions (architecture.md § Flux tools). The MCP tool blocks on `ask`
 // until the operator answers from a device or the timeout fires; either way exactly one answer
-// is delivered, and the caller is told which.
+// is delivered, and the caller is told which. `close` is the daemon stopping: every pending ask
+// settles as aborted, so its card closes and the agent is free to be shut down (ADR 0017).
 
 export interface Answer {
   answer: string;
@@ -52,7 +53,7 @@ export const createAskRegistry = (): AskRegistry => {
     pending: () => [...pending.keys()],
     close: () => {
       // Deleting during iteration is safe for a Map: removed keys are simply not visited.
-      for (const askId of pending.keys()) settle(askId, { answer: '', by: 'timeout' });
+      for (const askId of pending.keys()) settle(askId, { answer: '', by: 'aborted' });
     },
   };
 };

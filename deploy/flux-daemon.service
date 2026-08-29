@@ -28,11 +28,13 @@ Environment=PATH=/home/flux/.local/bin:/usr/local/bin:/usr/bin:/bin
 ExecStart=/usr/bin/node /home/flux/flux/apps/daemon/dist/index.mjs daemon
 Restart=always
 RestartSec=5
-# Exit 2 is a configuration error (missing FLUX_RELAY_URL, unknown command): restarting
-# cannot fix it, so stay down and let journalctl show why.
-RestartPreventExitStatus=2
-# SIGTERM goes to the daemon first, which stops its agents; anything left gets killed after
-# the timeout. Never SIGKILL the daemon while an agent process is still running under it.
+# Exit 2 is a configuration error (missing FLUX_RELAY_URL, unknown command) and exit 3 is
+# another daemon holding the data dir (ADR 0017): restarting cannot fix either, so stay down
+# and let journalctl show why.
+RestartPreventExitStatus=2 3
+# SIGTERM goes to the daemon first, which stops its agents within its own 10 s budget (stdin
+# EOF, SIGTERM, then SIGKILL of each agent's process group; ADR 0017); anything left gets
+# killed after the timeout, which must stay above that budget.
 KillMode=mixed
 TimeoutStopSec=60
 

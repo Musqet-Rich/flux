@@ -136,3 +136,19 @@ test('thinking and vcs signals go out as ephemerals and never touch the log', as
   ]);
   await supervisor.close();
 });
+
+// Closing is deliberate (stop, archive, restart): a session caught mid-turn is idle afterwards,
+// not running for ever, so the PWA's status is truthful and the next message resumes it.
+test('close leaves a running session idle, with the reason logged', async () => {
+  const silent: AgentAdapter = { mapLine: () => ({ events: [] }), reset: () => {} };
+  const { supervisor, log, sessions } = await setup({}, silent);
+  await supervisor.send('go');
+  expect(supervisor.state()).toBe('running');
+  await supervisor.close();
+  expect(supervisor.state()).toBe('idle');
+  expect(sessions.get('s1').state).toBe('idle');
+  expect(log.read('s1', 0).events.at(-1)?.payload).toEqual({
+    state: 'idle',
+    reason: 'agent closed',
+  });
+});

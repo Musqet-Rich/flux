@@ -1,6 +1,7 @@
 import type { Ephemeral, FluxEvent } from '@flux/protocol';
 
 import { claudeAdapter } from './claude/claude-adapter.ts';
+import type { CloseChildOptions } from './close-child.ts';
 import type { AgentProcess } from './claude/spawn-claude.ts';
 import { spawnClaude } from './claude/spawn-claude.ts';
 import type { EventLog } from './create-event-log.ts';
@@ -41,7 +42,16 @@ export interface SupervisorPoolOptions {
   env?: (session: string) => NodeJS.ProcessEnv;
   emit: (event: FluxEvent) => void;
   emitEphemeral: (message: Ephemeral) => void;
+  // How patiently an agent is closed (close-child.ts); the daemon's shutdown budget rests on it.
+  closeGraceMs?: number;
 }
+
+const closing = (options: SupervisorPoolOptions, session: string): CloseChildOptions => ({
+  ...(options.closeGraceMs === undefined ? {} : { graceMs: options.closeGraceMs }),
+  log: (stage) => {
+    console.error(`flux daemon: session ${session}: closing agent, ${stage}`);
+  },
+});
 
 const claudeSpawn =
   (options: SupervisorPoolOptions) =>
@@ -51,6 +61,7 @@ const claudeSpawn =
       ...(request.resume === undefined ? {} : { resume: request.resume }),
       ...(options.claudeCommand === undefined ? {} : { command: options.claudeCommand }),
       ...(options.mcpConfig === undefined ? {} : { mcpConfig: options.mcpConfig(request.session) }),
+      close: closing(options, request.session),
     });
 
 const piSpawn =
@@ -65,6 +76,7 @@ const piSpawn =
       ...(pi.provider === undefined ? {} : { provider: pi.provider }),
       ...(pi.model === undefined ? {} : { model: pi.model }),
       ...(options.env === undefined ? {} : { env: options.env(request.session) }),
+      close: closing(options, request.session),
     });
 
 const forAgent = (

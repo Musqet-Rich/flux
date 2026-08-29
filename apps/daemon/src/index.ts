@@ -141,8 +141,48 @@ const daemon = await createDaemon({
   ...(env['FLUX_PI_MODEL'] === undefined ? {} : { piModel: env['FLUX_PI_MODEL'] }),
 });
 
+// SIGTERM stops the daemon within its budget (ADR 0017); a second signal, or the budget
+// running out, exits at once rather than let a stuck agent keep two daemons alive.
+const shutdownBudgetMs = 10_000;
+const installShutdown = (): void => {
+  let stopping = false;
+  const shutdown = (signal: string): void => {
+    if (stopping) {
+      console.error(`flux daemon: second ${signal}, exiting now`);
+      process.exit(1);
+    }
+    stopping = true;
+    console.error(`flux daemon: ${signal}, stopping`);
+    setTimeout(() => {
+      console.error('flux daemon: shutdown budget exceeded, exiting now');
+      process.exit(1);
+    }, shutdownBudgetMs).unref();
+    daemon
+      .stop()
+      .then(() => process.exit(0))
+      .catch(() => process.exit(1));
+  };
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+};
+
+const startDaemon = async (): Promise<void> => {
+  try {
+    const settled = await daemon.start();
+    if (settled.asks > 0 || settled.sessions > 0) {
+      console.log(
+        `flux daemon: settled ${settled.asks} orphaned ask(s), ${settled.sessions} stuck session(s)`,
+      );
+    }
+  } catch (error) {
+    if (!(error instanceof DaemonError) || error.code !== 'conflict') throw error;
+    console.error(error.message);
+    process.exit(3);
+  }
+};
+
 if (command === 'daemon') {
-  await daemon.start();
+  await startDaemon();
   console.log(`flux daemon: relay ${relayUrl}`);
   const agents = daemon.agents.length === 0 ? 'none found on PATH' : daemon.agents.join(', ');
   console.log(`flux daemon: agents ${agents}`);
@@ -150,14 +190,7 @@ if (command === 'daemon') {
   // to a person at a terminal; under systemd the operator runs `flux pair` when they mean it.
   if (process.stdout.isTTY) printPairing(daemon.pairingUrl());
   else console.log('run `flux pair` to pair a device');
-  const shutdown = (): void => {
-    daemon
-      .stop()
-      .then(() => process.exit(0))
-      .catch(() => process.exit(1));
-  };
-  process.once('SIGINT', shutdown);
-  process.once('SIGTERM', shutdown);
+  installShutdown();
 } else if (command === 'devices') {
   const sub = process.argv[3] ?? 'ls';
   if (sub === 'rm' && process.argv[4] !== undefined) {

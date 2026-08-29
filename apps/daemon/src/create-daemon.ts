@@ -32,10 +32,16 @@ export interface DaemonConfig {
   piModel?: string;
   // The flux user's `~/.claude`; the PWA edits CLAUDE.md and settings.json there.
   claudeDir: string;
+  // How patiently each agent is closed on stop, per stage (close-child.ts).
+  closeGraceMs?: number;
 }
 
 export interface Daemon {
-  start: () => Promise<void>;
+  // Takes the data dir lock (`conflict` if another daemon holds it), settles what the last
+  // daemon left behind, binds the control socket, connects to the relay.
+  start: () => Promise<ReturnType<Services['settle']>>;
+  // Bounded (ADR 0017): asks abort, control connections drop, agents are closed with
+  // escalation, then the stores close and the lock is released.
   stop: () => Promise<void>;
   pairingUrl: () => string;
   devices: Services['devices']['devices'];
@@ -65,21 +71,37 @@ const revoker =
     await transport().revoke(deviceId);
   };
 
-const assemble = ({ services, supervisors, transport, control, gate, agents }: Parts): Daemon => ({
-  start: () => control.listen().then(transport.start),
-  stop: async () => {
-    transport.stop();
-    await control.close();
-    await supervisors.closeAll();
-    services.close();
-  },
-  pairingUrl: gate.url,
-  devices: services.devices.devices,
-  removeDevice: revoker(services, () => transport),
-  status: transport.status,
-  controlSocket: control.path,
-  agents,
-});
+const assemble = ({ services, supervisors, transport, control, gate, agents }: Parts): Daemon => {
+  let lock: ReturnType<Services['lock']> | null = null;
+  let stopped = false;
+  return {
+    start: async () => {
+      lock = services.lock();
+      const settled = services.settle();
+      await control.listen();
+      transport.start();
+      return settled;
+    },
+    // Idempotent: a signal and a caller can both ask for it, and the second is a no-op.
+    stop: async () => {
+      if (stopped) return;
+      stopped = true;
+      transport.stop();
+      services.asks.close();
+      await control.close();
+      await supervisors.closeAll();
+      services.close();
+      lock?.release();
+      lock = null;
+    },
+    pairingUrl: gate.url,
+    devices: services.devices.devices,
+    removeDevice: revoker(services, () => transport),
+    status: transport.status,
+    controlSocket: control.path,
+    agents,
+  };
+};
 
 const servicesOptions = (config: DaemonConfig): ServicesOptions => ({
   dataDir: config.dataDir,
@@ -136,6 +158,7 @@ export const createDaemon = async (config: DaemonConfig): Promise<Daemon> => {
     ...pool,
     emit,
     emitEphemeral: (data) => void transport.broadcast({ kind: 'ephemeral', data }),
+    ...(config.closeGraceMs === undefined ? {} : { closeGraceMs: config.closeGraceMs }),
   });
   const handlers = createRpcHandlers(
     {

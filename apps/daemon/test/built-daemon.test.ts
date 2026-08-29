@@ -240,3 +240,52 @@ test('flux-mcp initializes and reports a missing, silent or rubbish daemon per c
   expect(await mcp.next()).toEqual({ jsonrpc: '2.0', id: 5, result: {} });
   mcp.kill();
 });
+
+interface Running {
+  child: ReturnType<typeof spawn>;
+  exit: Promise<Exit>;
+  firstLine: Promise<string>;
+}
+
+// The built daemon, left running: resolves once it has printed its first line.
+const startDaemon = (env: Record<string, string>): Running => {
+  const child = spawn(process.execPath, [join(outDir, 'index.mjs'), 'daemon'], {
+    env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let stdout = '';
+  let stderr = '';
+  const firstLine = new Promise<string>((resolve) => {
+    child.stdout?.setEncoding('utf8').on('data', (chunk: string) => {
+      stdout += chunk;
+      const end = stdout.indexOf('\n');
+      if (end !== -1) resolve(stdout.slice(0, end));
+    });
+  });
+  child.stderr?.setEncoding('utf8').on('data', (chunk: string) => {
+    stderr += chunk;
+  });
+  const exit = new Promise<Exit>((resolve) => {
+    child.once('close', (code) => {
+      resolve({ code, stdout, stderr });
+    });
+  });
+  return { child, exit, firstLine };
+};
+
+test('a second flux daemon on the same data dir refuses with exit 3; SIGTERM stops the first', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'flux-two-'));
+  // The relay is never reached: the transport retries in the background and stop() ends it.
+  const env = { HOME: dir, FLUX_DATA_DIR: dir, FLUX_RELAY_URL: 'http://127.0.0.1:9', PATH: '' };
+  const first = startDaemon(env);
+  expect(await first.firstLine).toBe('flux daemon: relay http://127.0.0.1:9');
+  const second = await runFlux(['daemon'], env);
+  expect(second.code).toBe(3);
+  expect(second.stderr).toContain(`another flux daemon (pid ${first.child.pid}) holds`);
+  first.child.kill('SIGTERM');
+  const exit = await first.exit;
+  expect(exit.code).toBe(0);
+  expect(exit.stderr).toContain('SIGTERM, stopping');
+  await expect(access(join(dir, 'daemon.lock'))).rejects.toThrow('ENOENT');
+  await rm(dir, { recursive: true, force: true });
+});
