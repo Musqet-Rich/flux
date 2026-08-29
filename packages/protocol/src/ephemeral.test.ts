@@ -15,6 +15,8 @@ test.each([
   [{ type: 'agent.status', session: 's', status: 'idle' }, true],
   [{ type: 'agent.status', session: 's', status: 'sleeping' }, false],
   [{ type: 'presence', session: 's' }, false],
+  [{ type: 'device.revoked', deviceId: 'd' }, true],
+  [{ type: 'device.revoked' }, false],
   [{ type: 'delta', forSeq: 1, text: '' }, false],
   [{ type: 'delta', session: 1, forSeq: 1, text: '' }, false],
   [null, false],

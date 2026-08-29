@@ -17,6 +17,9 @@ test('stores, replaces by endpoint, lists and removes subscriptions', () => {
   ]);
   store.remove(sub.endpoint);
   expect(store.all()).toHaveLength(1);
+  store.put('d2', { ...sub, endpoint: 'https://push.example/3' });
+  store.removeDevice('d2');
+  expect(store.all()).toEqual([]);
 });
 
 test('rejects anything that is not a subscription', () => {

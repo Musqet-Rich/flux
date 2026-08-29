@@ -4,6 +4,7 @@ import { expect, test } from 'vitest';
 
 import type { Handlers } from '../../test/fake-relay.ts';
 import { createFakeRelay } from '../../test/fake-relay.ts';
+import { settingsFixture } from '../../test/settings-fixture.ts';
 import { until } from '../../test/until.ts';
 import { ClientError } from '../client/client-error.ts';
 import { createMemoryStorage } from '../client/create-memory-storage.ts';
@@ -57,6 +58,13 @@ const boxHandlers = (): Handlers => ({
   'push.subscribe': () => ({}),
   'sessions.list': () => [summary('s1'), summary('s2')],
   'sessions.create': (p) => summary('s3', { branch: p.branch }),
+  'devices.list': () => [
+    { deviceId: 'dev-1', pairedAt: '2026-01-01T00:00:00Z', current: true },
+    { deviceId: 'dev-2', pairedAt: '2026-01-01T00:00:00Z', current: false },
+  ],
+  'devices.remove': () => ({}),
+  'settings.get': () => settingsFixture(),
+  'settings.set': () => settingsFixture({ agent: { claudeMd: '# x', settingsJson: '' } }),
   'git.commit': (p) => ({ sha: `sha-${p.paths?.length ?? 'all'}` }),
   'git.push': () => ({ remote: 'origin', branch: 'main' }),
   'fs.write': (p) => {
@@ -336,4 +344,58 @@ test('boots from the stored box, renders the cache, and re-syncs after a reconne
   expect(store.state.status).toBe('connected');
   expect(called('hello').length).toBe(3);
   store.stop();
+});
+
+test('lists devices, revokes another, and revoking itself forgets the box', async () => {
+  const { store, storage, link, called } = await setup();
+  await store.pair('https://relay.example', link());
+  expect(await store.refreshDevices()).toBe(true);
+  expect(store.state.devices.map((d) => d.deviceId)).toEqual(['dev-1', 'dev-2']);
+  expect(await store.removeDevice('dev-2')).toBe(true);
+  expect(store.state.devices.map((d) => d.deviceId)).toEqual(['dev-1']);
+  expect(store.state.phase).toBe('paired');
+  expect(await store.removeDevice('dev-1')).toBe(true);
+  expect(called('devices.remove').map((c) => c.params)).toEqual([
+    { deviceId: 'dev-2' },
+    { deviceId: 'dev-1' },
+  ]);
+  expect(store.state).toMatchObject({ phase: 'unpaired', status: 'stopped', devices: [] });
+  expect(store.state.error).toContain('removed');
+  expect(await storage.get(pairedBox.storageKey)).toBeUndefined();
+  expect(await store.refreshDevices()).toBe(false);
+});
+
+test('a revoked notice for this device, or a not_paired answer, lands on the pair screen', async () => {
+  const first = await setup();
+  await first.store.pair('https://relay.example', first.link());
+  await first.relay.ephemeral({ type: 'device.revoked', deviceId: 'someone-else' });
+  await first.store.refreshSessions();
+  expect(first.store.state.phase).toBe('paired');
+  await first.relay.ephemeral({ type: 'device.revoked', deviceId: 'dev-1' });
+  await until(() => first.store.state.phase === 'unpaired');
+  expect(first.store.state.error).toContain('no longer paired');
+  expect(await first.store.boot().then(() => first.store.state.phase)).toBe('unpaired');
+  const second = await setup();
+  await second.store.pair('https://relay.example', second.link());
+  delete second.handlers['sessions.list'];
+  await second.store.refreshSessions();
+  expect(second.store.state.phase).toBe('paired');
+  second.handlers['sessions.list'] = () => {
+    throw new Error('unreachable');
+  };
+  second.relay.refuseCall('sessions.list', 'not_paired');
+  await second.store.refreshSessions();
+  expect(second.store.state).toMatchObject({ phase: 'unpaired', sessions: [] });
+  expect(second.store.state.error).toContain('no longer paired');
+});
+
+test('reads and saves settings', async () => {
+  const { store, link, called } = await setup();
+  await store.pair('https://relay.example', link());
+  expect(store.state.settings).toBeNull();
+  expect(await store.refreshSettings()).toBe(true);
+  expect(store.state.settings?.flux.reposDir).toBe('/home/flux/repos');
+  expect(await store.saveSettings({ agent: { claudeMd: '# x' } })).toBe(true);
+  expect(called('settings.set')[0]?.params).toEqual({ agent: { claudeMd: '# x' } });
+  expect(store.state.settings?.agent.claudeMd).toBe('# x');
 });

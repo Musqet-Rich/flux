@@ -29,7 +29,7 @@ const event = (type: FluxEvent['type'], payload: unknown, session = 's1'): FluxE
   // The notifier only reads type, session and payload; the envelope is otherwise irrelevant here.
   ({ seq: 1, ts: '2026-01-01T00:00:00Z', session, type, payload });
 
-const setup = async (statusFor: (url: string) => number) => {
+const setup = async (statusFor: (url: string) => number, muted: string[] = []) => {
   const db = openDatabase(':memory:');
   await createDeviceStore({ db }).identity();
   const push = createPushStore(db);
@@ -39,6 +39,7 @@ const setup = async (statusFor: (url: string) => number) => {
   const notifier = await createNotifier({
     push,
     subject: 'mailto:ops@example.com',
+    enabled: (kind) => !muted.includes(kind),
     fetch: (input) => {
       posted.push(urlOf(input));
       return Promise.resolve(new Response(null, { status: statusFor(urlOf(input)) }));
@@ -58,6 +59,16 @@ test('pushes asks, done/blocked notifies and running→idle to every subscriptio
   await notifier.notify(event('session.state', { state: 'idle' }));
   await notifier.notify(event('msg.user', { text: 'hi' }));
   expect(posted).toHaveLength(6);
+});
+
+test('a muted trigger sends nothing while the others still do', async () => {
+  const { posted, notifier } = await setup(() => 201, ['idle', 'done']);
+  await notifier.notify(event('session.state', { state: 'running' }));
+  await notifier.notify(event('session.state', { state: 'idle' }));
+  await notifier.notify(event('notify', { level: 'done', summary: 'finished' }));
+  expect(posted).toHaveLength(0);
+  await notifier.notify(event('ask', { askId: 'a', question: 'ship?', timeoutAt: 'x' }));
+  expect(posted).toHaveLength(2);
 });
 
 test('forgets subscriptions the push service reports gone', async () => {

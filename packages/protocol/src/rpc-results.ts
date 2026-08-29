@@ -3,6 +3,7 @@ import { fluxEvent } from './flux-event.ts';
 import { guards } from './guards.ts';
 import type {
   Commit,
+  Device,
   DirEntry,
   FileContent,
   FileStatus,
@@ -11,6 +12,7 @@ import type {
   RpcMethods,
   SessionSummary,
 } from './rpc-methods.ts';
+import { settings } from './settings.ts';
 
 // Result guards for every RPC method (protocol.md § 7): the device validates what the box sends
 // back, so a malformed or hostile result cannot reach the UI as a trusted value.
@@ -61,6 +63,14 @@ const isRepo = (v: unknown): v is Repo =>
 const isDirEntry = (v: unknown): v is DirEntry =>
   isRecord(v) && isString(v['name']) && isOneOf(v['kind'], ['file', 'dir']);
 
+const isDevice = (v: unknown): v is Device =>
+  isRecord(v) &&
+  isString(v['deviceId']) &&
+  isOptional(v['name'], isString) &&
+  isString(v['pairedAt']) &&
+  isOptional(v['lastSeenAt'], isString) &&
+  isBoolean(v['current']);
+
 const isContent = (v: unknown): v is FileContent =>
   isRecord(v) &&
   isString(v['content']) &&
@@ -104,4 +114,8 @@ export const rpcResults: ResultGuards = {
   'repos.list': (v): v is { repos: Repo[] } => isRecord(v) && isArrayOf(v['repos'], isRepo),
   'pair.request': (v): v is { deviceId: string } => isRecord(v) && isString(v['deviceId']),
   'push.subscribe': isEmpty,
+  'devices.list': (v): v is Device[] => isArrayOf(v, isDevice),
+  'devices.remove': isEmpty,
+  'settings.get': settings.is,
+  'settings.set': settings.is,
 };

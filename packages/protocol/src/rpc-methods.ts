@@ -2,9 +2,11 @@ import type { AgentKind, CodeRef, SessionState, TokenUsage } from './event-paylo
 import type { FluxEvent } from './flux-event.ts';
 import { guards } from './guards.ts';
 import { isCodeRef } from './is-code-ref.ts';
+import type { Settings, SettingsPatch } from './settings.ts';
+import { settings } from './settings.ts';
 
 // RPC methods (protocol.md § 7): params are validated on the box with the guards below; results
-// are validated on the device with `rpc-results.ts`. Settings and devices are P2 and not listed yet.
+// are validated on the device with `rpc-results.ts`.
 
 export interface SessionSummary {
   session: string;
@@ -49,6 +51,15 @@ export interface FileContent {
   binary: boolean;
   hash?: string;
   truncated?: boolean;
+}
+
+// A paired device as the box lists it; `current` marks the caller's own device.
+export interface Device {
+  deviceId: string;
+  name?: string;
+  pairedAt: string;
+  lastSeenAt?: string;
+  current: boolean;
 }
 
 export interface RpcMethods {
@@ -130,6 +141,10 @@ export interface RpcMethods {
   'repos.list': { params: Record<string, never>; result: { repos: Repo[] } };
   'pair.request': { params: { devPub: string; proof: string }; result: { deviceId: string } };
   'push.subscribe': { params: { subscription: unknown }; result: Record<string, never> };
+  'devices.list': { params: Record<string, never>; result: Device[] };
+  'devices.remove': { params: { deviceId: string }; result: Record<string, never> };
+  'settings.get': { params: Record<string, never>; result: Settings };
+  'settings.set': { params: SettingsPatch; result: Settings };
 }
 
 export type RpcMethod = keyof RpcMethods;
@@ -214,4 +229,9 @@ export const rpcMethods: ParamGuards = {
     isRecord(v) && isString(v['devPub']) && isString(v['proof']),
   'push.subscribe': (v): v is RpcMethods['push.subscribe']['params'] =>
     isRecord(v) && isRecord(v['subscription']),
+  'devices.list': isEmpty,
+  'devices.remove': (v): v is RpcMethods['devices.remove']['params'] =>
+    isRecord(v) && isString(v['deviceId']),
+  'settings.get': isEmpty,
+  'settings.set': settings.isPatch,
 };

@@ -40,6 +40,8 @@ export interface FakeRelay {
   hostJoin: () => void;
   dropGuests: () => void;
   refuseJoins: (error: 'room_full' | null) => void;
+  // Makes the box answer one method with this error code from now on.
+  refuseCall: (method: string, code: string) => void;
   guests: () => number;
 }
 
@@ -58,6 +60,7 @@ interface State {
   handlers: Record<string, ((params: unknown) => unknown) | undefined>;
   hostPresent: boolean;
   refusal: 'room_full' | null;
+  refusedCalls: Map<string, string>;
 }
 
 const later = (fn: () => void): void => {
@@ -91,12 +94,17 @@ const outcome = (id: string, handler: (params: unknown) => unknown, params: unkn
   }
 };
 
+const resultOf = (state: State, id: string, method: string, params: unknown): Wire => {
+  const refused = state.refusedCalls.get(method);
+  if (refused !== undefined) return refuse(id, refused, `${method} refused`);
+  const handler = state.handlers[method];
+  if (handler === undefined) return refuse(id, 'not_found', `no ${method}`);
+  return outcome(id, handler, params);
+};
+
 const answer = (state: State, guest: Guest, id: string, method: string, params: unknown): void => {
   state.calls.push({ method, params });
-  const handler = state.handlers[method];
-  const message =
-    handler === undefined ? refuse(id, 'not_found', `no ${method}`) : outcome(id, handler, params);
-  void reply(guest, message);
+  void reply(guest, resultOf(state, id, method, params));
 };
 
 const boxHandshake = async (state: State, guest: Guest, payload: Bytes): Promise<void> => {
@@ -198,6 +206,7 @@ export const createFakeRelay = async (handlers: Handlers): Promise<FakeRelay> =>
     handlers: handlers as State['handlers'],
     hostPresent: true,
     refusal: null,
+    refusedCalls: new Map(),
   };
   const broadcast = async (message: Wire): Promise<void> => {
     await Promise.all([...state.guests].map((guest) => reply(guest, message)));
@@ -225,6 +234,9 @@ export const createFakeRelay = async (handlers: Handlers): Promise<FakeRelay> =>
     },
     refuseJoins: (error) => {
       state.refusal = error;
+    },
+    refuseCall: (method, code) => {
+      state.refusedCalls.set(method, code);
     },
     guests: () => state.guests.size,
   };

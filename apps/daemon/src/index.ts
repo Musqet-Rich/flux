@@ -15,11 +15,13 @@ import { renderQr } from './qr/render-qr.ts';
 //   FLUX_DATA_DIR    state directory, default ~/.flux
 //   FLUX_REPOS_DIR   directory whose subdirectories are the repositories, default ~/repos
 //   FLUX_CLAUDE      the claude binary, default `claude` on PATH
+//   FLUX_CLAUDE_DIR  the agent's config directory (CLAUDE.md, settings.json), default ~/.claude
 //   FLUX_PUSH_SUBJECT VAPID contact (mailto: or https: URL) shown to push services
 //   FLUX_QR_INVERT   set to 1 on a light terminal; the pairing QR is drawn for a dark one
 // `flux pair` asks a running daemon for a fresh pairing URL over its control socket; devices
 // are managed with `flux devices ls|rm <id>` (which open the database directly, daemon stopped
-// or not).
+// or not) or from the PWA's settings screen. Repos dir and notification triggers can be
+// changed from that screen too; the environment only sets their starting values.
 
 const { isRecord, isString } = guards;
 const env = process.env;
@@ -110,6 +112,7 @@ const daemon = await createDaemon({
   daemonName: `flux@${hostname()}`,
   pushSubject: env['FLUX_PUSH_SUBJECT'] ?? `https://${hostname()}`,
   ...(env['FLUX_CLAUDE'] === undefined ? {} : { claudeCommand: env['FLUX_CLAUDE'] }),
+  claudeDir: env['FLUX_CLAUDE_DIR'] ?? join(home, '.claude'),
 });
 
 if (command === 'daemon') {
@@ -130,10 +133,12 @@ if (command === 'daemon') {
 } else if (command === 'devices') {
   const sub = process.argv[3] ?? 'ls';
   if (sub === 'rm' && process.argv[4] !== undefined) {
-    daemon.removeDevice(process.argv[4]);
+    await daemon.removeDevice(process.argv[4]);
     console.log(`removed ${process.argv[4]}`);
   } else {
-    for (const d of daemon.devices()) console.log(`${d.deviceId}\t${d.name}\t${d.pairedAt}`);
+    for (const d of daemon.devices()) {
+      console.log(`${d.deviceId}\t${d.name}\t${d.pairedAt}\t${d.lastSeenAt ?? 'never seen'}`);
+    }
   }
   await daemon.stop();
 } else {

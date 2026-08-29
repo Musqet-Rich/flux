@@ -115,7 +115,7 @@ export const createRepoHandlers = (ctx: HandlerContext): RepoHandlers => {
       return { url: await ctx.git.pr(record.worktree, prOptions(p, base)) };
     },
     ...fileHandlers(ctx, worktreeOf),
-    'repos.list': async () => ({ repos: await ctx.git.listRepos(ctx.reposDir) }),
+    'repos.list': async () => ({ repos: await ctx.git.listRepos(ctx.settings.get().reposDir) }),
     'pair.request': async (p, peer) => {
       const devPub = base64url.decode(p.devPub);
       const device = await ctx.devices.pair(devPub, base64url.decode(p.proof), 'device');

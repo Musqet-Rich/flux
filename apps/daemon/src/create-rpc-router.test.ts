@@ -9,7 +9,13 @@ import { DaemonError } from './daemon-error.ts';
 const paired: Peer = {
   fingerprint: 'ff',
   publicKey: new Uint8Array(32),
-  device: { deviceId: 'd1', publicKey: new Uint8Array(32), name: 'n', pairedAt: 't' },
+  device: {
+    deviceId: 'd1',
+    publicKey: new Uint8Array(32),
+    name: 'n',
+    pairedAt: 't',
+    lastSeenAt: null,
+  },
 };
 const stranger: Peer = { fingerprint: 'ee', publicKey: new Uint8Array(32), device: null };
 
@@ -52,6 +58,10 @@ const handlers: RpcHandlers = {
   'repos.list': unimplemented,
   'pair.request': (_params, peer) => Promise.resolve({ deviceId: `new-${peer.fingerprint}` }),
   'push.subscribe': unimplemented,
+  'devices.list': unimplemented,
+  'devices.remove': unimplemented,
+  'settings.get': unimplemented,
+  'settings.set': unimplemented,
 };
 
 const router = createRpcRouter(handlers);

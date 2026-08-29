@@ -102,7 +102,13 @@ const setup = async () => {
   const channels = createDeviceChannels({
     identity: { publicKey: box.publicKey, privateKey: box.privateKey },
     roomId,
-    deviceByKey: () => ({ deviceId: 'd1', publicKey: dev.publicKey, name: 'n', pairedAt: 't' }),
+    deviceByKey: () => ({
+      deviceId: 'd1',
+      publicKey: dev.publicKey,
+      name: 'n',
+      pairedAt: 't',
+      lastSeenAt: null,
+    }),
     pairingOpen: () => false,
     onMessage: (_peer, message) => {
       received.push(message);

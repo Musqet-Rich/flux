@@ -84,12 +84,20 @@ const cases: [RpcMethod, unknown, boolean][] = [
   ['pair.request', { devPub: 'p' }, false],
   ['push.subscribe', { subscription: { endpoint: 'https://x' } }, true],
   ['push.subscribe', { subscription: 'x' }, false],
+  ['devices.list', {}, true],
+  ['devices.list', { all: true }, false],
+  ['devices.remove', { deviceId: 'd' }, true],
+  ['devices.remove', {}, false],
+  ['settings.get', {}, true],
+  ['settings.set', {}, true],
+  ['settings.set', { flux: { reposDir: '/r' }, agent: { claudeMd: '' } }, true],
+  ['settings.set', { flux: { reposDir: 1 } }, false],
 ];
 
 test.each(cases)('%s params %j accepted=%s', (method, value, expected) => {
   expect(rpcMethods[method](value)).toBe(expected);
 });
 
-test('covers every method in protocol.md § 7 that is in P1', () => {
-  expect(Object.keys(rpcMethods)).toHaveLength(25);
+test('covers every method in protocol.md § 7', () => {
+  expect(Object.keys(rpcMethods)).toHaveLength(29);
 });

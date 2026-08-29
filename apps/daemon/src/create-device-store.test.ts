@@ -33,7 +33,11 @@ test('a device pairs with a valid proof, and the secret is burned', async () => 
   const devPub = await devKey();
   const proof = await pairing.proof(secret, devPub, box.publicKey);
   const device = await store.pair(devPub, proof, 'phone');
-  expect(device).toMatchObject({ name: 'phone', pairedAt: '2026-08-29T10:00:00.000Z' });
+  expect(device).toMatchObject({
+    name: 'phone',
+    pairedAt: '2026-08-29T10:00:00.000Z',
+    lastSeenAt: null,
+  });
   expect(device?.publicKey).toEqual(devPub);
   expect(store.devices()).toHaveLength(1);
   expect(store.deviceByKey(devPub)?.deviceId).toBe(device?.deviceId);
@@ -79,6 +83,16 @@ test('secrets expire', async () => {
   const proof = await pairing.proof(secret, devPub, box.publicKey);
   clock.t += 1000;
   expect(await store.pair(devPub, proof, 'x')).toBeNull();
+});
+
+test('touch records when a device was last seen', async () => {
+  const { store, clock } = setup();
+  const box = await store.identity();
+  const devPub = await devKey();
+  await store.pair(devPub, await pairing.proof(store.newSecret(), devPub, box.publicKey), 'a');
+  clock.t += 60_000;
+  store.touch(String(store.devices()[0]?.deviceId));
+  expect(store.deviceByKey(devPub)?.lastSeenAt).toBe('2026-08-29T10:01:00.000Z');
 });
 
 test('devices can be removed, unknown ids are not_found', async () => {

@@ -4,27 +4,28 @@ import { execFileSync } from 'node:child_process';
 import { lstat, mkdtemp, mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { afterEach, expect, test } from 'vitest';
 
 import { deviceHandshake } from '../test/device-side.ts';
 import type { FakeRelay } from '../test/fake-relay.ts';
 import { startFakeRelay } from '../test/fake-relay.ts';
+import type { FrameRouter } from '../test/frame-router.ts';
+import { frameRouter } from '../test/frame-router.ts';
 import type { Daemon } from './create-daemon.ts';
 import { createDaemon } from './create-daemon.ts';
 
 // The whole daemon against a fake relay and the fake agent: pair, hello, create a session,
-// send a message, watch events arrive, sync them back.
+// send a message, watch events arrive, sync them back; then a second device, settings, and
+// revocation in both directions.
 
-const fake = fileURLToPath(new URL('../test/fake-claude.ts', import.meta.url));
-const fixture = fileURLToPath(
-  new URL('../test/fixtures/claude/session-two-turns.jsonl', import.meta.url),
-);
+const fake = join(import.meta.dirname, '../test/fake-claude.ts');
+const fixture = join(import.meta.dirname, '../test/fixtures/claude/session-two-turns.jsonl');
 const gitEnv = Object.fromEntries(
   Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')),
 );
 
 let relay: FakeRelay;
+let frames: FrameRouter;
 let daemon: Daemon;
 
 afterEach(async () => {
@@ -49,6 +50,8 @@ const setup = async () => {
     env: gitEnv,
   });
   relay = await startFakeRelay();
+  frames = frameRouter(relay.nextFrame);
+  const claudeDir = join(root, 'claude');
   daemon = await createDaemon({
     dataDir: join(root, 'data'),
     relayUrl: relay.url,
@@ -56,26 +59,38 @@ const setup = async () => {
     daemonName: 'flux@test',
     pushSubject: 'mailto:ops@example.com',
     claudeCommand: fake,
+    claudeDir,
   });
   await daemon.start();
   await relay.host();
-  return { repo, root };
+  return { repo, root, repos, claudeDir };
 };
 
-// A device: parses the pairing URL, handshakes over the fake relay, returns an rpc caller.
-const device = async () => {
+interface Dev {
+  keys: Awaited<ReturnType<typeof handshake.generateKeyPair>>;
+  payload: NonNullable<ReturnType<typeof pairing.parse>>;
+  channel: Channel;
+  next: () => Promise<Bytes>;
+  fingerprint: Bytes;
+}
+
+// A device: parses a fresh pairing URL, handshakes over the fake relay, returns an rpc caller.
+// `keys` lets a device come back with the identity it had.
+const device = async (keys?: Dev['keys']): Promise<Dev> => {
   const url = daemon.pairingUrl();
   const payload = pairing.parse(new URL(url).hash);
   if (payload === null) throw new Error('bad pairing url');
-  const keys = await handshake.generateKeyPair(true);
+  const own = keys ?? (await handshake.generateKeyPair(true));
+  const fingerprint = await room.fingerprint(own.publicKey);
+  const next = frames.register(fingerprint);
   const channel = await deviceHandshake({
-    keys,
+    keys: own,
     boxPub: payload.boxPub,
     roomId: await room.id(payload.boxPub),
     send: relay.send,
-    next: relay.nextFrame,
+    next,
   });
-  return { keys, payload, channel };
+  return { keys: own, payload, channel, next, fingerprint };
 };
 
 const open = async (channel: Channel, data: Bytes): Promise<Wire | null> => {
@@ -85,67 +100,70 @@ const open = async (channel: Channel, data: Bytes): Promise<Wire | null> => {
 
 // Reads frames until one decrypts to a message the predicate accepts (recursion, not a loop:
 // every frame is awaited in turn, which is the point).
-const untilMatch = async (channel: Channel, match: (m: Wire) => boolean): Promise<Wire> => {
-  const message = await open(channel, await relay.nextFrame());
-  return message !== null && match(message) ? message : untilMatch(channel, match);
+const untilMatch = async (d: Dev, match: (m: Wire) => boolean): Promise<Wire> => {
+  const message = await open(d.channel, await d.next());
+  return message !== null && match(message) ? message : untilMatch(d, match);
 };
 
 // Sends an rpc and returns its result, skipping any events broadcast in between.
-const call = async (channel: Channel, method: string, params: unknown): Promise<unknown> => {
+const call = async (d: Dev, method: string, params: unknown): Promise<unknown> => {
   const id = crypto.randomUUID();
   const rpc: Wire = { kind: 'rpc', id, method, params };
-  relay.send(await channel.seal(bytes.fromUtf8(JSON.stringify(rpc))));
-  const message = await untilMatch(channel, (m) => m.kind === 'rpc.result' && m.id === id);
+  relay.send(await d.channel.seal(bytes.fromUtf8(JSON.stringify(rpc))));
+  const message = await untilMatch(d, (m) => m.kind === 'rpc.result' && m.id === id);
   if (message.kind !== 'rpc.result') throw new Error('unreachable');
   if (message.ok) return message.result;
   throw new Error(`${message.error.code}: ${message.error.message}`);
 };
 
-const untilEvent = (channel: Channel, type: string): Promise<Wire> =>
-  untilMatch(channel, (m) => m.kind === 'event' && m.event.type === type);
+const untilEvent = (d: Dev, type: string): Promise<Wire> =>
+  untilMatch(d, (m) => m.kind === 'event' && m.event.type === type);
 
-// Pairs a fresh device with the proof from its pairing URL.
-const pairDevice = async (d: Awaited<ReturnType<typeof device>>): Promise<unknown> => {
+const untilRevoked = (d: Dev): Promise<Wire> =>
+  untilMatch(d, (m) => m.kind === 'ephemeral' && m.data.type === 'device.revoked');
+
+const pair = async (d: Dev): Promise<string> => {
   const proof = await pairing.proof(d.payload.secret, d.keys.publicKey, d.payload.boxPub);
-  return call(d.channel, 'pair.request', {
+  const paired = (await call(d, 'pair.request', {
     devPub: base64url.encode(d.keys.publicKey),
     proof: base64url.encode(proof),
-  });
+  })) as { deviceId: string };
+  return paired.deviceId;
 };
 
-// Reads frames until each channel has seen `wanted[i]` messages, decrypting every frame with
-// every channel: what each device sees, in the order it sees it. A frame out of nonce order
-// makes `open` throw, which fails the test.
-const collect = async (channels: Channel[], wanted: number[]): Promise<Wire[][]> => {
-  const seen: Wire[][] = channels.map(() => []);
-  const step = async (): Promise<Wire[][]> => {
-    if (seen.every((list, i) => list.length >= (wanted[i] ?? 0))) return seen;
-    const data = await relay.nextFrame();
-    const opened = await Promise.all(channels.map((channel) => open(channel, data)));
-    opened.forEach((message, i) => {
-      if (message !== null) seen[i]?.push(message);
-    });
-    return step();
-  };
-  return step();
-};
+// Reads each device's frames until it has seen `wanted[i]` messages: what each device sees, in
+// the order it sees it. A frame out of nonce order makes `open` throw, which fails the test.
+const collect = (devs: Dev[], wanted: number[]): Promise<Wire[][]> =>
+  Promise.all(
+    devs.map(async (d, i) => {
+      const seen: Wire[] = [];
+      const step = async (): Promise<Wire[]> => {
+        if (seen.length >= (wanted[i] ?? 0)) return seen;
+        const message = await open(d.channel, await d.next());
+        if (message !== null) seen.push(message);
+        return step();
+      };
+      return step();
+    }),
+  );
 
 test('pair, create a session, talk to the agent, sync the log', async () => {
   const { repo } = await setup();
   const d = await device();
-  await expect(call(d.channel, 'sessions.list', {})).rejects.toThrow('not_paired');
-  expect(await pairDevice(d)).toMatchObject({ deviceId: expect.any(String) });
+  await expect(call(d, 'sessions.list', {})).rejects.toThrow('not_paired');
+  const deviceId = await pair(d);
+  expect(deviceId).toEqual(expect.any(String));
   expect(daemon.devices()).toHaveLength(1);
-  expect(await call(d.channel, 'hello', { protocol: 1 })).toEqual({
+  expect(await call(d, 'hello', { protocol: 1 })).toEqual({
     protocol: 1,
     daemon: 'flux@test',
     sessions: [],
     vapidPublicKey: expect.stringMatching(/^B[\w-]{86}$/u),
   });
-  expect(await call(d.channel, 'repos.list', {})).toEqual({
+  expect(await call(d, 'repos.list', {})).toEqual({
     repos: [{ path: repo, name: 'app', branches: ['main'] }],
   });
-  const created = await call(d.channel, 'sessions.create', {
+  const created = await call(d, 'sessions.create', {
     repo,
     branch: 'flux/task',
     agent: 'claude',
@@ -153,37 +171,141 @@ test('pair, create a session, talk to the agent, sync the log', async () => {
   });
   expect(created).toMatchObject({ title: 'Task', branch: 'flux/task', state: 'idle' });
   const { session } = created as { session: string };
-  const sent = await call(d.channel, 'agent.send', { session, text: 'go' });
+  const sent = await call(d, 'agent.send', { session, text: 'go' });
   expect(sent).toEqual({ seq: 2 });
-  await untilEvent(d.channel, 'turn.ended');
-  const synced = (await call(d.channel, 'events.sync', { session, since: 0 })) as {
+  await untilEvent(d, 'turn.ended');
+  const synced = (await call(d, 'events.sync', { session, since: 0 })) as {
     events: { seq: number; type: string }[];
     complete: boolean;
   };
   expect(synced.complete).toBe(true);
   expect(synced.events.map((e) => e.seq)).toEqual(synced.events.map((_, i) => i + 1));
   expect(synced.events.map((e) => e.type)).toContain('tool.start');
-  const status = (await call(d.channel, 'git.status', { session })) as { files: unknown[] };
+  const status = (await call(d, 'git.status', { session })) as { files: unknown[] };
   expect(status.files).toEqual([]);
-  expect(await call(d.channel, 'fs.list', { session, path: '.' })).toEqual({
+  expect(await call(d, 'fs.list', { session, path: '.' })).toEqual({
     entries: [{ name: 'README.md', kind: 'file' }],
   });
-  await expect(call(d.channel, 'fs.read', { session, path: '../x' })).rejects.toThrow('bad_params');
-  expect(await call(d.channel, 'sessions.cost', { session })).toMatchObject({ turns: 1 });
-  await call(d.channel, 'sessions.archive', { session });
-  expect(await call(d.channel, 'sessions.list', {})).toEqual([]);
+  await expect(call(d, 'fs.read', { session, path: '../x' })).rejects.toThrow('bad_params');
+  expect(await call(d, 'sessions.cost', { session })).toMatchObject({ turns: 1 });
+  await call(d, 'sessions.archive', { session });
+  expect(await call(d, 'sessions.list', {})).toEqual([]);
+});
+
+// Two devices paired in turn, the second while the first is connected, both past hello.
+const twoDevices = async () => {
+  const { repo } = await setup();
+  const a = await device();
+  const aId = await pair(a);
+  await call(a, 'hello', { protocol: 1 });
+  const b = await device();
+  const bId = await pair(b);
+  await call(b, 'hello', { protocol: 1 });
+  return { repo, a, aId, b, bId };
+};
+
+const listed = (deviceId: string, current: boolean) => ({
+  deviceId,
+  name: 'device',
+  pairedAt: expect.any(String),
+  lastSeenAt: expect.any(String),
+  current,
+});
+
+test('a second device pairs while the first is connected and both receive events', async () => {
+  const { repo, a, aId, b, bId } = await twoDevices();
+  expect(await call(a, 'devices.list', {})).toEqual([listed(aId, true), listed(bId, false)]);
+  expect(await call(b, 'devices.list', {})).toEqual([listed(aId, false), listed(bId, true)]);
+  const created = (await call(a, 'sessions.create', {
+    repo,
+    branch: 'flux/one',
+    agent: 'claude',
+  })) as { session: string };
+  await call(a, 'agent.send', { session: created.session, text: 'go' });
+  await untilEvent(a, 'turn.ended');
+  await untilEvent(b, 'turn.ended');
+});
+
+test('revoking a device cuts it off at once and leaves the other one working', async () => {
+  const { a, aId, b, bId } = await twoDevices();
+  // A revokes B: B is told, its frames are ignored from then on, and A carries on.
+  expect(await call(a, 'devices.remove', { deviceId: bId })).toEqual({});
+  expect(await untilRevoked(b)).toEqual({
+    kind: 'ephemeral',
+    data: { type: 'device.revoked', deviceId: bId },
+  });
+  expect(daemon.devices().map((d) => d.deviceId)).toEqual([aId]);
+  relay.send(await b.channel.seal(bytes.fromUtf8('{"kind":"rpc","id":"x","method":"hello"}')));
+  // The box answers frames in order, so A's answer arriving proves B's frame was dropped.
+  await call(a, 'sessions.list', {});
+  expect(frames.pending(b.fingerprint)).toBe(0);
+  await expect(call(a, 'devices.remove', { deviceId: bId })).rejects.toThrow('not_found');
+  // B comes back with the same keys: the pairing window is still open, so it is answered as a
+  // stranger, and a stranger may only pair.
+  const again = await device(b.keys);
+  await expect(call(again, 'hello', { protocol: 1 })).rejects.toThrow('not_paired');
+  expect(await call(a, 'devices.list', {})).toHaveLength(1);
+  // A removes itself: the answer arrives, then the notice, and the trust list is empty.
+  expect(await call(a, 'devices.remove', { deviceId: aId })).toEqual({});
+  await untilRevoked(a);
+  expect(daemon.devices()).toEqual([]);
+});
+
+test('settings: runtime values persist, env is read-only, agent config files are edited', async () => {
+  const { repos, claudeDir } = await setup();
+  const d = await device();
+  await pair(d);
+  const initial = (await call(d, 'settings.get', {})) as {
+    flux: unknown;
+    env: unknown;
+    agent: unknown;
+  };
+  expect(initial).toEqual({
+    flux: {
+      reposDir: repos,
+      defaultAgent: 'claude',
+      notifyOnAsk: true,
+      notifyOnIdle: true,
+      notifyOnDone: true,
+    },
+    env: {
+      relayUrl: relay.url,
+      dataDir: expect.stringContaining('data'),
+      daemonName: 'flux@test',
+      pushSubject: 'mailto:ops@example.com',
+      claudeCommand: fake,
+    },
+    agent: { claudeMd: '', settingsJson: '' },
+  });
+  const updated = await call(d, 'settings.set', {
+    flux: { notifyOnIdle: false, defaultAgent: 'pi' },
+    agent: { claudeMd: '# Be terse\n', settingsJson: '{"model":"opus"}' },
+  });
+  expect(updated).toMatchObject({
+    flux: { notifyOnIdle: false, defaultAgent: 'pi', reposDir: repos },
+    agent: { claudeMd: '# Be terse\n', settingsJson: '{"model":"opus"}' },
+  });
+  expect(await readFile(join(claudeDir, 'CLAUDE.md'), 'utf8')).toBe('# Be terse\n');
+  await expect(
+    call(d, 'settings.set', { flux: { reposDir: '/nowhere' }, agent: { settingsJson: '{' } }),
+  ).rejects.toThrow('bad_params');
+  await expect(call(d, 'settings.set', { flux: { reposDir: 'relative' } })).rejects.toThrow(
+    'bad_params',
+  );
+  expect(await call(d, 'settings.get', {})).toEqual(updated);
+  // A repos dir change applies to the next call without a restart.
+  const empty = join(repos, '..', 'empty');
+  await mkdir(empty);
+  await call(d, 'settings.set', { flux: { reposDir: empty } });
+  expect(await call(d, 'repos.list', {})).toEqual({ repos: [] });
 });
 
 // A paired device with one session whose worktree is on disk.
 const pairedSession = async () => {
   const { repo, root } = await setup();
   const d = await device();
-  const proof = await pairing.proof(d.payload.secret, d.keys.publicKey, d.payload.boxPub);
-  await call(d.channel, 'pair.request', {
-    devPub: base64url.encode(d.keys.publicKey),
-    proof: base64url.encode(proof),
-  });
-  const created = (await call(d.channel, 'sessions.create', {
+  await pair(d);
+  const created = (await call(d, 'sessions.create', {
     repo,
     branch: 'flux/edit',
     agent: 'claude',
@@ -197,13 +319,13 @@ const pairedSession = async () => {
 // touching the file.
 test('a paired device edits a file in the worktree, with conflict detection', async () => {
   const { d, session, worktree } = await pairedSession();
-  const read = (await call(d.channel, 'fs.read', { session, path: 'README.md' })) as {
+  const read = (await call(d, 'fs.read', { session, path: 'README.md' })) as {
     content: string;
     hash: string;
     truncated: boolean;
   };
   expect(read).toMatchObject({ content: '# app\n', truncated: false });
-  const saved = (await call(d.channel, 'fs.write', {
+  const saved = (await call(d, 'fs.write', {
     session,
     path: 'README.md',
     content: '# app\n\nedited\n',
@@ -211,14 +333,14 @@ test('a paired device edits a file in the worktree, with conflict detection', as
   })) as { hash: string };
   expect(await readFile(join(worktree, 'README.md'), 'utf8')).toBe('# app\n\nedited\n');
   await expect(
-    call(d.channel, 'fs.write', { session, path: 'README.md', content: 'x', ifMatch: read.hash }),
+    call(d, 'fs.write', { session, path: 'README.md', content: 'x', ifMatch: read.hash }),
   ).rejects.toThrow('conflict');
   expect(await readFile(join(worktree, 'README.md'), 'utf8')).toBe('# app\n\nedited\n');
-  const again = (await call(d.channel, 'fs.read', { session, path: 'README.md' })) as {
+  const again = (await call(d, 'fs.read', { session, path: 'README.md' })) as {
     hash: string;
   };
   expect(again.hash).toBe(saved.hash);
-  const status = (await call(d.channel, 'git.status', { session })) as { files: unknown[] };
+  const status = (await call(d, 'git.status', { session })) as { files: unknown[] };
   expect(status.files).toEqual([{ path: 'README.md', status: 'M' }]);
 });
 
@@ -230,31 +352,28 @@ test('file access stays inside the worktree and out of .git', async () => {
   const escapes = ['../escape.md', '/etc/passwd', 'link.md', '.git/config', '.git'];
   await Promise.all(
     escapes.map((path) =>
-      expect(call(d.channel, 'fs.write', { session, path, content: 'x' })).rejects.toThrow(
-        'bad_params',
-      ),
+      expect(call(d, 'fs.write', { session, path, content: 'x' })).rejects.toThrow('bad_params'),
     ),
   );
   await Promise.all(
     escapes.map((path) =>
-      expect(call(d.channel, 'fs.read', { session, path })).rejects.toThrow('bad_params'),
+      expect(call(d, 'fs.read', { session, path })).rejects.toThrow('bad_params'),
     ),
   );
   await Promise.all(
     escapes.map((path) =>
-      expect(call(d.channel, 'git.show', { session, path, rev: 'worktree' })).rejects.toThrow(
-        'bad_params',
-      ),
+      expect(call(d, 'git.show', { session, path, rev: 'worktree' })).rejects.toThrow('bad_params'),
     ),
   );
-  expect(
-    await call(d.channel, 'git.show', { session, path: 'README.md', rev: 'worktree' }),
-  ).toMatchObject({ content: '# app\n', binary: false });
-  await expect(call(d.channel, 'fs.list', { session, path: '.git' })).rejects.toThrow('bad_params');
+  expect(await call(d, 'git.show', { session, path: 'README.md', rev: 'worktree' })).toMatchObject({
+    content: '# app\n',
+    binary: false,
+  });
+  await expect(call(d, 'fs.list', { session, path: '.git' })).rejects.toThrow('bad_params');
   expect(await readFile(join(repo, 'README.md'), 'utf8')).toBe('# app\n');
   // A symlink that stays inside is written through: the link survives, the target changes.
   await symlink(join(worktree, 'README.md'), join(worktree, 'alias.md'));
-  await call(d.channel, 'fs.write', { session, path: 'alias.md', content: 'via link\n' });
+  await call(d, 'fs.write', { session, path: 'alias.md', content: 'via link\n' });
   expect((await lstat(join(worktree, 'alias.md'))).isSymbolicLink()).toBe(true);
   expect(await readFile(join(worktree, 'README.md'), 'utf8')).toBe('via link\n');
 });
@@ -265,16 +384,18 @@ test('file access stays inside the worktree and out of .git', async () => {
 test('a comment added by one device is an event on both, before the result', async () => {
   const { repo } = await setup();
   const first = await device();
-  await pairDevice(first);
+  await pair(first);
   const second = await device();
-  await pairDevice(second);
+  await pair(second);
   expect(daemon.devices()).toHaveLength(2);
-  const created = await call(first.channel, 'sessions.create', {
+  const created = await call(first, 'sessions.create', {
     repo,
     branch: 'flux/two',
     agent: 'claude',
   });
   const { session } = created as { session: string };
+  // The second device has the session.created broadcast queued; read past it first.
+  await untilEvent(second, 'session.created');
   const ref = { path: 'README.md', rev: 'worktree', range: { startLine: 1, endLine: 1 } };
   const rpc: Wire = {
     kind: 'rpc',
@@ -283,7 +404,7 @@ test('a comment added by one device is an event on both, before the result', asy
     params: { session, ref, text: 'why' },
   };
   relay.send(await second.channel.seal(bytes.fromUtf8(JSON.stringify(rpc))));
-  const [onFirst, onSecond] = await collect([first.channel, second.channel], [1, 2]);
+  const [onFirst, onSecond] = await collect([first, second], [1, 2]);
   const event = { kind: 'event', event: expect.objectContaining({ type: 'comment.added' }) };
   expect(onFirst).toEqual([event]);
   expect(onSecond).toEqual([

@@ -17,6 +17,9 @@ export interface DeviceChannels {
   handleFrame: (data: Bytes, send: (data: Bytes) => void) => Promise<void>;
   broadcast: (message: Wire, send: (data: Bytes) => void) => Promise<void>;
   sendTo: (fingerprint: string, message: Wire, send: (data: Bytes) => void) => Promise<boolean>;
+  // Tells every channel of a device that it is revoked and forgets it. A channel busy
+  // answering an rpc (the device removing itself) gets the answer first, then the notice.
+  revoke: (deviceId: string, send: (data: Bytes) => void) => Promise<void>;
   peers: () => Peer[];
   reset: () => void;
 }
@@ -32,6 +35,9 @@ export interface DeviceChannelsOptions {
 interface Connected {
   peer: Peer;
   channel: Channel;
+  // Frames of this device being answered right now, and whether a revocation waits on them.
+  busy: number;
+  revoked: boolean;
 }
 
 interface State {
@@ -90,7 +96,7 @@ const accept = async (state: State, payload: Bytes, send: Send): Promise<void> =
   const fingerprint = hex(fingerprintBytes);
   const channel = createChannel({ keys, fingerprint: fingerprintBytes });
   const peer = { fingerprint, publicKey: hello.devPub, device };
-  state.connected.set(fingerprint, { peer, channel });
+  state.connected.set(fingerprint, { peer, channel, busy: 0, revoked: false });
   const reply = {
     v: 1,
     boxEph: base64url.encode(ephemeral.publicKey),
@@ -112,11 +118,39 @@ const openWire = async (entry: Connected, data: Bytes): Promise<Wire | null> => 
   }
 };
 
+const notice = (deviceId: string): Wire => ({
+  kind: 'ephemeral',
+  data: { type: 'device.revoked', deviceId },
+});
+
+const disconnect = async (state: State, entry: Connected, send: Send): Promise<void> => {
+  const { device } = entry.peer;
+  state.connected.delete(entry.peer.fingerprint);
+  entry.peer.device = null;
+  if (device !== null) send(await entry.channel.seal(encode(notice(device.deviceId))));
+};
+
+const revoke = async (state: State, deviceId: string, send: Send): Promise<void> => {
+  const entries = [...state.connected.values()].filter(
+    (entry) => entry.peer.device?.deviceId === deviceId,
+  );
+  for (const entry of entries) entry.revoked = true;
+  await Promise.all(
+    entries.filter((entry) => entry.busy === 0).map((entry) => disconnect(state, entry, send)),
+  );
+};
+
 const deliver = async (state: State, entry: Connected, data: Bytes, send: Send): Promise<void> => {
   const message = await openWire(entry, data);
   if (message === null) return;
-  const reply = await state.options.onMessage(entry.peer, message);
-  if (reply !== null) send(await entry.channel.seal(encode(reply)));
+  entry.busy += 1;
+  try {
+    const reply = await state.options.onMessage(entry.peer, message);
+    if (reply !== null) send(await entry.channel.seal(encode(reply)));
+  } finally {
+    entry.busy -= 1;
+  }
+  if (entry.revoked && entry.busy === 0) await disconnect(state, entry, send);
 };
 
 const handleFrame = async (state: State, data: Bytes, send: Send): Promise<void> => {
@@ -144,6 +178,7 @@ export const createDeviceChannels = (options: DeviceChannelsOptions): DeviceChan
       send(await entry.channel.seal(encode(message)));
       return true;
     },
+    revoke: (deviceId, send) => revoke(state, deviceId, send),
     // Sealed and sent per device, never sealed for all and then sent: a channel numbers its
     // frames as it seals them, and a reply sealed after this broadcast (an rpc.result behind
     // the event a handler appended) must not leave before it, or the device refuses the event.

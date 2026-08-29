@@ -2,6 +2,7 @@ import type { CodeRef, RpcMethods, SessionSummary, TokenUsage } from '@flux/prot
 import { fluxEvent } from '@flux/protocol';
 import { join } from 'node:path';
 
+import type { Peer } from './create-device-channels.ts';
 import { DaemonError } from './daemon-error.ts';
 import type { HandlerContext } from './handler-context.ts';
 import { inside } from './inside.ts';
@@ -10,7 +11,10 @@ import { inside } from './inside.ts';
 
 export type SessionHandlers = Pick<
   {
-    [M in keyof RpcMethods]: (params: RpcMethods[M]['params']) => Promise<RpcMethods[M]['result']>;
+    [M in keyof RpcMethods]: (
+      params: RpcMethods[M]['params'],
+      peer: Peer,
+    ) => Promise<RpcMethods[M]['result']>;
   },
   | 'hello'
   | 'events.sync'
@@ -51,7 +55,7 @@ const createSession = async (
   ctx: HandlerContext,
   params: { repo: string; branch: string; base?: string; agent: 'claude' | 'pi'; title?: string },
 ): Promise<SessionSummary> => {
-  const repo = inside(ctx.reposDir, params.repo);
+  const repo = inside(ctx.settings.get().reposDir, params.repo);
   const exists = (await ctx.git.branches(repo)).includes(params.branch);
   const base = await ctx.git.revParse(repo, params.base ?? (exists ? params.branch : 'HEAD'));
   const session = crypto.randomUUID();
@@ -93,13 +97,15 @@ const sendMessage = async (
 };
 
 export const createSessionHandlers = (ctx: HandlerContext): SessionHandlers => ({
-  hello: () =>
-    Promise.resolve({
+  hello: (_p, peer) => {
+    if (peer.device !== null) ctx.devices.touch(peer.device.deviceId);
+    return Promise.resolve({
       protocol: 1,
       daemon: ctx.daemonName,
       sessions: ctx.sessions.list(),
       vapidPublicKey: ctx.vapidPublicKey,
-    }),
+    });
+  },
   'events.sync': (p) => Promise.resolve(ctx.log.read(p.session, p.since)),
   'sessions.list': () => Promise.resolve(ctx.sessions.list()),
   'sessions.cost': (p) => Promise.resolve(cost(ctx, ctx.sessions.get(p.session).session)),

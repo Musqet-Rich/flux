@@ -1,0 +1,62 @@
+import type { Device, RpcMethods, Settings } from '@flux/protocol';
+
+import type { Peer } from './create-device-channels.ts';
+import { DaemonError } from './daemon-error.ts';
+import type { HandlerContext } from './handler-context.ts';
+
+// Device and settings methods of protocol.md § 7 (prd.md P2: pair a second device, revoke a
+// device, edit the box-side and agent config from the PWA).
+
+export type SettingsHandlers = Pick<
+  {
+    [M in keyof RpcMethods]: (
+      params: RpcMethods[M]['params'],
+      peer: Peer,
+    ) => Promise<RpcMethods[M]['result']>;
+  },
+  'devices.list' | 'devices.remove' | 'settings.get' | 'settings.set'
+>;
+
+const listDevices = (ctx: HandlerContext, peer: Peer): Device[] =>
+  ctx.devices.devices().map((d) => {
+    const { deviceId, name, pairedAt } = d;
+    const device: Device = {
+      deviceId,
+      name,
+      pairedAt,
+      current: deviceId === peer.device?.deviceId,
+    };
+    if (d.lastSeenAt !== null) device.lastSeenAt = d.lastSeenAt;
+    return device;
+  });
+
+const readSettings = async (ctx: HandlerContext): Promise<Settings> => ({
+  flux: ctx.settings.get(),
+  env: ctx.env,
+  agent: await ctx.agentConfig.read(),
+});
+
+export const createSettingsHandlers = (ctx: HandlerContext): SettingsHandlers => ({
+  'devices.list': (_p, peer) => Promise.resolve(listDevices(ctx, peer)),
+  'devices.remove': async (p) => {
+    if (ctx.devices.devices().every((d) => d.deviceId !== p.deviceId)) {
+      throw new DaemonError('not_found', `no device ${p.deviceId}`);
+    }
+    await ctx.revokeDevice(p.deviceId);
+    return {};
+  },
+  'settings.get': () => readSettings(ctx),
+  'settings.set': async (p) => {
+    // Both halves are validated before either is written, so a bad patch changes nothing.
+    if (p.agent?.settingsJson !== undefined) {
+      try {
+        JSON.parse(p.agent.settingsJson);
+      } catch {
+        throw new DaemonError('bad_params', 'settings.json is not valid JSON');
+      }
+    }
+    if (p.flux !== undefined) ctx.settings.set(p.flux);
+    if (p.agent !== undefined) await ctx.agentConfig.write(p.agent);
+    return readSettings(ctx);
+  },
+});

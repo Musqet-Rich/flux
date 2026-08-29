@@ -15,6 +15,8 @@ export interface HostTransport {
   status: () => TransportStatus;
   broadcast: (message: Wire) => Promise<void>;
   sendTo: (fingerprint: string, message: Wire) => Promise<boolean>;
+  // Drops every live channel of a revoked device after telling it so.
+  revoke: (deviceId: string) => Promise<void>;
 }
 
 export interface HostTransportOptions {
@@ -153,5 +155,6 @@ export const createHostTransport = (options: HostTransportOptions): HostTranspor
     status: () => state.status,
     broadcast: (message) => options.channels.broadcast(message, out),
     sendTo: (fingerprint, message) => options.channels.sendTo(fingerprint, message, out),
+    revoke: (deviceId) => options.channels.revoke(deviceId, out),
   };
 };

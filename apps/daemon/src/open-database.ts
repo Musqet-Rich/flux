@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 // One SQLite file for everything the daemon persists (ADR 0006). The schema is applied on every
 // open with IF NOT EXISTS; there are no migrations yet, and there will be none until a release.
+// The one exception is a column added after the first build, applied below if it is missing.
 
 const schema = `
   PRAGMA journal_mode = WAL;
@@ -39,7 +40,8 @@ const schema = `
     device_id TEXT PRIMARY KEY,
     public_key BLOB NOT NULL UNIQUE,
     name TEXT NOT NULL,
-    paired_at TEXT NOT NULL
+    paired_at TEXT NOT NULL,
+    last_seen_at TEXT
   );
   CREATE TABLE IF NOT EXISTS push_subscriptions (
     endpoint TEXT PRIMARY KEY,
@@ -53,10 +55,27 @@ const schema = `
     text TEXT NOT NULL,
     sent_seq INTEGER
   );
+  CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
 `;
+
+// Columns a pre-release database lacks, added in place so a box paired before them keeps working.
+const addedColumns = [{ table: 'devices', column: 'last_seen_at', type: 'TEXT' }];
+
+const addMissingColumns = (db: DatabaseSync): void => {
+  for (const { table, column, type } of addedColumns) {
+    const present = db
+      .prepare(`SELECT name FROM pragma_table_info(?) WHERE name = ?`)
+      .get(table, column);
+    if (present === undefined) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  }
+};
 
 export const openDatabase = (path: string): DatabaseSync => {
   const db = new DatabaseSync(path);
   db.exec(schema);
+  addMissingColumns(db);
   return db;
 };

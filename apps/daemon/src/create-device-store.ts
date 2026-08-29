@@ -12,6 +12,7 @@ export interface Device {
   publicKey: Bytes;
   name: string;
   pairedAt: string;
+  lastSeenAt: string | null;
 }
 
 export interface BoxIdentity {
@@ -24,6 +25,8 @@ export interface DeviceStore {
   devices: () => Device[];
   deviceByKey: (publicKey: Bytes) => Device | null;
   remove: (deviceId: string) => void;
+  // Records that the device said hello just now.
+  touch: (deviceId: string) => void;
   newSecret: () => Bytes;
   // Verifies a pairing proof against every live secret; burns the secret on success and
   // after three failures. Returns the new device, or null if no secret matched.
@@ -55,6 +58,7 @@ const toDevice = (row: Record<string, unknown>): Device => ({
   publicKey: toBytes(row['public_key']),
   name: String(row['name']),
   pairedAt: String(row['paired_at']),
+  lastSeenAt: typeof row['last_seen_at'] === 'string' ? row['last_seen_at'] : null,
 });
 
 interface State {
@@ -72,6 +76,7 @@ const statements = (db: DatabaseSync) => ({
     'INSERT INTO devices (device_id, public_key, name, paired_at) VALUES (?, ?, ?, ?)',
   ),
   remove: db.prepare('DELETE FROM devices WHERE device_id = ?'),
+  touch: db.prepare('UPDATE devices SET last_seen_at = ? WHERE device_id = ?'),
 });
 
 // Drops expired secrets and returns the live list (the same array, mutated in place).
@@ -113,6 +118,7 @@ const register = (
     publicKey: devPub,
     name,
     pairedAt: state.now().toISOString(),
+    lastSeenAt: null,
   };
   st.insert.run(device.deviceId, device.publicKey, device.name, device.pairedAt);
   return device;
@@ -167,6 +173,9 @@ export const createDeviceStore = (options: DeviceStoreOptions): DeviceStore => {
       if (st.remove.run(deviceId).changes === 0) {
         throw new DaemonError('not_found', `no device ${deviceId}`);
       }
+    },
+    touch: (deviceId) => {
+      st.touch.run(state.now().toISOString(), deviceId);
     },
     newSecret: () => {
       const value = bytes.random(pairing.secretLength);

@@ -1,4 +1,4 @@
-import type { FluxEvent, RateWindow, SessionSummary } from '@flux/protocol';
+import type { Device, FluxEvent, RateWindow, SessionSummary, Settings } from '@flux/protocol';
 import { reactive } from 'vue';
 
 import type { Connection, ConnectionStatus } from '../client/create-connection.ts';
@@ -39,6 +39,9 @@ export interface StoreState {
   rateWindows: RateWindow[];
   logs: Record<string, LogView>;
   drafts: Record<string, Draft>;
+  // The settings screen's data, fetched when it opens; null until then.
+  devices: Device[];
+  settings: Settings | null;
 }
 
 export interface StoreOptions {
@@ -60,6 +63,8 @@ export interface StoreInternals {
   sync: SyncSession | null;
   vapidPublicKey: string | null;
   refreshing: Promise<void> | null;
+  // The id the box gave this device at pairing; a `device.revoked` notice naming it unpairs.
+  deviceId: string | null;
 }
 
 // A fresh, empty state, before boot.
@@ -74,4 +79,6 @@ export const storeState = (): StoreState =>
     rateWindows: [],
     logs: {},
     drafts: {},
+    devices: [],
+    settings: null,
   });
