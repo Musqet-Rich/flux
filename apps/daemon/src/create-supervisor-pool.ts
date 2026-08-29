@@ -19,6 +19,8 @@ export interface SupervisorPool {
   get: (record: SessionRecord) => SessionSupervisor;
   close: (session: string) => Promise<void>;
   closeAll: () => Promise<void>;
+  // Every agent's group SIGKILLed now, for a shutdown that cannot wait for closeAll.
+  killAll: () => void;
 }
 
 export interface PiOptions {
@@ -91,10 +93,16 @@ const forAgent = (
 
 export const createSupervisorPool = (options: SupervisorPoolOptions): SupervisorPool => {
   const pool = new Map<string, SessionSupervisor>();
+  // Leaves the pool at once (a restart makes a fresh one meanwhile) but stays reachable by
+  // killAll until its agent is gone: a shutdown cut short mid-close must still find it.
+  const leaving = new Set<SessionSupervisor>();
   const close = async (session: string): Promise<void> => {
     const existing = pool.get(session);
     pool.delete(session);
-    if (existing) await existing.close();
+    if (!existing) return;
+    leaving.add(existing);
+    await existing.close();
+    leaving.delete(existing);
   };
   return {
     get: (record) => {
@@ -107,6 +115,9 @@ export const createSupervisorPool = (options: SupervisorPoolOptions): Supervisor
     close,
     closeAll: async () => {
       await Promise.all([...pool.keys()].map((session) => close(session)));
+    },
+    killAll: () => {
+      for (const supervisor of [...pool.values(), ...leaving]) supervisor.kill();
     },
   };
 };

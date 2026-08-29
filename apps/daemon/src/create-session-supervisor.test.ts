@@ -2,8 +2,12 @@ import type { FluxEvent } from '@flux/protocol';
 import { fluxEvent } from '@flux/protocol';
 import { expect, test } from 'vitest';
 
+import { fileURLToPath } from 'node:url';
+
 import { sessionHarness as setup } from '../test/session-harness.ts';
 import type { AgentAdapter, Mapped } from './create-session-supervisor.ts';
+
+const stubborn = fileURLToPath(new URL('../test/stubborn-agent.ts', import.meta.url));
 
 // Resolves once an event matching the predicate has been emitted (after the ones already seen).
 const until = (
@@ -151,4 +155,22 @@ test('close leaves a running session idle, with the reason logged', async () => 
     state: 'idle',
     reason: 'agent closed',
   });
+});
+
+// A shutdown that cannot wait: kill is SIGKILL of the agent's group, so an agent that ignores
+// EOF and SIGTERM (blocked in an MCP call) is gone at once; it is deliberate, so no `ended`.
+test('kill ends a stubborn agent without waiting, deliberately', async () => {
+  const silent: AgentAdapter = { mapLine: () => ({ events: [] }), reset: () => {} };
+  const { supervisor, log, agents } = await setup({}, silent, stubborn);
+  await supervisor.send('go');
+  const exit = new Promise<number | null>((resolve) => {
+    agents[0]?.onExit(resolve);
+  });
+  supervisor.kill();
+  expect(await exit).toBeNull();
+  await supervisor.close();
+  expect(supervisor.state()).toBe('idle');
+  expect(log.read('s1', 0).events.map((e) => e.payload)).not.toContainEqual(
+    expect.objectContaining({ state: 'ended' }),
+  );
 });

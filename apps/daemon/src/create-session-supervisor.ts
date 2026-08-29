@@ -43,6 +43,8 @@ export interface SessionSupervisor {
   waiting: (on: boolean) => void;
   interrupt: () => void;
   close: () => Promise<void>;
+  // The agent's group is SIGKILLed now, nothing awaited (a shutdown that cannot wait).
+  kill: () => void;
   state: () => SessionState;
 }
 
@@ -195,6 +197,10 @@ export const createSessionSupervisor = (options: SupervisorOptions): SessionSupe
       if (ctx.state === 'running' || ctx.state === 'waiting_user') {
         setState(ctx, 'idle', 'agent closed');
       }
+    },
+    kill: () => {
+      ctx.closing = true;
+      ctx.agent?.kill();
     },
     state: () => ctx.state,
   };

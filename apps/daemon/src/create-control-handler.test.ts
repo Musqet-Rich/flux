@@ -31,6 +31,7 @@ const setup = () => {
     },
     interrupt: () => {},
     close: () => Promise.resolve(),
+    kill: () => {},
     state: () => 'running',
   };
   const handle = createControlHandler({

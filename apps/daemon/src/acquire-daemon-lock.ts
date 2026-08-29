@@ -1,4 +1,4 @@
-import { closeSync, openSync, readFileSync, unlinkSync, writeSync } from 'node:fs';
+import { closeSync, openSync, readFileSync, renameSync, unlinkSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { DaemonError } from './daemon-error.ts';
@@ -58,6 +58,19 @@ const remove = (path: string): void => {
   }
 };
 
+// A stale lock is moved aside, not unlinked: of two daemons that both found it stale, only one
+// rename succeeds (the other gets ENOENT), and an unlink here could otherwise remove the lock
+// the winner had just created. Whoever renamed or not, `create` then decides.
+const retire = (path: string): void => {
+  const aside = `${path}.stale`;
+  try {
+    renameSync(path, aside);
+    unlinkSync(aside);
+  } catch {
+    // Someone else moved it first, or it was gone.
+  }
+};
+
 export const acquireDaemonLock = (dataDir: string): DaemonLock => {
   const path = join(dataDir, 'daemon.lock');
   if (!create(path)) {
@@ -65,7 +78,7 @@ export const acquireDaemonLock = (dataDir: string): DaemonLock => {
     if (pid !== null && alive(pid)) {
       throw new DaemonError('conflict', `another flux daemon (pid ${pid}) holds ${path}`);
     }
-    remove(path);
+    retire(path);
     if (!create(path)) throw new DaemonError('conflict', `another flux daemon just took ${path}`);
   }
   return {

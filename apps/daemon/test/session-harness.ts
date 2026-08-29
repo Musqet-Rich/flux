@@ -2,6 +2,7 @@ import type { Ephemeral, FluxEvent } from '@flux/protocol';
 import { fileURLToPath } from 'node:url';
 
 import { claudeAdapter } from '../src/claude/claude-adapter.ts';
+import type { AgentProcess } from '../src/claude/spawn-claude.ts';
 import { spawnClaude } from '../src/claude/spawn-claude.ts';
 import { createEventLog } from '../src/create-event-log.ts';
 import { createGitService } from '../src/create-git-service.ts';
@@ -31,14 +32,17 @@ export interface SessionHarness {
   emitted: FluxEvent[];
   ephemeral: Ephemeral[];
   spawns: SpawnRequest[];
+  // Every process spawned, for a test that must see one exit.
+  agents: AgentProcess[];
   worktree: string;
 }
 
 // `adapter` replaces the real Claude read side, for tests of what the supervisor does with a
-// mapping the fixtures cannot produce.
+// mapping the fixtures cannot produce; `command` replaces the fixture-replaying fake.
 export const sessionHarness = async (
   extraEnv: NodeJS.ProcessEnv = {},
   adapter?: AgentAdapter,
+  command = fake,
 ): Promise<SessionHarness> => {
   const worktree = await tempWorktree();
   const db = openDatabase(':memory:');
@@ -56,6 +60,7 @@ export const sessionHarness = async (
   const emitted: FluxEvent[] = [];
   const ephemeral: Ephemeral[] = [];
   const spawns: SpawnRequest[] = [];
+  const agents: AgentProcess[] = [];
   const supervisor = createSessionSupervisor({
     record,
     log,
@@ -64,12 +69,15 @@ export const sessionHarness = async (
     adapter: adapter ?? claudeAdapter(worktree),
     spawn: (request) => {
       spawns.push(request);
-      return spawnClaude({
+      const agent = spawnClaude({
         cwd: request.cwd,
-        command: fake,
+        command,
         ...(request.resume === undefined ? {} : { resume: request.resume }),
         env: { ...process.env, FLUX_FAKE_FIXTURE: fixture, ...extraEnv },
+        close: { graceMs: 100 },
       });
+      agents.push(agent);
+      return agent;
     },
     emit: (event) => {
       emitted.push(event);
@@ -78,5 +86,5 @@ export const sessionHarness = async (
       ephemeral.push(message);
     },
   });
-  return { supervisor, log, sessions, emitted, ephemeral, spawns, worktree };
+  return { supervisor, log, sessions, emitted, ephemeral, spawns, agents, worktree };
 };

@@ -66,10 +66,6 @@ sudo journalctl -u flux-daemon -n 5  # "flux daemon: relay https://YOUR.DOMAIN"
 
 One daemon per data directory: a second `flux daemon` on the same `FLUX_DATA_DIR` refuses with exit 3 and names the pid that holds it (`~/.flux/daemon.lock`; a stale lock from a crashed daemon is replaced). `systemctl restart` stops the old one first; if you run it by hand, wait for the old process to exit before starting another.
 
-```sh
-
-```
-
 `deploy/.env.example` documents every `FLUX_*` variable. The unit hardens what it can; it cannot lock the filesystem or filter system calls because agents write to it and sandbox themselves. Read the comments before running it on a shared machine.
 
 ### Pair a phone

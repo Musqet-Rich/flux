@@ -6,6 +6,7 @@ import { StringDecoder } from 'node:string_decoder';
 import type { AgentProcess } from '../claude/spawn-claude.ts';
 import type { CloseChildOptions } from '../close-child.ts';
 import { closeChild } from '../close-child.ts';
+import { killChildGroup } from '../kill-child-group.ts';
 
 const { isRecord, isString, isOneOf } = guards;
 
@@ -163,7 +164,7 @@ export const spawnPi = (options: SpawnPiOptions): AgentProcess => {
     },
     close: () => closeChild(child, exited, options.close),
     kill: () => {
-      child.kill('SIGTERM');
+      killChildGroup(child);
     },
     stderr: stderr.text,
   };

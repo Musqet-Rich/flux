@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from 'vitest';
 
@@ -16,16 +17,21 @@ const fixture = fileURLToPath(
 const start = (command: string) => {
   const child = spawn(command, [], {
     env: { ...process.env, FLUX_FAKE_FIXTURE: fixture },
-    stdio: ['pipe', 'ignore', 'ignore'],
+    stdio: ['pipe', 'pipe', 'ignore'],
     detached: true,
   });
   const exited = new Promise<number | null>((resolve) => {
     child.once('exit', resolve);
   });
+  // The stubborn agent's first line: its SIGTERM handler is in place from here on.
+  const ready = new Promise<string>((resolve) => {
+    createInterface({ input: child.stdout }).once('line', resolve);
+  });
   const stages: string[] = [];
   return {
     child,
     exited,
+    ready,
     stages,
     log: (stage: string) => {
       stages.push(stage);
@@ -50,10 +56,8 @@ test('an agent that leaves on stdin EOF is closed at the first stage', async () 
 });
 
 test('an agent that ignores EOF and SIGTERM is killed within the bound', async () => {
-  const { child, exited, stages, log } = start(stubborn);
-  await new Promise<void>((resolve) => {
-    child.once('spawn', resolve);
-  });
+  const { child, exited, ready, stages, log } = start(stubborn);
+  expect(await ready).toBe('ready');
   expect(await closeChild(child, exited, { graceMs: 100, log })).toBeNull();
   expect(stages).toEqual(['stdin closed', 'SIGTERM', 'SIGKILL']);
   expect(gone(child.pid)).toBe(true);

@@ -43,6 +43,9 @@ export interface Daemon {
   // Bounded (ADR 0017): asks abort, control connections drop, agents are closed with
   // escalation, then the stores close and the lock is released.
   stop: () => Promise<void>;
+  // For a shutdown that cannot wait for `stop` (a second signal, its budget spent): every
+  // agent's process group is SIGKILLed and the lock released, synchronously.
+  abandon: () => void;
   pairingUrl: () => string;
   devices: Services['devices']['devices'];
   // Revokes a device: trust, push subscriptions and any live channel (`flux devices rm`).
@@ -77,10 +80,16 @@ const assemble = ({ services, supervisors, transport, control, gate, agents }: P
   return {
     start: async () => {
       lock = services.lock();
-      const settled = services.settle();
-      await control.listen();
-      transport.start();
-      return settled;
+      try {
+        const settled = services.settle();
+        await control.listen();
+        transport.start();
+        return settled;
+      } catch (error) {
+        lock.release();
+        lock = null;
+        throw error;
+      }
     },
     // Idempotent: a signal and a caller can both ask for it, and the second is a no-op.
     stop: async () => {
@@ -88,9 +97,20 @@ const assemble = ({ services, supervisors, transport, control, gate, agents }: P
       stopped = true;
       transport.stop();
       services.asks.close();
+      // The aborted answers reach the control handlers on later microtasks; let them log
+      // `ask.answered` and reply, so an agent blocked in flux_ask gets its tool result and can
+      // leave on stdin EOF, before the connections are destroyed.
+      await new Promise<void>((resolve) => {
+        setImmediate(resolve);
+      });
       await control.close();
       await supervisors.closeAll();
       services.close();
+      lock?.release();
+      lock = null;
+    },
+    abandon: () => {
+      supervisors.killAll();
       lock?.release();
       lock = null;
     },

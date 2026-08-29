@@ -52,21 +52,30 @@ test('reports an unexpected exit', async () => {
   expect(await agent.close()).toBe(1);
 });
 
-test('kill ends the process', async () => {
-  const agent = start();
+// The stubborn agent prints `ready` once its SIGTERM handler is installed.
+const ready = (agent: AgentProcess): Promise<string> =>
+  new Promise((resolve) => {
+    agent.onLine(resolve);
+  });
+
+// An agent blocked inside an MCP call ignores stdin EOF and SIGTERM; kill is SIGKILL of its
+// group and does not wait, close escalates to it and still returns.
+test('kill ends an agent that ignores SIGTERM', async () => {
+  const agent = start({}, stubborn);
   const exit = new Promise<number | null>((resolve) => {
     agent.onExit(resolve);
   });
+  expect(await ready(agent)).toBe('ready');
   agent.kill();
   expect(await exit).toBeNull();
 });
 
-// An agent blocked inside an MCP call ignores stdin EOF and SIGTERM; close still returns.
 test('close ends an agent that ignores EOF and SIGTERM', async () => {
   const agent = start({}, stubborn);
   const exit = new Promise<number | null>((resolve) => {
     agent.onExit(resolve);
   });
+  expect(await ready(agent)).toBe('ready');
   expect(await agent.close()).toBeNull();
   expect(await exit).toBeNull();
 });

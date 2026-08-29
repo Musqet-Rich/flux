@@ -3,6 +3,7 @@ import { createInterface } from 'node:readline';
 
 import type { CloseChildOptions } from '../close-child.ts';
 import { closeChild } from '../close-child.ts';
+import { killChildGroup } from '../kill-child-group.ts';
 
 // Write side of the Claude adapter, StreamJsonInput (ADR 0007): one long-lived headless process
 // per session, user turns written as JSON lines to stdin, output read as JSON lines. The
@@ -16,6 +17,7 @@ export interface AgentProcess {
   onExit: (listener: (code: number | null) => void) => void;
   // Bounded (close-child.ts): stdin EOF, then SIGTERM, then SIGKILL of the process group.
   close: () => Promise<number | null>;
+  // SIGKILL of the process group, nothing awaited: for a shutdown that cannot wait.
   kill: () => void;
   // The tail of what the agent wrote to stderr, for the reason a session ended.
   stderr: () => string;
@@ -97,7 +99,7 @@ export const spawnClaude = (options: SpawnClaudeOptions): AgentProcess => {
     },
     close: () => closeChild(child, exited, options.close),
     kill: () => {
-      child.kill('SIGTERM');
+      killChildGroup(child);
     },
     // Claude's stderr is not captured (ADR 0007): its failures arrive as `result` lines.
     stderr: () => '',

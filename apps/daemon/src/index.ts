@@ -142,20 +142,25 @@ const daemon = await createDaemon({
 });
 
 // SIGTERM stops the daemon within its budget (ADR 0017); a second signal, or the budget
-// running out, exits at once rather than let a stuck agent keep two daemons alive.
+// running out, kills every agent's group and exits at once rather than let a stuck agent keep
+// two daemons alive or outlive this one.
 const shutdownBudgetMs = 10_000;
 const installShutdown = (): void => {
   let stopping = false;
+  const exitNow = (why: string): void => {
+    console.error(`flux daemon: ${why}, killing agents and exiting now`);
+    daemon.abandon();
+    process.exit(1);
+  };
   const shutdown = (signal: string): void => {
     if (stopping) {
-      console.error(`flux daemon: second ${signal}, exiting now`);
-      process.exit(1);
+      exitNow(`second ${signal}`);
+      return;
     }
     stopping = true;
     console.error(`flux daemon: ${signal}, stopping`);
     setTimeout(() => {
-      console.error('flux daemon: shutdown budget exceeded, exiting now');
-      process.exit(1);
+      exitNow('shutdown budget exceeded');
     }, shutdownBudgetMs).unref();
     daemon
       .stop()
