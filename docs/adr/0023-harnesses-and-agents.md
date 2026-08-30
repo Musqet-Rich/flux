@@ -26,10 +26,12 @@ Both harnesses already expose the knobs as spawn flags (`claude -h`, `pi -h`), a
    | --------------- | ------------------------ | ----------------------------------------------------------- |
    | `model`         | `--model <alias>`        | `--model <pattern>` (+ `--provider`, `:thinking` shorthand) |
    | `effort`        | `--effort <level>`       | `--thinking <level>`                                        |
-   | `tools.allow`   | `--allowedTools`         | `--tools`                                                   |
+   | `tools.allow`   | `--tools <names>`        | `--tools`                                                   |
    | `tools.deny`    | `--disallowedTools`      | `--exclude-tools`                                           |
    | `tools.none`    | `--tools ""`             | `--no-tools` / `--no-builtin-tools`                         |
    | `role` (append) | `--append-system-prompt` | `--append-system-prompt`                                    |
+
+   Note (implementation, verified against `claude` 2.1.251): Claude's `--allowedTools` is a _permission_ allow-list, and Flux always spawns with `--dangerously-skip-permissions` (ADR 0007) which makes it inert — it does not restrict which tools exist. Claude's `--tools` (comma-separated, `""` for none) restricts tool _availability_ and is what `tools.allow`/`tools.none` compile to; `tools.deny` uses `--disallowedTools`, which does remove a tool under skip-permissions. MCP tools are unaffected by any of these, which is how the Flux tools floor (§5) survives every mode.
 
    The spec compiles to these **top-level flags, not Claude's `--agents` JSON**, for two reasons: (a) _composition_ — Flux already injects `--append-system-prompt` and its MCP tools (§5); an `--agents` allowlist that dropped them would silently sever the operator channel, whereas top-level flags layer transparently over the existing injection; (b) _neutrality_ — pi has no `--agents` construct but composes the same agent from primitives, so top-level flags are the surface **both** harnesses expose natively. `--agents`/`--agent` personas and pi's `--skill`/`--prompt-template`/`--extension` roles are a later, richer `role` source, not the foundation.
 
