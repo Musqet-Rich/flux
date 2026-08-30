@@ -16,6 +16,13 @@ const cases: [string, string, Route][] = [
     { name: 'diff', session: 'abc', path: 'new.ts', from: 'old.ts' },
   ],
   ['/s/abc/edit', '?path=src%2Fx.ts', { name: 'edit', session: 'abc', path: 'src/x.ts' }],
+  ['/s/abc/files', '', { name: 'files', session: 'abc', path: '' }],
+  ['/s/abc/files', '?path=src%2Fsub', { name: 'files', session: 'abc', path: 'src/sub' }],
+  [
+    '/s/abc/edit',
+    '?path=src%2Fx.ts&dir=src',
+    { name: 'edit', session: 'abc', path: 'src/x.ts', dir: 'src' },
+  ],
 ];
 
 test('paths round-trip through parse and path', () => {

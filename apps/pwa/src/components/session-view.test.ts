@@ -71,7 +71,7 @@ test('raw, rate_limit and files.changed are kept in the log but not shown', asyn
   await flushPromises();
   expect(store.state.logs['s1']?.events.length).toBe(4);
   expect(wrapper.findAll('.item').map((i) => i.text())).toEqual(['hi']);
-  expect(wrapper.find('.toolbar button').text()).toBe('Changes (1)');
+  expect(wrapper.findAll('.toolbar button').map((b) => b.text())).toContain('Changes (1)');
   store.stop();
 });
 
@@ -147,15 +147,34 @@ test('offers to stop a running agent and asks the box to interrupt', async () =>
   const box = await pairedStore([], { 'agent.interrupt': () => ({}) });
   const { store, relay, event } = box;
   const wrapper = mount(SessionView, { props: { store, session: 's1' } });
-  expect(wrapper.findAll('.toolbar button').map((b) => b.text())).toEqual(['Changes (0)', '⋯']);
+  expect(wrapper.findAll('.toolbar button').map((b) => b.text())).toEqual([
+    'Files',
+    'Changes (0)',
+    '⋯',
+  ]);
   await relay.emit(event(1, 'session.state', { state: 'running' }));
   await until(() => store.state.sessions[0]?.state === 'running');
   await flushPromises();
   await wrapper.find('.toolbar button').trigger('click');
   await until(() => box.calls('agent.interrupt').length === 1);
   expect(box.calls('agent.interrupt')).toEqual([{ session: 's1' }]);
-  await wrapper.findAll('.toolbar button')[1]?.trigger('click');
+  await wrapper
+    .findAll('.toolbar button')
+    .find((b) => b.text().startsWith('Changes'))
+    ?.trigger('click');
   expect(wrapper.emitted('changes')).toEqual([[]]);
+  store.stop();
+});
+
+test('the Files button opens the worktree browser', async () => {
+  const box = await pairedStore([]);
+  const { store } = box;
+  const wrapper = mount(SessionView, { props: { store, session: 's1' } });
+  await wrapper
+    .findAll('.toolbar button')
+    .find((b) => b.text() === 'Files')
+    ?.trigger('click');
+  expect(wrapper.emitted('files')).toEqual([[]]);
   store.stop();
 });
 
