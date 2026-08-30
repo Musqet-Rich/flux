@@ -72,6 +72,7 @@ test('lists every event type from protocol.md § 5', () => {
       'task.ended',
       'pr.published',
       'hook.failed',
+      'compact.boundary',
       'raw',
     ].toSorted(),
   );

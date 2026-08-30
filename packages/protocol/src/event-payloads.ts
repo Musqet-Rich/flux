@@ -106,6 +106,18 @@ export interface EventPayloads {
     action: string;
   };
   'hook.failed': { hookName: string; hookEvent: string; exitCode?: number; stderr: string };
+  // Claude Code compacted the conversation (architecture.md § Adapter). `trigger` is the reason
+  // (`manual`, `auto`, … — open set), `preTokens`/`postTokens` the context size before and after,
+  // `durationMs` how long it took, `result` the outcome read from the status line (`success`,
+  // `failure`; open set). The device draws an indeterminate indicator while a compaction is in
+  // flight and this marks it done with the token delta.
+  'compact.boundary': {
+    trigger: string;
+    preTokens: number;
+    postTokens: number;
+    durationMs: number;
+    result: string;
+  };
   raw: { agent: string; data: unknown };
 }
 
@@ -228,5 +240,12 @@ export const eventPayloads: PayloadGuards = {
     isString(v['hookEvent']) &&
     isOptional(v['exitCode'], isInteger) &&
     isString(v['stderr']),
+  'compact.boundary': (v): v is EventPayloads['compact.boundary'] =>
+    isRecord(v) &&
+    isString(v['trigger']) &&
+    isInteger(v['preTokens']) &&
+    isInteger(v['postTokens']) &&
+    isInteger(v['durationMs']) &&
+    isString(v['result']),
   raw: (v): v is EventPayloads['raw'] => isRecord(v) && isString(v['agent']) && 'data' in v,
 };

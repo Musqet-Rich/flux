@@ -150,6 +150,52 @@ const cases: [EventType, unknown, boolean][] = [
   ['hook.failed', { hookName: 'h', hookEvent: 'Stop', exitCode: 2, stderr: 'boom' }, true],
   ['hook.failed', { hookName: 'h', hookEvent: 'Stop', exitCode: 'two', stderr: 'boom' }, false],
   ['hook.failed', { hookName: 'h', hookEvent: 'Stop' }, false],
+  [
+    'compact.boundary',
+    { trigger: 'manual', preTokens: 60065, postTokens: 6202, durationMs: 59369, result: 'success' },
+    true,
+  ],
+  [
+    'compact.boundary',
+    { trigger: 'manual', preTokens: 0, postTokens: 0, durationMs: 0, result: 'failure' },
+    true,
+  ],
+  [
+    'compact.boundary',
+    { trigger: 'manual', preTokens: 60065, postTokens: 6202, durationMs: 59369 },
+    false,
+  ],
+  [
+    'compact.boundary',
+    { trigger: 1, preTokens: 60065, postTokens: 6202, durationMs: 59369, result: 'success' },
+    false,
+  ],
+  [
+    'compact.boundary',
+    { trigger: 'manual', preTokens: 1.5, postTokens: 6202, durationMs: 59369, result: 'success' },
+    false,
+  ],
+  [
+    'compact.boundary',
+    { trigger: 'manual', preTokens: 60065, postTokens: -1, durationMs: 59369, result: 'success' },
+    false,
+  ],
+  [
+    'compact.boundary',
+    {
+      trigger: 'manual',
+      preTokens: 60065,
+      postTokens: 6202,
+      durationMs: '59369',
+      result: 'success',
+    },
+    false,
+  ],
+  [
+    'compact.boundary',
+    { trigger: 'manual', preTokens: 60065, postTokens: 6202, durationMs: 59369, result: 5 },
+    false,
+  ],
   ['raw', { agent: 'claude', data: { anything: true } }, true],
   ['raw', { agent: 'claude' }, false],
 ];

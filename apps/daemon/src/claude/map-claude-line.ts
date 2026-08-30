@@ -20,6 +20,9 @@ export interface Pending {
   thinking: number | null;
   // `subagent_type` by Agent call id, for a task_started line that does not name it itself.
   agents: Map<string, string>;
+  // The `compact_result` from the compaction's status line, kept until its `compact_boundary`
+  // arrives so the one event carries both the token delta and the outcome.
+  compactResult?: string;
 }
 
 // Hook stderr is for the timeline, not an archive (protocol.md § 5).
@@ -172,6 +175,22 @@ const signal = (line: ClaudeLine, pending: Pending): Mapped | null => {
   return null;
 };
 
+// Claude's compaction is two lines: a status line carrying `compact_result` (kept on `pending`)
+// and the `compact_boundary` with the token delta, which emits the one event with the result the
+// status line named (defaulting to success when no such line was seen).
+const compact = (line: ClaudeLine, pending: Pending): Mapped | null => {
+  if (line.kind === 'compact_status') {
+    pending.compactResult = line.result;
+    return { events: [] };
+  }
+  if (line.kind !== 'compact_boundary') return null;
+  const { trigger, preTokens, postTokens, durationMs } = line;
+  const outcome = pending.compactResult ?? 'success';
+  delete pending.compactResult;
+  const payload = { trigger, preTokens, postTokens, durationMs, result: outcome };
+  return { events: [{ type: 'compact.boundary', payload }] };
+};
+
 // Thinking is ephemeral: on at the block's start, a token count on each report, off at the
 // block's stop. A count outside a thinking block would leave the indicator stuck, so it stays raw.
 const thinking = (line: ClaudeLine, pending: Pending): Mapped | null => {
@@ -210,7 +229,7 @@ const mapBody = (line: ClaudeLine, pending: Pending, cwd: string): Mapped => {
   if (line.kind === 'context') {
     return { events: [], context: { tokens: line.tokens, model: line.model } };
   }
-  const mapped = thinking(line, pending) ?? signal(line, pending);
+  const mapped = thinking(line, pending) ?? signal(line, pending) ?? compact(line, pending);
   if (mapped !== null) return mapped;
   return raw(line.kind === 'other' ? line.data : line);
 };
