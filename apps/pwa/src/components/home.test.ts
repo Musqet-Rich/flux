@@ -24,6 +24,14 @@ test('presents the hero, the four things you get, and the three setup steps', ()
   expect(wrapper.text()).toContain('flux pair');
 });
 
+test('keeps a sound heading order: the single h1, then h2s above the feature h3s', () => {
+  const wrapper = mount(Home, { props: { phase: 'unpaired', error: null } });
+  const levels = wrapper.findAll('h1, h2, h3').map((node) => node.element.tagName);
+  expect(levels[0]).toBe('H1');
+  expect(levels.indexOf('H2')).toBeLessThan(levels.indexOf('H3'));
+  expect(wrapper.findAll('h1').length).toBe(1);
+});
+
 test('mounts the hero flow canvas', () => {
   const wrapper = mount(Home, { props: { phase: 'unpaired', error: null } });
   expect(wrapper.find('canvas').exists()).toBe(true);

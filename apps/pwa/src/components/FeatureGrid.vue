@@ -29,7 +29,7 @@ const features = [
 
 <template>
   <section id="get" class="features">
-    <p class="kicker">// WHAT YOU GET</p>
+    <h2 class="kicker">// WHAT YOU GET</h2>
     <div class="cards">
       <div v-for="f in features" :key="f.num" class="cell">
         <span class="cell-num">{{ f.num }}</span>
@@ -50,6 +50,7 @@ const features = [
 .kicker {
   font-family: var(--flux-mono);
   font-size: 12px;
+  font-weight: 400;
   letter-spacing: 0.15em;
   color: oklch(0.55 0.03 150);
   margin: 0 0 28px;
