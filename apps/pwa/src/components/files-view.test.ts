@@ -5,6 +5,8 @@ import { expect, test } from 'vitest';
 import type { PairedStore } from '../../test/paired-store.ts';
 import { pairedStore } from '../../test/paired-store.ts';
 import { until } from '../../test/until.ts';
+import type { RpcCall } from '../client/create-rpc-client.ts';
+import type { Store } from '../store/create-store.ts';
 import FilesView from './FilesView.vue';
 
 type Wrapper = ReturnType<typeof mount<typeof FilesView>>;
@@ -112,4 +114,47 @@ test('an empty directory says so and a failed listing shows a notice, not a cras
   expect(two.findAll('.entry')).toHaveLength(0);
   two.unmount();
   broken.store.stop();
+});
+
+// A store whose fs.list answers are held open, so the test resolves them in whatever order it
+// likes — the race the epoch guard defends against, without any timers.
+interface Deferred {
+  store: Store;
+  // `newest` (the default) answers the most recent load; the earlier one is left open to land late.
+  answer: (entries: DirEntry[], newest?: boolean) => void;
+}
+const deferredStore = (box: PairedStore): Deferred => {
+  const pending: ((entries: DirEntry[]) => void)[] = [];
+  const call: RpcCall = (method, params) => {
+    if (method === 'fs.list')
+      return new Promise<{ entries: DirEntry[] }>((resolve) => {
+        pending.push((entries) => {
+          resolve({ entries });
+        });
+      });
+    return box.store.call(method, params);
+  };
+  return {
+    store: { ...box.store, call },
+    answer: (entries, newest = true) => {
+      pending[newest ? pending.length - 1 : 0]?.(entries);
+    },
+  };
+};
+
+test('a listing that resolves after a newer navigation does not overwrite the new path', async () => {
+  const box = await pairedStore([]);
+  const { store, answer } = deferredStore(box);
+  const wrapper = mount(FilesView, { props: { store, session: 's1', path: 'a' } });
+  await flushPromises(); // the mount's load for 'a' is in flight.
+  await wrapper.setProps({ path: 'b' }); // navigating to 'b' starts a second load.
+  answer([{ name: 'in-b.ts', kind: 'file' }]); // the current path 'b' answers first…
+  await flushPromises();
+  expect(names(wrapper)).toEqual(['in-b.ts']);
+  answer([{ name: 'in-a.ts', kind: 'file' }], false); // …then the stale 'a' answer lands late.
+  await flushPromises();
+  expect(names(wrapper)).toEqual(['in-b.ts']);
+  expect(Reflect.get(wrapper.vm, 'loading')).toBe(false);
+  wrapper.unmount();
+  box.store.stop();
 });

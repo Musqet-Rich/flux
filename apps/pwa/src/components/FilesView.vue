@@ -16,6 +16,11 @@ const entries = ref<DirEntry[] | null>(null);
 const loading = ref(false);
 const failure = ref<string | null>(null);
 
+// The component is reused across `path` changes (no key in the parent), so two listings can be
+// in flight at once. Each load claims the next token; a response whose token is no longer the
+// latest is stale — the operator has since moved on — and must not paint over the current path.
+let token = 0;
+
 const join = (dir: string, name: string): string => (dir === '' ? name : `${dir}/${name}`);
 
 const sorted = computed((): DirEntry[] =>
@@ -31,16 +36,19 @@ const crumbs = computed(() =>
 );
 
 const load = async (): Promise<void> => {
+  const mine = ++token;
   loading.value = true;
   failure.value = null;
   try {
     const result = await props.store.call('fs.list', { session: props.session, path: props.path });
+    if (mine !== token) return;
     entries.value = result.entries;
   } catch (error) {
+    if (mine !== token) return;
     entries.value = null;
     failure.value = error instanceof Error ? error.message : String(error);
   } finally {
-    loading.value = false;
+    if (mine === token) loading.value = false;
   }
 };
 
