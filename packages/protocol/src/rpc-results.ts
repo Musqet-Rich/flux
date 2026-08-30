@@ -91,7 +91,8 @@ export const rpcResults: ResultGuards = {
     isString(v['daemon']) &&
     isArrayOf(v['sessions'], isSessionSummary) &&
     isOptional(v['vapidPublicKey'], isString) &&
-    isOptional(v['agents'], (a): a is AgentKind[] => isArrayOf(a, isAgentKind)),
+    isOptional(v['agents'], (a): a is AgentKind[] => isArrayOf(a, isAgentKind)) &&
+    isOptional(v['version'], isString),
   'events.sync': (v): v is RpcMethods['events.sync']['result'] =>
     isRecord(v) && isArrayOf(v['events'], fluxEvent.is) && isBoolean(v['complete']),
   'sessions.list': (v): v is SessionSummary[] => isArrayOf(v, isSessionSummary),

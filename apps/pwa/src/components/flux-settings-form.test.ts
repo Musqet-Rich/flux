@@ -25,13 +25,22 @@ test('shows the settings, enables Save once edited, sends the form and shows env
   expect(submit.text()).toBe('Saved');
   expect(submit.attributes('disabled')).toBeDefined();
   expect(wrapper.find<HTMLInputElement>('#flux-repos').element.value).toBe('/home/flux/repos');
-  expect(wrapper.findAll('dd').map((d) => d.text())).toEqual([
+  expect(wrapper.findAll('.env dd').map((d) => d.text())).toEqual([
     'https://relay.example',
     '/home/flux/.flux',
     'flux@box',
     'mailto:ops@example.com',
     'claude',
   ]);
+  // The version rows are read-only; the hello mock sends no version, so the daemon's reads
+  // `unknown` (an older daemon), and this app's own build version is always a non-empty string.
+  expect(wrapper.findAll('.versions dt').map((d) => d.text())).toEqual([
+    'Daemon version',
+    'App version',
+  ]);
+  const versions = wrapper.findAll('.versions dd').map((d) => d.text());
+  expect(versions[0]).toBe('unknown');
+  expect(versions[1]).not.toBe('');
   await wrapper.find('#flux-repos').setValue('/srv/repos');
   await wrapper.find('#flux-agent').setValue('pi');
   await wrapper.findAll('.trigger input')[2]?.setValue(true);

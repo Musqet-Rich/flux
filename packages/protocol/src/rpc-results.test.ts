@@ -45,6 +45,7 @@ const cases: { [M in RpcMethod]: [ok: unknown, bad: unknown] } = {
       sessions: [summary],
       vapidPublicKey: 'k',
       agents: ['claude', 'pi'],
+      version: '1.2.3',
     },
     { protocol: 1 },
   ],
@@ -126,6 +127,9 @@ test('optional fields may be present or absent, never wrong', () => {
   );
   expect(rpcResults.hello({ protocol: 1, daemon: 'd', sessions: [], agents: ['pi'] })).toBe(true);
   expect(rpcResults.hello({ protocol: 1, daemon: 'd', sessions: [], agents: ['gpt'] })).toBe(false);
+  // An old daemon omits `version`; a current one sends the string; a non-string is refused.
+  expect(rpcResults.hello({ protocol: 1, daemon: 'd', sessions: [], version: '1.0.0' })).toBe(true);
+  expect(rpcResults.hello({ protocol: 1, daemon: 'd', sessions: [], version: 1 })).toBe(false);
   expect(rpcResults['git.status']({ files: [{ path: 'b', status: 'R', from: 'a' }] })).toBe(true);
   expect(rpcResults['git.status']({ files: [{ path: 'b', status: 'R', from: 1 }] })).toBe(false);
   expect(rpcResults['devices.list']([{ ...device, name: 1 }])).toBe(false);

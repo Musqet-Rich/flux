@@ -9,3 +9,7 @@ coverage/
 .env.*
 !.env.example
 test-results/
+# Release signing: private keys must never be committed (public keys are vendored as source).
+*.key.pem
+*.key
+!*.pub.pem

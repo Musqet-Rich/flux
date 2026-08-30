@@ -98,6 +98,7 @@ test('pair, create a session, talk to the agent, sync the log', async () => {
     sessions: [],
     vapidPublicKey: expect.stringMatching(/^B[\w-]{86}$/u),
     agents: ['claude'],
+    version: expect.any(String),
   });
   expect(await call(d, 'repos.list', {})).toEqual({
     repos: [{ path: repo, name: 'app', branches: ['main'] }],

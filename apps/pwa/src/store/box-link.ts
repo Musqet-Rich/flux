@@ -35,6 +35,7 @@ const unpair = async (i: StoreInternals, reason: string): Promise<void> => {
   i.state.devices = [];
   i.state.settings = null;
   i.state.daemon = null;
+  i.state.daemonVersion = null;
   i.state.phase = 'unpaired';
   reportError(i, reason, 'connection');
   // The keys, then the old box's cached logs: another box's session ids must not collide.
@@ -118,6 +119,7 @@ const enablePush = async (i: StoreInternals, prompt: boolean): Promise<boolean> 
 const afterConnect = async (i: StoreInternals): Promise<void> => {
   const hello = await call(i, 'hello', { protocol: protocolVersion });
   i.state.daemon = hello.daemon;
+  i.state.daemonVersion = hello.version ?? null;
   i.state.sessions = hello.sessions;
   i.state.agents = hello.agents ?? ['claude'];
   // Back in touch with the box: whatever the outage said is over.

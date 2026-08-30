@@ -3,6 +3,7 @@ import type { AgentKind, FluxSettings } from '@flux/protocol';
 import { computed, ref, watch } from 'vue';
 
 import type { Store } from '../store/create-store.ts';
+import { version as appVersion } from '../version.ts';
 
 // The box's runtime settings as a form, and the environment-only values as read-only rows.
 // The form is a copy of what the box last sent; Save sends the whole copy back.
@@ -25,6 +26,13 @@ const env = computed(() => {
         { name: 'Claude command', value: e.claudeCommand },
       ];
 });
+
+// Read-only version rows (ADR 0021): this app's own build version, and the daemon's from `hello`
+// (`unknown` for a daemon built before it sent one). No comparison or update action yet.
+const versions = computed(() => [
+  { name: 'Daemon version', value: props.store.state.daemonVersion ?? 'unknown' },
+  { name: 'App version', value: appVersion },
+]);
 
 const fields = ['reposDir', 'defaultAgent', 'notifyOnAsk', 'notifyOnIdle', 'notifyOnDone'] as const;
 
@@ -102,6 +110,12 @@ const save = async (): Promise<void> => {
         {{ dirty ? 'Save changes' : 'Saved' }}
       </button>
     </template>
+    <dl class="versions">
+      <template v-for="row in versions" :key="row.name">
+        <dt>{{ row.name }}</dt>
+        <dd>{{ row.value }}</dd>
+      </template>
+    </dl>
     <dl v-if="env.length > 0" class="env">
       <template v-for="row in env" :key="row.name">
         <dt>{{ row.name }}</dt>
@@ -148,7 +162,8 @@ h2 {
   width: auto;
 }
 
-.env {
+.env,
+.versions {
   display: grid;
   grid-template-columns: max-content 1fr;
   gap: 0.25rem 0.75rem;
