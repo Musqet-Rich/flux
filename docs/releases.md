@@ -7,6 +7,23 @@ is published, a daemon updates itself from the PWA: Settings shows **Update daem
 box is behind, and the box fetches that release, verifies it, swaps its files and restarts (ADR 0022,
 architecture.md § Self-update).
 
+## Install a daemon on a box
+
+To stand up a daemon on a fresh box from the latest signed release, one line:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Musqet-Rich/flux/main/scripts/install.sh | sh
+```
+
+`scripts/install.sh` downloads a release's five assets, then **verifies the ed25519 signature over
+the manifest bytes and every file's SHA-256 against the trusted keys before it places or runs a
+single byte** (the same check the daemon's self-update makes; the trusted keys are copied verbatim
+from `apps/daemon/src/update/trusted-keys.ts`). Only on success does it place the three `.mjs` into
+`~/.flux/bin` (override with `FLUX_INSTALL_DIR`) and run `flux service install` to set up the
+supervisor. Prerequisites are Node 24+ and `curl`. Override the target with `FLUX_VERSION`, or the
+source repo with `FLUX_RELEASE_REPO`. Then set `FLUX_RELAY_URL`, start the service and pair a device
+(`node ~/.flux/bin/index.mjs pair`).
+
 ## The bundle
 
 A daemon release is not an archive. It is the raw `.mjs` files `tsdown` emits into `apps/daemon/dist`
