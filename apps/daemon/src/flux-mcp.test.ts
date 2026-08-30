@@ -78,7 +78,7 @@ test('initializes, lists both tools and forwards calls to the control socket', a
   server.notify('notifications/initialized');
   const list = await server.call('tools/list');
   const tools = (list['result'] as { tools: { name: string }[] }).tools.map((t) => t.name);
-  expect(tools).toEqual(['flux_ask', 'flux_notify']);
+  expect(tools).toEqual(['flux_ask', 'flux_notify', 'flux_compact']);
   const asked = await server.call('tools/call', {
     name: 'flux_ask',
     arguments: { question: 'deploy?', options: ['yes', 'no'] },
@@ -89,9 +89,25 @@ test('initializes, lists both tools and forwards calls to the control socket', a
     arguments: { summary: 'all green', level: 'done' },
   });
   expect(notified['result']).toEqual({ content: [{ type: 'text', text: 'noted' }] });
+  const compacted = await server.call('tools/call', {
+    name: 'flux_compact',
+    arguments: { focus: 'keep the API shape' },
+  });
+  expect(compacted['result']).toEqual({
+    content: [
+      {
+        type: 'text',
+        text: 'Compaction queued; it runs after this turn ends. This must be the last action in your turn.',
+      },
+    ],
+  });
+  const bareCompact = await server.call('tools/call', { name: 'flux_compact', arguments: {} });
+  expect(bareCompact['result']).toMatchObject({ content: [{ type: 'text' }] });
   expect(requests).toEqual([
     { type: 'ask', session: 's1', question: 'deploy?', options: ['yes', 'no'] },
     { type: 'notify', session: 's1', summary: 'all green', level: 'done' },
+    { type: 'compact', session: 's1', focus: 'keep the API shape' },
+    { type: 'compact', session: 's1' },
   ]);
   expect(await server.call('ping')).toMatchObject({ result: {} });
   server.close();

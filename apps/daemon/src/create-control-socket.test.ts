@@ -86,6 +86,37 @@ test('rejects malformed lines without dropping the connection', async () => {
   expect(seen).toHaveLength(1);
 });
 
+test('accepts valid compact requests, with and without focus', async () => {
+  const replies = await roundTrip([
+    JSON.stringify({ type: 'compact', session: 's' }),
+    JSON.stringify({ type: 'compact', session: 's', focus: 'keep the shape' }),
+  ]);
+  expect(replies.map((r) => parse(r))).toEqual([
+    { ok: true, result: {} },
+    { ok: true, result: {} },
+  ]);
+  expect(seen).toEqual([
+    { type: 'compact', session: 's' },
+    { type: 'compact', session: 's', focus: 'keep the shape' },
+  ]);
+});
+
+test('rejects a compact request with a blank/missing session or non-string focus', async () => {
+  const replies = await roundTrip([
+    JSON.stringify({ type: 'compact', session: '' }),
+    JSON.stringify({ type: 'compact' }),
+    JSON.stringify({ type: 'compact', session: 's', focus: '' }),
+    JSON.stringify({ type: 'compact', session: 's', focus: 7 }),
+  ]);
+  expect(replies.map((r) => parse(r))).toEqual([
+    { ok: false, error: 'bad request' },
+    { ok: false, error: 'bad request' },
+    { ok: false, error: 'bad request' },
+    { ok: false, error: 'bad request' },
+  ]);
+  expect(seen).toHaveLength(0);
+});
+
 test('a stale socket file is replaced on listen', async () => {
   await socket.close();
   const again = createControlSocket({ path, handle: () => Promise.resolve({}) });

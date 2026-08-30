@@ -5,8 +5,8 @@ import { createInterface } from 'node:readline';
 
 import { DaemonError } from './daemon-error.ts';
 
-// The Flux MCP server (ADR 0008): a stdio JSON-RPC 2.0 server exposing flux_ask and
-// flux_notify to the agent, forwarding each call to the daemon over the control socket.
+// The Flux MCP server (ADR 0008): a stdio JSON-RPC 2.0 server exposing flux_ask, flux_notify and
+// flux_compact to the agent, forwarding each call to the daemon over the control socket.
 // Spawned by the agent per session with FLUX_CONTROL_SOCKET and FLUX_SESSION in its env.
 
 const { isString, isRecord, isArrayOf, isOneOf } = guards;
@@ -46,6 +46,20 @@ const tools = [
         level: { type: 'string', enum: ['info', 'done', 'blocked'] },
       },
       required: ['summary', 'level'],
+    },
+  },
+  {
+    name: 'flux_compact',
+    description:
+      'Compact your own context at a clean boundary between large phases of work. Returns immediately; the compaction runs after the current turn ends. CALL THIS LAST IN YOUR TURN — do nothing after it — or the queued compaction runs before you finish what you are doing.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        focus: {
+          type: 'string',
+          description: 'Optional instruction passed to /compact, e.g. what to preserve.',
+        },
+      },
     },
   },
 ];
@@ -108,6 +122,12 @@ const callTool = async (name: unknown, args: unknown): Promise<string> => {
     const level = isOneOf(input['level'], ['info', 'done', 'blocked']) ? input['level'] : 'info';
     await control({ type: 'notify', session, summary: input['summary'], level });
     return 'noted';
+  }
+  if (name === 'flux_compact') {
+    const focus =
+      isString(input['focus']) && input['focus'] !== '' ? { focus: input['focus'] } : {};
+    await control({ type: 'compact', session, ...focus });
+    return 'Compaction queued; it runs after this turn ends. This must be the last action in your turn.';
   }
   throw new DaemonError('bad_params', `unknown tool ${String(name)}`);
 };

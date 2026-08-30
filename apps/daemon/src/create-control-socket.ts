@@ -12,6 +12,7 @@ import { createInterface } from 'node:readline';
 export type ControlRequest =
   | { type: 'ask'; session: string; question: string; options?: string[]; timeoutMs?: number }
   | { type: 'notify'; session: string; summary: string; level: 'info' | 'done' | 'blocked' }
+  | { type: 'compact'; session: string; focus?: string }
   | { type: 'pair' }
   | { type: 'devices.rm'; deviceId: string };
 
@@ -45,6 +46,12 @@ const isRequest = (v: unknown): v is ControlRequest => {
         isString(v['session']) &&
         isString(v['summary']) &&
         isOneOf(v['level'], ['info', 'done', 'blocked'])
+      );
+    case 'compact':
+      return (
+        isString(v['session']) &&
+        v['session'] !== '' &&
+        isOptional(v['focus'], (s): s is string => isString(s) && s !== '')
       );
     case 'pair':
       return true;
