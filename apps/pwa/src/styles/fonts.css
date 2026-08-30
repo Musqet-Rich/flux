@@ -1,0 +1,26 @@
+/* Self-hosted so the "no third parties" promise on the landing holds — no runtime request to
+   Google Fonts. The woff2 files live in apps/pwa/public/fonts and Vite serves them at /fonts.
+   Imported from Home.vue's scoped style; @font-face is global wherever it is declared. */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/fonts/space-grotesk-var.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-mono-400.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-mono-500.woff2') format('woff2');
+}

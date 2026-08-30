@@ -9,15 +9,32 @@ const link = pairing.url('https://relay.example', {
   secret: new Uint8Array(pairing.secretLength),
 });
 
-test('presents Flux and its setup on the unpaired landing', () => {
+test('presents the hero, the four things you get, and the three setup steps', () => {
   const wrapper = mount(Home, { props: { phase: 'unpaired', error: null } });
   expect(wrapper.find('h1').text()).toBe('Give coding agents their own computer.');
-  const headings = wrapper.findAll('h2').map((node) => node.text());
-  expect(headings).toContain('What you get');
-  expect(headings).toContain('Set up in a minute');
-  expect(wrapper.text()).toContain('flux pair');
+  const titles = wrapper.findAll('.cell h3').map((node) => node.text());
+  expect(titles).toEqual([
+    'Agents on a box',
+    'Review from anywhere',
+    "Know when you're needed",
+    'End-to-end encrypted',
+  ]);
   const steps = wrapper.findAll('.steps li');
   expect(steps.length).toBe(3);
+  expect(wrapper.text()).toContain('flux pair');
+});
+
+test('keeps a sound heading order: the single h1, then h2s above the feature h3s', () => {
+  const wrapper = mount(Home, { props: { phase: 'unpaired', error: null } });
+  const levels = wrapper.findAll('h1, h2, h3').map((node) => node.element.tagName);
+  expect(levels[0]).toBe('H1');
+  expect(levels.indexOf('H2')).toBeLessThan(levels.indexOf('H3'));
+  expect(wrapper.findAll('h1').length).toBe(1);
+});
+
+test('mounts the hero flow canvas', () => {
+  const wrapper = mount(Home, { props: { phase: 'unpaired', error: null } });
+  expect(wrapper.find('canvas').exists()).toBe(true);
 });
 
 test('embeds the connect card and forwards a pasted pairing link', async () => {
