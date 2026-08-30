@@ -6,6 +6,7 @@ import AgentsEditor from './AgentsEditor.vue';
 import HarnessConfigEditor from './HarnessConfigEditor.vue';
 import DevicesSection from './DevicesSection.vue';
 import FluxSettingsForm from './FluxSettingsForm.vue';
+import SkillsEditor from './SkillsEditor.vue';
 
 // The settings screen (prd.md P2): paired devices, the box's runtime settings, and the agent's
 // global config. Each section talks to the store on its own; this only fetches on open.
@@ -29,6 +30,7 @@ onMounted(() => {
       <DevicesSection :store="store" />
       <FluxSettingsForm :store="store" />
       <AgentsEditor :store="store" />
+      <SkillsEditor :store="store" />
       <HarnessConfigEditor :store="store" />
     </div>
   </section>
@@ -77,6 +79,7 @@ h1 {
     grid-template-areas:
       'devices flux'
       'agents agents'
+      'skills skills'
       'config config';
     align-items: start;
     gap: 1.5rem;
@@ -95,6 +98,10 @@ h1 {
   }
 
   .sections > :nth-child(4) {
+    grid-area: skills;
+  }
+
+  .sections > :nth-child(5) {
     grid-area: config;
   }
 }

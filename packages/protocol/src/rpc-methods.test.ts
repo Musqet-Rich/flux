@@ -118,6 +118,21 @@ const cases: [RpcMethod, unknown, boolean][] = [
   ['settings.set', { agents: [{ name: 'a' }, { name: 'a' }] }, false],
   ['settings.set', { agents: [{ name: '' }] }, false],
   ['settings.set', { flux: { reposDir: 1 } }, false],
+  ['skills.list', {}, true],
+  ['skills.list', { extra: 1 }, false],
+  ['skills.write', { name: 'review', body: '# Review\n' }, true],
+  ['skills.write', { name: 'review', body: '' }, true],
+  ['skills.write', { name: '../evil', body: 'x' }, false],
+  ['skills.write', { name: '/etc/x', body: 'x' }, false],
+  ['skills.write', { name: 'a/b', body: 'x' }, false],
+  ['skills.write', { name: '', body: 'x' }, false],
+  ['skills.write', { name: '.', body: 'x' }, false],
+  ['skills.write', { name: 'review', body: 1 }, false],
+  ['skills.write', { name: 1, body: 'x' }, false],
+  ['skills.delete', { name: 'review' }, true],
+  ['skills.delete', { name: '..' }, false],
+  ['skills.delete', { name: 'a\\b' }, false],
+  ['skills.delete', {}, false],
   ['attach.begin', { ...s, name: 'a.png', mime: 'image/png', size: 0 }, true],
   ['attach.begin', { ...s, name: 'a.png', mime: 'image/png', size: -1 }, false],
   ['attach.begin', { ...s, name: 'a.png', mime: 'image/png' }, false],
@@ -151,5 +166,5 @@ test.each(cases)('%s params %j accepted=%s', (method, value, expected) => {
 });
 
 test('covers every method in protocol.md § 7', () => {
-  expect(Object.keys(rpcMethods)).toHaveLength(39);
+  expect(Object.keys(rpcMethods)).toHaveLength(42);
 });

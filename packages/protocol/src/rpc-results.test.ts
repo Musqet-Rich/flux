@@ -93,6 +93,12 @@ const cases: { [M in RpcMethod]: [ok: unknown, bad: unknown] } = {
   'devices.remove': [{}, 0],
   'settings.get': [settings, { ...settings, harnessConfig: {} }],
   'settings.set': [settings, { flux: settings.flux }],
+  'skills.list': [
+    { skills: [{ name: 'review', body: '# Review\n' }] },
+    { skills: [{ name: 'review' }] },
+  ],
+  'skills.write': [{}, 0],
+  'skills.delete': [{}, null],
   'attach.begin': [{ attachmentId: 'a' }, {}],
   'attach.chunk': [{}, null],
   'attach.end': [{ path: '/d/a', size: 3 }, { path: '/d/a' }],

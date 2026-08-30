@@ -36,6 +36,7 @@ export interface HandlerContext {
   push: Services['push'];
   settings: Services['settings'];
   harnessConfig: Services['harnessConfig'];
+  skills: Services['skills'];
   asks: Services['asks'];
   git: Services['git'];
   supervisor: (record: SessionRecord) => SessionSupervisor;

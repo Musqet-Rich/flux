@@ -27,6 +27,7 @@ test('exports every runtime module', () => {
     'rpcResults',
     'semver',
     'settings',
+    'skillName',
     'wire',
   ]);
 });

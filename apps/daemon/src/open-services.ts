@@ -3,6 +3,8 @@ import { join } from 'node:path';
 
 import type { HarnessConfigFiles } from './create-harness-config.ts';
 import { createHarnessConfig } from './create-harness-config.ts';
+import type { SkillsStore } from './create-skills-store.ts';
+import { createSkillsStore } from './create-skills-store.ts';
 import type { AskRegistry } from './create-ask-registry.ts';
 import { createAskRegistry } from './create-ask-registry.ts';
 import type { GitService } from './create-git-service.ts';
@@ -24,6 +26,8 @@ import { settleOrphans } from './settle-orphans.ts';
 export interface Services extends Stores {
   worktreesDir: string;
   harnessConfig: HarnessConfigFiles;
+  // Box-side skills under `<claudeDir>/skills` (protocol.md § 7 `skills.*`).
+  skills: SkillsStore;
   asks: AskRegistry;
   git: GitService;
   // Refuses (`conflict`) while another daemon holds the directory (ADR 0017).
@@ -50,6 +54,7 @@ export const openServices = (options: ServicesOptions): Services => {
     ...stores,
     worktreesDir,
     harnessConfig: createHarnessConfig(options.claudeDir),
+    skills: createSkillsStore(join(options.claudeDir, 'skills')),
     asks,
     git: createGitService(),
     lock: () => acquireDaemonLock(options.dataDir),

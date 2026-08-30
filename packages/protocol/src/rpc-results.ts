@@ -11,6 +11,7 @@ import type {
   RpcMethod,
   RpcMethods,
   SessionSummary,
+  Skill,
 } from './rpc-methods.ts';
 import { settings } from './settings.ts';
 
@@ -89,6 +90,9 @@ const isCheckUpdate = (v: unknown): v is RpcMethods['daemon.checkUpdate']['resul
   (v['verified'] === null || isBoolean(v['verified'])) &&
   (v['reason'] === undefined || (isString(v['reason']) && v['reason'].length > 0));
 
+const isSkill = (v: unknown): v is Skill =>
+  isRecord(v) && isString(v['name']) && isString(v['body']);
+
 const isContent = (v: unknown): v is FileContent =>
   isRecord(v) &&
   isString(v['content']) &&
@@ -141,6 +145,9 @@ export const rpcResults: ResultGuards = {
   'devices.remove': isEmpty,
   'settings.get': settings.is,
   'settings.set': settings.is,
+  'skills.list': (v): v is { skills: Skill[] } => isRecord(v) && isArrayOf(v['skills'], isSkill),
+  'skills.write': isEmpty,
+  'skills.delete': isEmpty,
   'daemon.update': isEmpty,
   'daemon.checkUpdate': isCheckUpdate,
   'attach.begin': (v): v is { attachmentId: string } => isRecord(v) && isString(v['attachmentId']),
