@@ -55,9 +55,10 @@ test('renders the log, streams, answers asks, sends with pending comments', asyn
   store.stop();
 });
 
-// Hooks and streaming envelopes arrive as `raw`, half a dozen around every reply, and the
-// status bar is where rate limits live: neither belongs in the timeline, but both stay in the log.
-test('raw and rate_limit events are kept in the log but not shown', async () => {
+// Hooks and streaming envelopes arrive as `raw`, half a dozen around every reply; rate limits
+// live in the status bar; a subagent repeats `files.changed` on every write, and its count rides
+// the Changes button. None belong in the timeline, but all stay in the log.
+test('raw, rate_limit and files.changed are kept in the log but not shown', async () => {
   const box = await pairedStore([]);
   const { store, relay, event } = box;
   const wrapper = mount(SessionView, { props: { store, session: 's1' } });
@@ -65,10 +66,12 @@ test('raw and rate_limit events are kept in the log but not shown', async () => 
   await relay.emit(event(1, 'raw', { agent: 'claude', data: { type: 'system' } }));
   await relay.emit(event(2, 'msg.assistant', { text: 'hi' }));
   await relay.emit(event(3, 'rate_limit', { windows: [] }));
-  await until(() => store.state.logs['s1']?.lastSeq === 3);
+  await relay.emit(event(4, 'files.changed', { files: [{ path: 'a.ts', status: 'M' }] }));
+  await until(() => store.state.logs['s1']?.lastSeq === 4);
   await flushPromises();
-  expect(store.state.logs['s1']?.events.length).toBe(3);
+  expect(store.state.logs['s1']?.events.length).toBe(4);
   expect(wrapper.findAll('.item').map((i) => i.text())).toEqual(['hi']);
+  expect(wrapper.find('.toolbar button').text()).toBe('Changes (1)');
   store.stop();
 });
 
@@ -144,7 +147,7 @@ test('offers to stop a running agent and asks the box to interrupt', async () =>
   const box = await pairedStore([], { 'agent.interrupt': () => ({}) });
   const { store, relay, event } = box;
   const wrapper = mount(SessionView, { props: { store, session: 's1' } });
-  expect(wrapper.findAll('.toolbar button').map((b) => b.text())).toEqual(['Changes', '⋯']);
+  expect(wrapper.findAll('.toolbar button').map((b) => b.text())).toEqual(['Changes (0)', '⋯']);
   await relay.emit(event(1, 'session.state', { state: 'running' }));
   await until(() => store.state.sessions[0]?.state === 'running');
   await flushPromises();

@@ -18,11 +18,12 @@ import { useMessageReply } from './useMessageReply.ts';
 
 const pageSize = 200;
 
-// Agent lines Flux does not read (`raw`) and rate-limit changes stay in the log for the ask,
-// comment and sync logic, but they are noise on a phone: hooks and streaming envelopes would
-// put half a dozen bare rows around every reply, and the status bar already shows the windows.
+// Agent lines Flux does not read (`raw`), rate-limit changes and `files.changed` stay in the log
+// for the ask, comment, sync and Changes logic, but they are noise on a phone: hooks and streaming
+// envelopes would put half a dozen bare rows around every reply, a subagent repeats `files.changed`
+// on every write, and the status bar and Changes button already carry what they say.
 // `task.progress` only feeds the agents strip.
-const hiddenTypes = new Set(['raw', 'rate_limit', 'task.progress']);
+const hiddenTypes = new Set(['raw', 'rate_limit', 'files.changed', 'task.progress']);
 
 export interface SessionTimeline extends MessageReply {
   tasks: ComputedRef<SessionTask[]>;
