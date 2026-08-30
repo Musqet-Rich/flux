@@ -79,6 +79,16 @@ const isDevice = (v: unknown): v is Device =>
   isOptional(v['lastSeenAt'], isString) &&
   isBoolean(v['current']);
 
+// `daemon.checkUpdate`: `latest` and `verified` are nullable (not merely optional), and `reason`
+// is a non-empty string when present, so each is guarded by hand rather than with `isOptional`.
+const isCheckUpdate = (v: unknown): v is RpcMethods['daemon.checkUpdate']['result'] =>
+  isRecord(v) &&
+  isString(v['current']) &&
+  (v['latest'] === null || isString(v['latest'])) &&
+  isBoolean(v['available']) &&
+  (v['verified'] === null || isBoolean(v['verified'])) &&
+  (v['reason'] === undefined || (isString(v['reason']) && v['reason'].length > 0));
+
 const isContent = (v: unknown): v is FileContent =>
   isRecord(v) &&
   isString(v['content']) &&
@@ -132,6 +142,7 @@ export const rpcResults: ResultGuards = {
   'settings.get': settings.is,
   'settings.set': settings.is,
   'daemon.update': isEmpty,
+  'daemon.checkUpdate': isCheckUpdate,
   'attach.begin': (v): v is { attachmentId: string } => isRecord(v) && isString(v['attachmentId']),
   'attach.chunk': isEmpty,
   'attach.end': (v): v is { path: string; size: number } =>

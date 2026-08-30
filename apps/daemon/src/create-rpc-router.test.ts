@@ -67,6 +67,7 @@ const handlers: RpcHandlers = {
   'settings.get': unimplemented,
   'settings.set': unimplemented,
   'daemon.update': unimplemented,
+  'daemon.checkUpdate': unimplemented,
   'attach.begin': unimplemented,
   'attach.chunk': unimplemented,
   'attach.end': unimplemented,

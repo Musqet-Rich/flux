@@ -102,6 +102,10 @@ const cases: { [M in RpcMethod]: [ok: unknown, bad: unknown] } = {
   ],
   'attach.delete': [{}, 0],
   'daemon.update': [{}, 0],
+  'daemon.checkUpdate': [
+    { current: '1.0.0', latest: null, available: false, verified: null },
+    { current: 1, latest: null, available: false, verified: null },
+  ],
 };
 
 test.each(Object.entries(cases))('%s result guard accepts and rejects', (method, [ok, bad]) => {
@@ -149,4 +153,30 @@ test('optional fields may be present or absent, never wrong', () => {
   expect(rpcResults['sessions.list']([{ ...summary, model: 'opus', effort: 'high' }])).toBe(true);
   expect(rpcResults['sessions.list']([{ ...summary, model: 1 }])).toBe(false);
   expect(rpcResults['sessions.list']([{ ...summary, effort: 1 }])).toBe(false);
+});
+
+// checkUpdate's nullable and non-empty-when-present fields (protocol.md § 7): a string or null
+// `latest`/`verified`, an absent or non-empty `reason`, and the negative of each.
+test('daemon.checkUpdate accepts its nullable shape and rejects the wrong one', () => {
+  const check = rpcResults['daemon.checkUpdate'];
+  expect(check({ current: '1.0.0', latest: '1.2.0', available: true, verified: true })).toBe(true);
+  expect(
+    check({
+      current: '1.0.0',
+      latest: '1.2.0',
+      available: false,
+      verified: false,
+      reason: 'bad_hash',
+    }),
+  ).toBe(true);
+  expect(check({ current: '1.0.0', latest: null, available: false, verified: null })).toBe(true);
+  expect(check({ current: '1.0.0', latest: 1, available: false, verified: null })).toBe(false);
+  expect(check({ current: '1.0.0', latest: null, available: 'no', verified: null })).toBe(false);
+  expect(check({ current: '1.0.0', latest: null, available: false, verified: 'x' })).toBe(false);
+  expect(
+    check({ current: '1.0.0', latest: null, available: false, verified: null, reason: '' }),
+  ).toBe(false);
+  expect(
+    check({ current: '1.0.0', latest: null, available: false, verified: null, reason: 1 }),
+  ).toBe(false);
 });

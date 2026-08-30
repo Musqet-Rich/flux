@@ -3,6 +3,7 @@ import type {
   FluxEvent,
   HarnessKind,
   RateWindow,
+  RpcMethods,
   SessionSummary,
   Settings,
   UpdateFailReason,
@@ -98,6 +99,13 @@ export interface DaemonUpdate {
   failed: UpdateFailReason | null;
 }
 
+// The last `daemon.checkUpdate` result (ADR 0021/0022): what the box discovered and its verify-
+// only dry-run of that release. `latest === null` means the box could not check (offline, no
+// published release), and the store also stores a `latest: null` sentinel when the daemon is too
+// old to have the method at all — Settings shows "couldn't check for updates" for both. Null
+// until Settings runs the first check.
+export type UpdateCheck = RpcMethods['daemon.checkUpdate']['result'];
+
 export interface StoreState {
   phase: StorePhase;
   status: ConnectionStatus;
@@ -107,6 +115,8 @@ export interface StoreState {
   daemonVersion: string | null;
   // The daemon self-update in progress, or idle (all null).
   update: DaemonUpdate;
+  // The last update check Settings ran, or null before it opens (settings-actions.ts).
+  updateCheck: UpdateCheck | null;
   error: StoreError | null;
   push: PushState;
   sessions: SessionSummary[];
@@ -169,6 +179,7 @@ export const storeState = (): StoreState =>
     daemon: null,
     daemonVersion: null,
     update: { target: null, phase: null, failed: null },
+    updateCheck: null,
     error: null,
     push: 'unavailable',
     sessions: [],

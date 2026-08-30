@@ -37,6 +37,7 @@ const unpair = async (i: StoreInternals, reason: string): Promise<void> => {
   i.state.daemon = null;
   i.state.daemonVersion = null;
   i.state.update = { target: null, phase: null, failed: null };
+  i.state.updateCheck = null;
   i.state.phase = 'unpaired';
   reportError(i, reason, 'connection');
   // The keys, then the old box's cached logs: another box's session ids must not collide.

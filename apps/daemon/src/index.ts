@@ -7,11 +7,11 @@ import { hostname, userInfo } from 'node:os';
 import { join } from 'node:path';
 
 import type { Daemon } from './create-daemon.ts';
-import { createDaemon } from './create-daemon.ts';
+import { createDaemon, detectDistDir } from './create-daemon.ts';
 import { DaemonError } from './daemon-error.ts';
 import { pairingQr } from './qr/pairing-qr.ts';
 import { runServiceCli } from './service/run-service-cli.ts';
-import { detectDistDir } from './update/detect-dist-dir.ts';
+import { runUpdateCheck } from './update/run-update-check.ts';
 
 // `flux daemon`: the box side of Flux (architecture.md § Daemon). Configuration is environment:
 //   FLUX_RELAY_URL   the relay origin, e.g. https://flux.example.com (required)
@@ -149,6 +149,32 @@ if (command === 'service') {
   process.exit(0);
 }
 
+// `flux update --check` runs the discovery + verify-only dry-run standalone (ADR 0021/0022): no
+// relay URL, no Daemon instance, no control socket, so a fresh box can prove a published release
+// against the trusted keys before self-updating. It fetches and verifies but NEVER applies. Like
+// `flux pair`/`flux service` it dispatches here, before `createDaemon`. Exits non-zero only on an
+// unexpected error, not on "up to date".
+if (command === 'update') {
+  if ((process.argv[3] ?? '') !== '--check') {
+    console.error('usage: flux update --check');
+    process.exit(2);
+  }
+  try {
+    await runUpdateCheck({
+      distDir: detectDistDir(process.argv[1] ?? '', { exists: existsSync }),
+      fetch: (url) => globalThis.fetch(url),
+      log: (line) => {
+        console.log(line);
+      },
+      ...(env['FLUX_RELEASE_REPO'] === undefined ? {} : { repo: env['FLUX_RELEASE_REPO'] }),
+    });
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
+  process.exit(0);
+}
+
 // Only `daemon` talks to the relay; `devices` opens the database and needs no URL, so it works
 // from a login shell without the unit's environment file.
 const relayUrl = env['FLUX_RELAY_URL'];
@@ -252,7 +278,7 @@ if (command === 'daemon') {
   await daemon.stop();
 } else {
   console.error(
-    `unknown command ${command}; use: flux daemon | flux pair | flux devices ls | flux devices rm <id> | flux service install|uninstall|status`,
+    `unknown command ${command}; use: flux daemon | flux pair | flux update --check | flux devices ls | flux devices rm <id> | flux service install|uninstall|status`,
   );
   await daemon.stop();
   process.exit(2);

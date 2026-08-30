@@ -16,6 +16,11 @@ import { createSupervisorPool } from './create-supervisor-pool.ts';
 import type { Services, ServicesOptions } from './open-services.ts';
 import { openServices } from './open-services.ts';
 
+// Re-exported so the CLI (index.ts) reaches the install-dir detector through the daemon module it
+// already imports, keeping index.ts within its dependency budget; `distDir` is a DaemonConfig
+// field, so the detector belongs to this module's surface.
+export { detectDistDir } from './update/detect-dist-dir.ts';
+
 // Composition root: wires the stores, the git service, the session supervisors, the device
 // channels and the relay transport together (architecture.md § Daemon).
 
