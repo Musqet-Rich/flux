@@ -4,7 +4,7 @@ Status: accepted, 2026-08-30.
 
 ## Context
 
-The three deployables must stay compatible, but they are not deployed together. The relay and the PWA live on a VPS the project operator controls (Coolify); the daemon runs on each user's own box, devcontainer or VPS, under that user's control. So a release cannot assume every daemon updates at the same time, or ever. Until now every part is `0.0.0` and every machine builds from a source checkout (README § Quickstart); there is no version on the wire, no release artifact, and no way for a user to update a daemon short of `git pull && pnpm build`.
+The three deployables must stay compatible, but they are not deployed together. The relay and the PWA live on a VPS the project operator controls (Coolify); the daemon runs on each user's own box, devcontainer or VPS, under that user's control. So a release cannot assume every daemon updates at the same time, or ever. Until now every part is `0.0.0` and every machine builds from a source checkout (SELF_HOSTING.md); there is no version on the wire, no release artifact, and no way for a user to update a daemon short of `git pull && pnpm build`.
 
 Two things follow. The wire needs a version so a current PWA can tell what an old daemon can do. And the daemon needs an update path that a non-technical operator can trigger from the phone.
 

@@ -26,7 +26,7 @@ sudo -u flux -i flux pair
 
 That prints a QR code and the link it encodes, valid for ten minutes. On the phone, open `https://YOUR.DOMAIN`, tap **Scan QR code** (or paste the link), and accept the notification prompt when asked. Add the page to the home screen for a full-screen app; on iOS the home-screen install is also what enables push.
 
-Pairing is per device — run `flux pair` again for each one. The gear in the app header opens **Settings**, which lists paired devices and revokes them; a revoked device is cut off at once and must pair again.
+Pairing is per device — run `flux pair` again for each one. The gear in the app header opens **Settings**, which lists paired devices and revokes them; a revoked device is cut off at once and must pair again. The box can do the same from a shell with `sudo -u flux -i flux devices ls` and `flux devices rm <id>`; `rm` asks the running daemon so the device is cut off at once, and only edits the database (saying so) when no daemon is running.
 
 ### The session
 
