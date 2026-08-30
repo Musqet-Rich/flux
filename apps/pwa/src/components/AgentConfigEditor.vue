@@ -68,24 +68,36 @@ const save = async (): Promise<void> => {
     <h2>Agent config</h2>
     <p v-if="stored === null" class="hint">Loading…</p>
     <template v-else>
-      <label for="agent-md">
-        CLAUDE.md
-        <span v-if="mdDirty" class="dirty">edited</span>
-      </label>
-      <textarea id="agent-md" v-model="claudeMd" rows="10" spellcheck="false" :disabled="busy" />
-      <label for="agent-json">
-        settings.json
-        <span v-if="jsonDirty" class="dirty">edited</span>
-      </label>
-      <textarea
-        id="agent-json"
-        v-model="settingsJson"
-        rows="10"
-        spellcheck="false"
-        :disabled="busy"
-        :class="{ invalid: jsonError !== null }"
-      />
-      <p v-if="jsonError !== null" class="error">{{ jsonError }}</p>
+      <div class="editors">
+        <div class="editor">
+          <label for="agent-md">
+            CLAUDE.md
+            <span v-if="mdDirty" class="dirty">edited</span>
+          </label>
+          <textarea
+            id="agent-md"
+            v-model="claudeMd"
+            rows="10"
+            spellcheck="false"
+            :disabled="busy"
+          />
+        </div>
+        <div class="editor">
+          <label for="agent-json">
+            settings.json
+            <span v-if="jsonDirty" class="dirty">edited</span>
+          </label>
+          <textarea
+            id="agent-json"
+            v-model="settingsJson"
+            rows="10"
+            spellcheck="false"
+            :disabled="busy"
+            :class="{ invalid: jsonError !== null }"
+          />
+          <p v-if="jsonError !== null" class="error">{{ jsonError }}</p>
+        </div>
+      </div>
       <button type="submit" :disabled="!dirty || jsonError !== null || busy">
         {{ dirty ? 'Save changes' : 'Saved' }}
       </button>
@@ -109,6 +121,35 @@ h2 {
 .hint {
   color: var(--muted);
   margin: 0;
+}
+
+.editors {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+/* Wide screens: edit both files side by side, each filling the column height. */
+@media (min-width: 56rem) {
+  .editors {
+    flex-direction: row;
+    align-items: stretch;
+  }
+
+  .editor {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .editor textarea {
+    flex: 1;
+  }
 }
 
 label {
