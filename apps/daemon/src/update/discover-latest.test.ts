@@ -10,9 +10,12 @@ const ok = (body: string): FetchResponse => ({
   ok: true,
   arrayBuffer: () => Promise.resolve(toArrayBuffer(enc(body))),
 });
+// A non-200 that nonetheless carries a valid `tag_name` body, so the null result can only come
+// from the `response.ok` guard, not from a body that fails to parse (which would pass even if the
+// status were ignored).
 const notFound: FetchResponse = {
   ok: false,
-  arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+  arrayBuffer: () => Promise.resolve(toArrayBuffer(enc('{"tag_name":"v9.9.9"}'))),
 };
 
 const serve =
