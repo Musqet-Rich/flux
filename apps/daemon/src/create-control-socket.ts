@@ -1,3 +1,4 @@
+import type { HarnessKind } from '@flux/protocol';
 import { guards } from '@flux/protocol';
 import { unlink } from 'node:fs/promises';
 import type { Server, Socket } from 'node:net';
@@ -9,10 +10,29 @@ import { createInterface } from 'node:readline';
 // calls `pair` and `flux devices rm` calls `devices.rm`, so a revocation reaches the live
 // channels. Nothing here is reachable from outside the box.
 
+// The manager verbs (ADR 0025) all carry `session`, the CALLER: the daemon authorises them
+// against that session's persisted `manager` flag. The mutating verbs also carry `target`, the
+// acted-on session.
 export type ControlRequest =
   | { type: 'ask'; session: string; question: string; options?: string[]; timeoutMs?: number }
   | { type: 'notify'; session: string; summary: string; level: 'info' | 'done' | 'blocked' }
   | { type: 'compact'; session: string; focus?: string }
+  | { type: 'sessions.list'; session: string }
+  | {
+      type: 'session.open';
+      session: string;
+      repo: string;
+      branch: string;
+      harness: HarnessKind;
+      agent?: string;
+      model?: string;
+      effort?: string;
+      base?: string;
+      title?: string;
+    }
+  | { type: 'session.send'; session: string; target: string; text: string }
+  | { type: 'session.close'; session: string; target: string }
+  | { type: 'session.read'; session: string; target: string; limit?: number }
   | { type: 'pair' }
   | { type: 'devices.rm'; deviceId: string };
 
@@ -30,6 +50,22 @@ export interface ControlSocketOptions {
 }
 
 const { isString, isRecord, isArrayOf, isInteger, isOneOf, isOptional } = guards;
+
+// A non-blank string: session ids, targets and the open verb's required fields must all be present.
+const filled = (v: unknown): v is string => isString(v) && v !== '';
+
+// `session.open` mirrors `sessions.create` params (ADR 0025): required repo/branch/harness, the
+// rest optional and, where present, non-blank. Split out so the guard's switch stays short.
+const isOpen = (v: Record<string, unknown>): boolean =>
+  filled(v['session']) &&
+  filled(v['repo']) &&
+  filled(v['branch']) &&
+  isOneOf(v['harness'], ['claude', 'pi']) &&
+  isOptional(v['agent'], filled) &&
+  isOptional(v['model'], filled) &&
+  isOptional(v['effort'], filled) &&
+  isOptional(v['base'], filled) &&
+  isOptional(v['title'], isString);
 
 const isRequest = (v: unknown): v is ControlRequest => {
   if (!isRecord(v)) return false;
@@ -52,6 +88,20 @@ const isRequest = (v: unknown): v is ControlRequest => {
         isString(v['session']) &&
         v['session'] !== '' &&
         isOptional(v['focus'], (s): s is string => isString(s) && s !== '')
+      );
+    case 'sessions.list':
+      return filled(v['session']);
+    case 'session.open':
+      return isOpen(v);
+    case 'session.send':
+      return filled(v['session']) && filled(v['target']) && filled(v['text']);
+    case 'session.close':
+      return filled(v['session']) && filled(v['target']);
+    case 'session.read':
+      return (
+        filled(v['session']) &&
+        filled(v['target']) &&
+        isOptional(v['limit'], (n): n is number => isInteger(n, 1))
       );
     case 'pair':
       return true;

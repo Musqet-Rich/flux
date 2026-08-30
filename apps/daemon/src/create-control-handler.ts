@@ -1,22 +1,17 @@
-import type { FluxEvent } from '@flux/protocol';
-
 import type { AskRegistry } from './create-ask-registry.ts';
 import type { ControlRequest } from './create-control-socket.ts';
-import type { EventInput, EventLog } from './create-event-log.ts';
-import type { SessionRecord, SessionStore } from './create-session-store.ts';
-import type { SessionSupervisor } from './create-session-supervisor.ts';
+import type { EventInput } from './create-event-log.ts';
+import type { ManagerControlOptions } from './manager-control.ts';
+import { managerControl } from './manager-control.ts';
 
-// What the control socket does with each request (ADR 0008): `ask` logs the question, parks
-// the session in waiting_user until an answer or the timeout, then logs the answer; `notify`
-// logs; `compact` sends `/compact` to the agent as a queued user turn (self-compaction, ADR 0008);
-// `pair` mints a pairing URL; `devices.rm` revokes a device.
+// What the control socket does with each request: `ask` logs the question, parks the session in
+// waiting_user until an answer or the timeout, then logs the answer; `notify` logs; `compact`
+// sends `/compact` to the agent as a queued user turn (self-compaction, ADR 0008); `pair` mints a
+// pairing URL; `devices.rm` revokes a device; the manager verbs (ADR 0025) list/open/send/close/
+// read other sessions, each authorised against the caller's persisted `manager` flag.
 
-export interface ControlHandlerOptions {
-  log: EventLog;
-  sessions: SessionStore;
+export interface ControlHandlerOptions extends ManagerControlOptions {
   asks: AskRegistry;
-  supervisor: (record: SessionRecord) => SessionSupervisor;
-  emit: (event: FluxEvent) => void;
   pairingUrl: () => string;
   revokeDevice: (deviceId: string) => Promise<void>;
   askTimeoutMs?: number;
@@ -36,6 +31,8 @@ export const createControlHandler = (
       await options.revokeDevice(request.deviceId);
       return {};
     }
+    // The manager verbs authorise the caller themselves (ADR 0025 §5) before touching any session.
+    if (managerControl.is(request)) return managerControl.handle(options, request);
     const record = options.sessions.get(request.session);
     if (request.type === 'notify') {
       append(record.session, {

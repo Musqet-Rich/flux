@@ -204,6 +204,8 @@ export const createDaemon = async (config: DaemonConfig): Promise<Daemon> => {
     emit,
     pairingUrl: gate.url,
     revokeDevice: revoker(services, () => transport),
+    // A getter for `ctx` (declared below), so the manager ops (ADR 0025) resolve it lazily.
+    ctx: () => ctx,
   });
   const { agents, pool, forget } = createAgentCommands({ ...config, controlSocket: control.path });
   const supervisors = createSupervisorPool({

@@ -13,6 +13,8 @@ export interface AgentResolution {
   effort?: string;
   role?: string;
   tools?: AgentTools;
+  // The Agent's `manager` flag (ADR 0025); Agent-only (no inline override), omitted when off.
+  manager?: boolean;
 }
 
 export const resolveAgent = (
@@ -28,10 +30,14 @@ export const resolveAgent = (
   const effort = params.effort ?? named?.effort;
   const role = named?.role;
   const tools = named?.tools;
+  // Agent-only and boolean: carried only when the Agent turned it on, so an ordinary Agent leaves
+  // the session record's `manager` unset (the authorisation check treats absent as not a manager).
+  const manager = named?.manager === true ? true : undefined;
   return {
     ...(model === undefined ? {} : { model }),
     ...(effort === undefined ? {} : { effort }),
     ...(role === undefined ? {} : { role }),
     ...(tools === undefined ? {} : { tools }),
+    ...(manager === undefined ? {} : { manager }),
   };
 };

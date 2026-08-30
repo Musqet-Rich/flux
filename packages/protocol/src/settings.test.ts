@@ -53,6 +53,9 @@ test.each([
     { flux, env, harnessConfig, agents: [{ name: 'a', tools: { mode: 'all', list: ['Bash'] } }] },
     false,
   ],
+  // A manager Agent (ADR 0025) is a boolean opt-in; omitted when off, never `false` on the wire.
+  [{ flux, env, harnessConfig, agents: [{ name: 'a', manager: true }] }, true],
+  [{ flux, env, harnessConfig, agents: [{ name: 'a', manager: 'yes' }] }, false],
   [{ flux, env, harnessConfig, agents: [{ name: '' }] }, false],
   [{ flux, env, harnessConfig, agents: [{ name: 'a' }, { name: 'a' }] }, false],
   [{ flux, env, harnessConfig, agents: {} }, false],
@@ -88,6 +91,8 @@ test.each([
   [{ agents: [{ name: 'a', model: '' }] }, false],
   [{ agents: [{ name: 'a', effort: '' }] }, false],
   [{ agents: [{ name: 'a', role: '' }] }, false],
+  [{ agents: [{ name: 'a', manager: true }] }, true],
+  [{ agents: [{ name: 'a', manager: 1 }] }, false],
   [{ agents: [{ name: 'a', tools: { mode: 'none' } }] }, true],
   [{ agents: [{ name: 'a', tools: { mode: 'deny', list: ['Bash', 'Edit'] } }] }, true],
   [{ agents: [{ name: 'a', tools: { mode: 'deny' } }] }, false],

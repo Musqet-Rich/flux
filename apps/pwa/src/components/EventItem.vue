@@ -66,6 +66,24 @@ const note = (text: string, tone: View['tone'] = null): View => ({
   tone,
 });
 
+// A manager agent acted on this session (ADR 0025): its own system row, styled like other
+// lifecycle notes. `open` lands on the session the manager created, the rest on the one it acted
+// on, so the operator can always see what the manager did to which session.
+type ManagerActed = Extract<KnownEvent, { type: 'manager.acted' }>['payload'];
+const managerNote = (payload: ManagerActed): View => {
+  const { action, target, detail } = payload;
+  const head =
+    action === 'open'
+      ? `opened session ${target}`
+      : action === 'send'
+        ? `sent to ${target}`
+        : action === 'close'
+          ? `archived ${target}`
+          : `read ${target}`;
+  const tail = action === 'send' && detail !== '' ? `: ${detail}` : '';
+  return note(`Manager · ${head}${tail}`);
+};
+
 // Lifecycle, operator-interaction and code events all render as a one-line note.
 const describeNote = (event: KnownEvent): View => {
   switch (event.type) {
@@ -98,6 +116,8 @@ const describeNote = (event: KnownEvent): View => {
       return note('Comment removed');
     case 'comment.sent':
       return note(`${event.payload.commentIds.length} comment(s) sent`);
+    case 'manager.acted':
+      return managerNote(event.payload);
     default:
       return note(`${event.type} event`);
   }

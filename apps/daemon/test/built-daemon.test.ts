@@ -119,14 +119,19 @@ afterAll(async () => {
   await rm(dataDir, { recursive: true, force: true });
 });
 
-test('the build is flux, flux-mcp and the pi extension, resolved beside each other', async () => {
+test('the build is flux, flux-mcp, flux-manager-mcp and the pi extension, resolved beside each other', async () => {
   await access(join(outDir, 'index.mjs'), constants.X_OK);
   await access(join(outDir, 'flux-mcp.mjs'), constants.X_OK);
+  await access(join(outDir, 'flux-manager-mcp.mjs'), constants.X_OK);
   const flux = await readFile(join(outDir, 'index.mjs'), 'utf8');
   const mcp = await readFile(join(outDir, 'flux-mcp.mjs'), 'utf8');
+  const manager = await readFile(join(outDir, 'flux-manager-mcp.mjs'), 'utf8');
   expect(flux.startsWith('#!/usr/bin/env node\n')).toBe(true);
   expect(mcp.startsWith('#!/usr/bin/env node\n')).toBe(true);
+  expect(manager.startsWith('#!/usr/bin/env node\n')).toBe(true);
   expect(flux).toContain('./flux-mcp.mjs');
+  // A manager session's .mcp.json points here as a sibling of index.mjs (ADR 0025).
+  expect(flux).toContain('./flux-manager-mcp.mjs');
   expect(flux).toContain('./flux-pi-extension.mjs');
   // The extension is loaded by pi (jiti) from wherever dist lives: no workspace or relative
   // imports may survive bundling, and its default export must register the two Flux tools.

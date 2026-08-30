@@ -44,6 +44,8 @@ export interface AgentTools {
 // `harness` pins the runtime when set (advisory — the create call's harness still wins, § 3);
 // `model`/`effort`/`role` are loose free-text the box compiles to harness flags, each omitted
 // when unset. `tools` is the Agent's tool policy (§ 4), omitted when unset (== mode `all`).
+// `manager` (ADR 0025) opts this Agent into the audited fleet-control tools (list/open/send/
+// close/read on OTHER sessions); omitted (never `false`) when off, which is every ordinary Agent.
 export interface AgentSpec {
   name: string;
   harness?: HarnessKind;
@@ -51,6 +53,7 @@ export interface AgentSpec {
   effort?: string;
   role?: string;
   tools?: AgentTools;
+  manager?: boolean;
 }
 
 export interface Settings {
@@ -83,7 +86,7 @@ const onlyKeys = (v: Record<string, unknown>, keys: readonly string[]): boolean 
 
 const fluxKeys = ['reposDir', 'defaultHarness', 'notifyOnAsk', 'notifyOnIdle', 'notifyOnDone'];
 const harnessConfigKeys = ['claudeMd', 'settingsJson'];
-const agentKeys = ['name', 'harness', 'model', 'effort', 'role', 'tools'];
+const agentKeys = ['name', 'harness', 'model', 'effort', 'role', 'tools', 'manager'];
 const toolsKeys = ['mode', 'list'];
 
 const isFilledStringList = (v: unknown): v is string[] =>
@@ -107,7 +110,8 @@ const isAgentSpec = (v: unknown): v is AgentSpec =>
   isOptional(v['model'], isFilledString) &&
   isOptional(v['effort'], isFilledString) &&
   isOptional(v['role'], isFilledString) &&
-  isOptional(v['tools'], isAgentTools);
+  isOptional(v['tools'], isAgentTools) &&
+  isOptional(v['manager'], isBoolean);
 
 // The whole saved-Agents list: every element valid and names unique, so `settings.set` returns
 // `bad_params` for a duplicate name rather than silently keeping the last of the pair.

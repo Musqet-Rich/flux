@@ -38,8 +38,9 @@ export interface SupervisorPoolOptions {
   git: GitService;
   claudeCommand?: string;
   pi?: PiOptions;
-  // Path of the per-session MCP config injecting the Flux tools (ADR 0008).
-  mcpConfig?: (session: string) => string;
+  // Path of the per-session MCP config injecting the Flux tools (ADR 0008); a manager session
+  // (ADR 0025) also gets the `flux-manager` server, so the second argument carries that flag.
+  mcpConfig?: (session: string, manager: boolean) => string;
   // Environment for the agent process; the pi extension finds the daemon through it.
   env?: (session: string) => NodeJS.ProcessEnv;
   emit: (event: FluxEvent) => void;
@@ -62,7 +63,9 @@ const claudeSpawn =
       cwd: request.cwd,
       ...(request.resume === undefined ? {} : { resume: request.resume }),
       ...(options.claudeCommand === undefined ? {} : { command: options.claudeCommand }),
-      ...(options.mcpConfig === undefined ? {} : { mcpConfig: options.mcpConfig(request.session) }),
+      ...(options.mcpConfig === undefined
+        ? {}
+        : { mcpConfig: options.mcpConfig(request.session, record.manager === true) }),
       ...(record.model === undefined ? {} : { model: record.model }),
       ...(record.effort === undefined ? {} : { effort: record.effort }),
       ...(record.role === undefined ? {} : { role: record.role }),
