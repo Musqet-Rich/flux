@@ -8,7 +8,8 @@ import type { SessionSupervisor } from './create-session-supervisor.ts';
 
 // What the control socket does with each request (ADR 0008): `ask` logs the question, parks
 // the session in waiting_user until an answer or the timeout, then logs the answer; `notify`
-// logs; `pair` mints a pairing URL; `devices.rm` revokes a device.
+// logs; `compact` sends `/compact` to the agent as a queued user turn (self-compaction, ADR 0008);
+// `pair` mints a pairing URL; `devices.rm` revokes a device.
 
 export interface ControlHandlerOptions {
   log: EventLog;
@@ -41,6 +42,11 @@ export const createControlHandler = (
         type: 'notify',
         payload: { level: request.level, summary: request.summary },
       });
+      return {};
+    }
+    if (request.type === 'compact') {
+      const text = request.focus === undefined ? '/compact' : `/compact ${request.focus}`;
+      await options.supervisor(record).send(text);
       return {};
     }
     const askId = crypto.randomUUID();

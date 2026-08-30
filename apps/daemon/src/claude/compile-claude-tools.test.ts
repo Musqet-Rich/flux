@@ -31,7 +31,7 @@ test('none disables every built-in tool with --tools ""', () => {
 test('deny never disallows the Flux tools (the floor)', () => {
   const args = compileClaudeTools({
     mode: 'deny',
-    list: ['Bash', 'flux_ask', 'flux_notify', 'mcp__flux__flux_ask', 'mcp__flux'],
+    list: ['Bash', 'flux_ask', 'flux_notify', 'flux_compact', 'mcp__flux__flux_ask', 'mcp__flux'],
   });
   expect(args).toEqual(['--disallowedTools', 'Bash']);
   expect(args.join(' ')).not.toMatch(/flux/u);

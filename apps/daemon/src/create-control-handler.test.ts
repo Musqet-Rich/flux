@@ -24,8 +24,12 @@ const setup = () => {
     harness: 'pi',
   });
   const waiting: boolean[] = [];
+  const sends: string[] = [];
   const supervisor: SessionSupervisor = {
-    send: () => Promise.resolve(1),
+    send: (text) => {
+      sends.push(text);
+      return Promise.resolve(1);
+    },
     waiting: (on) => {
       waiting.push(on);
     },
@@ -43,7 +47,7 @@ const setup = () => {
     pairingUrl: () => 'u',
     revokeDevice: () => Promise.resolve(),
   });
-  return { handle, log, waiting };
+  return { handle, log, waiting, sends };
 };
 
 test('an ask whose connection drops is answered as aborted and the session stops waiting', async () => {
@@ -59,4 +63,13 @@ test('an ask whose connection drops is answered as aborted and the session stops
     type: 'ask.answered',
     payload: { askId: expect.any(String), answer: '', by: 'aborted' },
   });
+});
+
+test('compact sends /compact as a queued turn without touching the ask registry or waiting', async () => {
+  const { handle, log, waiting, sends } = setup();
+  expect(await handle({ type: 'compact', session: 's1' })).toEqual({});
+  expect(await handle({ type: 'compact', session: 's1', focus: 'keep the API shape' })).toEqual({});
+  expect(sends).toEqual(['/compact', '/compact keep the API shape']);
+  expect(waiting).toEqual([]);
+  expect(log.read('s1', 0).events).toEqual([]);
 });
