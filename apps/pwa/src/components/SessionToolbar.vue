@@ -2,12 +2,15 @@
 import type { FluxEvent } from '@flux/protocol';
 import { computed } from 'vue';
 
+import { fluxEvent } from '@flux/protocol';
+
 import type { Store } from '../store/create-store.ts';
 import { sessionPr } from '../store/session-pr.ts';
 import SessionMenu from './SessionMenu.vue';
 
 // The strip above the timeline: the branch, a link to the session's PR once the log has a
-// `pr.published`, Stop while the agent runs, Changes, and the session menu.
+// `pr.published`, Stop while the agent runs, Changes (with the latest changed-file count), and
+// the session menu.
 
 const props = defineProps<{
   store: Store;
@@ -22,6 +25,14 @@ const pr = computed(() => sessionPr(props.events));
 const prLabel = computed(() =>
   pr.value?.identifier === '' ? 'PR' : `PR #${pr.value?.identifier}`,
 );
+// The count from the latest `files.changed` event, on the button so those events need not spam
+// the timeline. `ChangesView` reads the same last event when its fresher `git.status` has not run.
+const changedCount = computed(() => {
+  const last = props.events.findLast((e) => e.type === 'files.changed');
+  return last !== undefined && fluxEvent.isKnown(last) && last.type === 'files.changed'
+    ? last.payload.files.length
+    : 0;
+});
 </script>
 
 <template>
@@ -31,7 +42,9 @@ const prLabel = computed(() =>
       prLabel
     }}</a>
     <button v-if="busy" type="button" class="secondary" @click="$emit('interrupt')">Stop</button>
-    <button type="button" class="secondary" @click="$emit('changes')">Changes</button>
+    <button type="button" class="secondary" @click="$emit('changes')">
+      Changes ({{ changedCount }})
+    </button>
     <SessionMenu :store="store" :session="session" @closed="$emit('closed')" />
   </div>
 </template>

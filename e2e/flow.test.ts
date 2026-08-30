@@ -193,8 +193,9 @@ const wipeStorage = `indexedDB.databases().then((dbs) => Promise.all(dbs.map((db
     req.onsuccess = req.onerror = req.onblocked = () => done(null);
   }))))`;
 
-// The timeline leaves these in the log unrendered (architecture.md, `SessionView`).
-const hidden = new Set(['raw', 'rate_limit']);
+// The timeline leaves these in the log unrendered (architecture.md, `SessionView`):
+// `files.changed` now rides the Changes button count instead of a timeline row.
+const hidden = new Set(['raw', 'rate_limit', 'files.changed']);
 
 // A wiped device: nothing cached, not even the pairing, so after the reload the timeline can
 // only come from events.sync, from seq 0, and must match what the log holds: one row per
@@ -217,7 +218,7 @@ const reloadCold = async (page: Page, stack: Stack): Promise<void> => {
   expect(rows.map((row) => row.seq)).toEqual(rows.map((_, index) => index + 1));
   expect(rows.filter((row) => !hidden.has(row.type))).toHaveLength(before.length);
   expect(rows.filter((row) => hidden.has(row.type)).map((row) => row.type)).toEqual(
-    expect.arrayContaining(['raw', 'rate_limit']),
+    expect.arrayContaining(['raw', 'rate_limit', 'files.changed']),
   );
 };
 
