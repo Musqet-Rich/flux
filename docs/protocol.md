@@ -394,7 +394,7 @@ interface Settings {
   flux: FluxSettings; // runtime settings, stored on the box, changeable while it runs
   env: EnvSettings; // set only by the daemon's environment; read-only here
   harnessConfig: HarnessConfig;
-  agents: AgentSpec[]; // saved Agents (ADR 0023 § 2); a `settings.set` `agents` patch replaces the whole list
+  agents?: AgentSpec[]; // saved Agents (ADR 0023 § 2); a `settings.set` `agents` patch replaces the whole list. Absent from a daemon built before this shipped, which the device reads as no saved Agents; the box that has it always sends it
 }
 
 // A saved Agent (ADR 0023 § 2): a named, reusable preset picked at session create. `harness` pins

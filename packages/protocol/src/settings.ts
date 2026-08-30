@@ -45,7 +45,9 @@ export interface Settings {
   env: EnvSettings;
   harnessConfig: HarnessConfig;
   // Saved Agents (ADR 0023 § 2); a `settings.set` patch with `agents` replaces the whole list.
-  agents: AgentSpec[];
+  // Optional on the wire so a daemon built before this shipped, which omits it, still passes the
+  // device's result guard; the box that has it always sends it, absent reads as no saved Agents.
+  agents?: AgentSpec[];
 }
 
 export interface SettingsPatch {
@@ -123,7 +125,7 @@ const is = (v: unknown): v is Settings =>
   isFlux(v['flux']) &&
   isEnv(v['env']) &&
   isHarnessConfig(v['harnessConfig']) &&
-  isAgentList(v['agents']);
+  isOptional(v['agents'], isAgentList);
 
 const isPatch = (v: unknown): v is SettingsPatch =>
   isRecord(v) &&

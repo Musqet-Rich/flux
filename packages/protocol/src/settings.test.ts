@@ -31,7 +31,9 @@ test.each([
   [{ flux: { ...flux, reposDir: 1 }, env, harnessConfig, agents }, false],
   [{ flux, env: { ...env, claudeCommand: undefined }, harnessConfig, agents }, false],
   [{ flux, env, harnessConfig: { claudeMd: '' }, agents }, false],
-  [{ flux, env, harnessConfig }, false],
+  // `agents` is optional on the wire: a daemon built before it shipped omits it and still passes.
+  [{ flux, env, harnessConfig }, true],
+  [{ flux, env, harnessConfig, agents: undefined }, true],
   [{ flux, env, harnessConfig, agents: [{ name: '' }] }, false],
   [{ flux, env, harnessConfig, agents: [{ name: 'a' }, { name: 'a' }] }, false],
   [{ flux, env, harnessConfig, agents: {} }, false],
