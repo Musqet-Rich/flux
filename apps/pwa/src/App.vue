@@ -2,13 +2,13 @@
 import { pairing } from '@flux/protocol';
 import { computed, onMounted } from 'vue';
 
-import Pair from './components/Pair.vue';
+import Home from './components/Home.vue';
 import Shell from './components/Shell.vue';
 import { browserHistory } from './router/browser-history.ts';
 import { createRouter } from './router/create-router.ts';
 import { appStore } from './store/app-store.ts';
 
-// Root: boots the store (or pairs from a link), then shows the pair screen or the app shell.
+// Root: boots the store (or pairs from a link), then shows the homepage or the app shell.
 
 const store = appStore;
 const router = createRouter(browserHistory);
@@ -33,7 +33,7 @@ onMounted(() => {
 <template>
   <div class="app">
     <Shell v-if="paired" :store="store" :router="router" />
-    <Pair v-else :phase="store.state.phase" :error="error" @pair="store.pair" />
+    <Home v-else :phase="store.state.phase" :error="error" @pair="store.pair" />
   </div>
 </template>
 

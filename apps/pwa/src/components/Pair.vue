@@ -6,9 +6,13 @@ import { useScanner } from '../composables/useScanner.ts';
 import { requestPushPermission } from '../push/request-push-permission.ts';
 import type { StorePhase } from '../store/store-state.ts';
 
-// The first screen: scan the QR that `flux pair` prints, or paste the link it encodes.
+// The connect affordance: scan the QR that `flux pair` prints, or paste the link it encodes.
+// Standalone it heads its own screen (`h1`); the homepage embeds it as a section (`h2`).
 
-const props = defineProps<{ phase: StorePhase; error: string | null }>();
+const props = withDefaults(
+  defineProps<{ phase: StorePhase; error: string | null; headingTag?: 'h1' | 'h2' }>(),
+  { headingTag: 'h1' },
+);
 const emit = defineEmits<{ pair: [relayUrl: string, fragment: string] }>();
 
 const link = ref('');
@@ -49,7 +53,7 @@ const message = computed(() => {
 
 <template>
   <section class="pair">
-    <h1>{{ heading }}</h1>
+    <component :is="props.headingTag">{{ heading }}</component>
     <p class="hint">Run <code>flux pair</code> on the box and scan the QR code it prints.</p>
     <video v-show="active" ref="video" class="camera" playsinline muted />
     <button v-if="supported && !active" type="button" :disabled="busy" @click="start">
@@ -82,7 +86,8 @@ const message = computed(() => {
   gap: 1rem;
 }
 
-h1 {
+h1,
+h2 {
   font-size: 1.4rem;
   margin: 0;
 }
