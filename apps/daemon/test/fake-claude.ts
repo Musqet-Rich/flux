@@ -2,10 +2,14 @@
 // A stand-in for the `claude` binary that replays a captured stream-json fixture: each user
 // message on stdin plays the next turn (fixture lines up to and including a `result`), and
 // end of stdin ends the process. Flags are accepted and ignored so the real spawn args work.
-// FLUX_FAKE_FIXTURE names the fixture; FLUX_FAKE_EXIT_AFTER_TURNS makes it die early.
+// FLUX_FAKE_FIXTURE names the fixture; FLUX_FAKE_EXIT_AFTER_TURNS makes it die early;
+// FLUX_FAKE_ARGS_FILE records the spawn args for the spawn test.
 // Node 24 runs this .ts directly (type stripping), so it needs no build step.
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
+
+const argsFile = process.env['FLUX_FAKE_ARGS_FILE'];
+if (argsFile !== undefined) writeFileSync(argsFile, JSON.stringify(process.argv.slice(2)));
 
 const typeOf = (line: string): unknown => {
   const parsed: unknown = JSON.parse(line);

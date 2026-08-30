@@ -1,4 +1,7 @@
 import { readFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from 'vitest';
 
@@ -84,6 +87,42 @@ test('close ends an agent that ignores EOF and SIGTERM', async () => {
   expect(await ready(agent)).toBe('ready');
   expect(await agent.close()).toBeNull();
   expect(await exit).toBeNull();
+});
+
+// Args are recorded by the fake at startup; drive one turn so the process is up and has written
+// them before reading, then close it.
+const argsOf = async (agent: AgentProcess, file: string): Promise<string[]> => {
+  const done = turn(agent);
+  agent.send('go');
+  await done;
+  const args = JSON.parse(readFileSync(file, 'utf8')) as string[];
+  await agent.close();
+  return args;
+};
+
+test('passes --model and --effort when set, and omits them when unset', async () => {
+  const flaggedFile = join(tmpdir(), `flux-claude-args-set-${process.pid}.json`);
+  const flagged = spawnClaude({
+    cwd: process.cwd(),
+    command: fake,
+    model: 'opus',
+    effort: 'high',
+    env: { ...process.env, FLUX_FAKE_FIXTURE: fixture, FLUX_FAKE_ARGS_FILE: flaggedFile },
+    close: { graceMs: 100 },
+  });
+  const args = await argsOf(flagged, flaggedFile);
+  expect(args.slice(args.indexOf('--model'), args.indexOf('--model') + 2)).toEqual([
+    '--model',
+    'opus',
+  ]);
+  expect(args.slice(args.indexOf('--effort'), args.indexOf('--effort') + 2)).toEqual([
+    '--effort',
+    'high',
+  ]);
+  const plainFile = join(tmpdir(), `flux-claude-args-bare-${process.pid}.json`);
+  const plain = await argsOf(start({ FLUX_FAKE_ARGS_FILE: plainFile }), plainFile);
+  expect(plain).not.toContain('--model');
+  expect(plain).not.toContain('--effort');
 });
 
 // The message with an image block is written exactly as the capture that produced

@@ -11,7 +11,7 @@ const usage = { input: 1, output: 2, cacheRead: 3, cacheWrite: 4 };
 const cases: [EventType, unknown, boolean][] = [
   [
     'session.created',
-    { repo: '/r', worktree: '/w', branch: 'b', base: 'abc', agent: 'claude' },
+    { repo: '/r', worktree: '/w', branch: 'b', base: 'abc', harness: 'claude' },
     true,
   ],
   [
@@ -21,7 +21,7 @@ const cases: [EventType, unknown, boolean][] = [
       worktree: '/w',
       branch: 'b',
       base: 'abc',
-      agent: 'pi',
+      harness: 'pi',
       agentSessionId: 'x',
       title: 't',
     },
@@ -29,13 +29,13 @@ const cases: [EventType, unknown, boolean][] = [
   ],
   [
     'session.created',
-    { repo: '/r', worktree: '/w', branch: 'b', base: 'abc', agent: 'gpt' },
+    { repo: '/r', worktree: '/w', branch: 'b', base: 'abc', harness: 'gpt' },
     false,
   ],
-  ['session.created', { repo: '/r', worktree: '/w', branch: 'b', agent: 'claude' }, false],
+  ['session.created', { repo: '/r', worktree: '/w', branch: 'b', harness: 'claude' }, false],
   [
     'session.created',
-    { repo: '/r', worktree: '/w', branch: 'b', base: 'abc', agent: 'claude', title: 1 },
+    { repo: '/r', worktree: '/w', branch: 'b', base: 'abc', harness: 'claude', title: 1 },
     false,
   ],
   ['session.state', { state: 'idle' }, true],

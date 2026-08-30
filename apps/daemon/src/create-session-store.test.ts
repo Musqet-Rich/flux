@@ -25,7 +25,7 @@ const input = {
   worktree: '/repos/app/.flux/s1',
   branch: 'flux/fix-login',
   base: 'abc123',
-  agent: 'claude' as const,
+  harness: 'claude' as const,
 };
 
 test('create returns the full record with defaults', () => {
@@ -59,7 +59,7 @@ test('list gives summaries, newest first, archived ones flagged with their workt
     title: 'Fix login',
     repo: '/repos/app',
     branch: 'flux/fix-login',
-    agent: 'claude',
+    harness: 'claude',
     state: 'idle',
     lastSeq: 7,
     createdAt: '2026-08-29T10:00:00.000Z',
@@ -97,15 +97,25 @@ test('unknown sessions raise not_found', () => {
   }).toThrow(DaemonError);
 });
 
-test('tolerates unknown agent and state values from older rows', () => {
+test('tolerates unknown harness and state values from older rows', () => {
   const { store } = setup();
-  store.create({ ...input, agent: 'pi' });
-  expect(store.get('s1').agent).toBe('pi');
+  store.create({ ...input, harness: 'pi' });
+  expect(store.get('s1').harness).toBe('pi');
   const db = openDatabase(':memory:');
   const other = createSessionStore({ db, lastSeq: () => 0 });
   db.exec(
-    "INSERT INTO sessions VALUES ('x', 't', '/r', '/w', 'b', 'base', 'future-agent', NULL, 'future-state', 0, 'now', 'now')",
+    "INSERT INTO sessions (session, title, repo, worktree, branch, base, agent, state, created_at, updated_at) VALUES ('x', 't', '/r', '/w', 'b', 'base', 'future-agent', 'future-state', 'now', 'now')",
   );
-  expect(other.get('x').agent).toBe('claude');
+  expect(other.get('x').harness).toBe('claude');
   expect(other.get('x').state).toBe('idle');
+});
+
+test('persists model and effort and omits them when unset', () => {
+  const { store } = setup();
+  store.create({ ...input, session: 'm1', model: 'opus', effort: 'high' });
+  expect(store.get('m1')).toMatchObject({ model: 'opus', effort: 'high' });
+  store.create({ ...input, session: 'm2' });
+  const bare = store.get('m2');
+  expect('model' in bare).toBe(false);
+  expect('effort' in bare).toBe(false);
 });

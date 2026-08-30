@@ -17,7 +17,7 @@ const setup = () => {
       worktree: '/w',
       branch: 'b',
       base: 'HEAD',
-      agent: 'claude',
+      harness: 'claude',
     });
   return { log, sessions, create };
 };

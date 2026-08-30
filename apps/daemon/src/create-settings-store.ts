@@ -27,7 +27,7 @@ const key = 'flux';
 
 const defaults = (reposDir: string): FluxSettings => ({
   reposDir,
-  defaultAgent: 'claude',
+  defaultHarness: 'claude',
   notifyOnAsk: true,
   notifyOnIdle: true,
   notifyOnDone: true,
@@ -46,7 +46,7 @@ const parse = (value: unknown): Partial<FluxSettings> => {
 // Field by field, so a stored row from another build carries nothing unknown into the result.
 const merge = (base: FluxSettings, patch: Partial<FluxSettings>): FluxSettings => ({
   reposDir: patch.reposDir ?? base.reposDir,
-  defaultAgent: patch.defaultAgent ?? base.defaultAgent,
+  defaultHarness: patch.defaultHarness ?? base.defaultHarness,
   notifyOnAsk: patch.notifyOnAsk ?? base.notifyOnAsk,
   notifyOnIdle: patch.notifyOnIdle ?? base.notifyOnIdle,
   notifyOnDone: patch.notifyOnDone ?? base.notifyOnDone,

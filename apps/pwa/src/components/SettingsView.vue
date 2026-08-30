@@ -2,7 +2,7 @@
 import { onMounted } from 'vue';
 
 import type { Store } from '../store/create-store.ts';
-import AgentConfigEditor from './AgentConfigEditor.vue';
+import HarnessConfigEditor from './HarnessConfigEditor.vue';
 import DevicesSection from './DevicesSection.vue';
 import FluxSettingsForm from './FluxSettingsForm.vue';
 
@@ -27,7 +27,7 @@ onMounted(() => {
     <div class="sections">
       <DevicesSection :store="store" />
       <FluxSettingsForm :store="store" />
-      <AgentConfigEditor :store="store" />
+      <HarnessConfigEditor :store="store" />
     </div>
   </section>
 </template>

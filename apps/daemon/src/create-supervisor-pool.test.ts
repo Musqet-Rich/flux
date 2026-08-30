@@ -25,7 +25,7 @@ const setup = async () => {
     worktree,
     branch: 'b',
     base: 'HEAD',
-    agent: 'claude',
+    harness: 'claude',
   });
   const pool = createSupervisorPool({
     log,

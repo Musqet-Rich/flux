@@ -1,5 +1,5 @@
 import { attachment } from './attachment.ts';
-import type { AgentKind, CodeRef, SessionState, TokenUsage } from './event-payloads.ts';
+import type { CodeRef, HarnessKind, SessionState, TokenUsage } from './event-payloads.ts';
 import type { FluxEvent } from './flux-event.ts';
 import { guards } from './guards.ts';
 import { isCodeRef } from './is-code-ref.ts';
@@ -14,7 +14,11 @@ export interface SessionSummary {
   title: string;
   repo: string;
   branch: string;
-  agent: AgentKind;
+  harness: HarnessKind;
+  // The configured model and effort the session was spawned with (ADR 0023 § 3), distinct from
+  // the running model reported in `agent.context`. Absent when the box spawned on its defaults.
+  model?: string;
+  effort?: string;
   state: SessionState;
   lastSeq: number;
   // Absent from a daemon built before it was sent (2026-08-29); the device then orders by id.
@@ -79,8 +83,8 @@ export interface RpcMethods {
       daemon: string;
       sessions: SessionSummary[];
       vapidPublicKey?: string;
-      // Agents whose binary the box found at start; absent from older daemons (claude only).
-      agents?: AgentKind[];
+      // Harnesses whose binary the box found at start; absent from older daemons (claude only).
+      agents?: HarnessKind[];
       // The daemon's app version (semver, ADR 0021); absent from daemons built before this
       // shipped, so the device feature-detects rather than assuming it is present.
       version?: string;
@@ -96,7 +100,17 @@ export interface RpcMethods {
     result: { costUsd: number; usage: TokenUsage; turns: number };
   };
   'sessions.create': {
-    params: { repo: string; branch: string; base?: string; agent: AgentKind; title?: string };
+    params: {
+      repo: string;
+      branch: string;
+      base?: string;
+      harness: HarnessKind;
+      title?: string;
+      // Configured model and effort (ADR 0023 § 3), loose free-text strings the box compiles to
+      // harness flags; omitted to spawn on the box defaults.
+      model?: string;
+      effort?: string;
+    };
     result: SessionSummary;
   };
   // Closes the agent and hides the session. `removeWorktree` also removes the worktree, refused
@@ -243,6 +257,10 @@ const isEmpty = (v: unknown): v is Record<string, never> =>
 const withSession = (v: unknown): v is Record<string, unknown> & { session: string } =>
   isRecord(v) && isString(v['session']);
 
+// `model`/`effort` are loose free-text (ADR 0023 § 3): the guard checks non-empty, not membership
+// of an enum, since the two harnesses' vocabularies differ and both move every release.
+const isFilledString = (v: unknown): v is string => isString(v) && v.length > 0;
+
 export const rpcMethods: ParamGuards = {
   hello: (v): v is RpcMethods['hello']['params'] => isRecord(v) && isInteger(v['protocol'], 1),
   'events.sync': (v): v is RpcMethods['events.sync']['params'] =>
@@ -254,8 +272,10 @@ export const rpcMethods: ParamGuards = {
     isString(v['repo']) &&
     isString(v['branch']) &&
     isOptional(v['base'], isString) &&
-    isOneOf(v['agent'], ['claude', 'pi']) &&
-    isOptional(v['title'], isString),
+    isOneOf(v['harness'], ['claude', 'pi']) &&
+    isOptional(v['title'], isString) &&
+    isOptional(v['model'], isFilledString) &&
+    isOptional(v['effort'], isFilledString),
   'sessions.archive': (v): v is RpcMethods['sessions.archive']['params'] =>
     withSession(v) &&
     isOptional(v['removeWorktree'], isBoolean) &&

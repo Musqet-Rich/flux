@@ -23,6 +23,8 @@ export interface SpawnPiOptions {
   extension?: string;
   provider?: string;
   model?: string;
+  // Configured effort (ADR 0023 § 3), passed as pi's `--thinking` when set.
+  thinking?: string;
   env?: NodeJS.ProcessEnv;
   close?: CloseChildOptions;
 }
@@ -51,6 +53,7 @@ const piArgs = (options: SpawnPiOptions): string[] => [
   '--no-prompt-templates',
   ...(options.provider === undefined ? [] : ['--provider', options.provider]),
   ...(options.model === undefined ? [] : ['--model', options.model]),
+  ...(options.thinking === undefined ? [] : ['--thinking', options.thinking]),
   ...(options.extension === undefined
     ? []
     : ['--extension', options.extension, '--append-system-prompt', fluxPrompt]),

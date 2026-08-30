@@ -21,7 +21,7 @@ const setup = () => {
     worktree: '/w',
     branch: 'b',
     base: 'HEAD',
-    agent: 'pi',
+    harness: 'pi',
   });
   const waiting: boolean[] = [];
   const supervisor: SessionSupervisor = {

@@ -11,11 +11,11 @@ export { createChannel } from './create-channel.ts';
 export type { Ephemeral, UpdateFailReason, UpdatePhase } from './ephemeral.ts';
 export { ephemeral } from './ephemeral.ts';
 export type {
-  AgentKind,
   ChangedFile,
   CodeRef,
   EventPayloads,
   EventType,
+  HarnessKind,
   LineRange,
   RateWindow,
   SessionState,
@@ -62,9 +62,9 @@ export type {
 export { rpcMethods } from './rpc-methods.ts';
 export { rpcResults } from './rpc-results.ts';
 export type {
-  AgentConfig,
   EnvSettings,
   FluxSettings,
+  HarnessConfig,
   Settings,
   SettingsPatch,
 } from './settings.ts';

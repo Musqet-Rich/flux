@@ -11,7 +11,7 @@ const s = (session: string, extra: Partial<SessionSummary>): SessionSummary => (
   title: `T ${session}`,
   repo: '/r',
   branch: `b/${session}`,
-  agent: 'claude',
+  harness: 'claude',
   state: 'idle',
   lastSeq: 0,
   createdAt: '2026-01-01T00:00:00Z',

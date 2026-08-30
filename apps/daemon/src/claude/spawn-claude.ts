@@ -31,6 +31,9 @@ export interface SpawnClaudeOptions {
   command?: string;
   resume?: string;
   mcpConfig?: string;
+  // Configured model and effort (ADR 0023 § 3), passed as `--model`/`--effort` when set.
+  model?: string;
+  effort?: string;
   env?: NodeJS.ProcessEnv;
   close?: CloseChildOptions;
 }
@@ -56,6 +59,8 @@ const fluxPrompt =
 const claudeArgs = (options: SpawnClaudeOptions): string[] => [
   ...baseArgs,
   ...(options.resume === undefined ? [] : ['--resume', options.resume]),
+  ...(options.model === undefined ? [] : ['--model', options.model]),
+  ...(options.effort === undefined ? [] : ['--effort', options.effort]),
   ...(options.mcpConfig === undefined
     ? []
     : ['--mcp-config', options.mcpConfig, '--append-system-prompt', fluxPrompt]),

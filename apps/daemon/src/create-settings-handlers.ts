@@ -5,7 +5,7 @@ import { DaemonError } from './daemon-error.ts';
 import type { HandlerContext } from './handler-context.ts';
 
 // Device and settings methods of protocol.md § 7 (prd.md P2: pair a second device, revoke a
-// device, edit the box-side and agent config from the PWA).
+// device, edit the box-side and harness config from the PWA).
 
 export type SettingsHandlers = Pick<
   {
@@ -33,7 +33,7 @@ const listDevices = (ctx: HandlerContext, peer: Peer): Device[] =>
 const readSettings = async (ctx: HandlerContext): Promise<Settings> => ({
   flux: ctx.settings.get(),
   env: ctx.env,
-  agent: await ctx.agentConfig.read(),
+  harnessConfig: await ctx.harnessConfig.read(),
 });
 
 export const createSettingsHandlers = (ctx: HandlerContext): SettingsHandlers => ({
@@ -49,13 +49,13 @@ export const createSettingsHandlers = (ctx: HandlerContext): SettingsHandlers =>
   'settings.set': async (p) => {
     // Both halves are checked before either is written, and the files go first: a failed file
     // write then leaves the database untouched too.
-    if (p.agent !== undefined) ctx.agentConfig.check(p.agent);
+    if (p.harnessConfig !== undefined) ctx.harnessConfig.check(p.harnessConfig);
     if (p.flux !== undefined) ctx.settings.check(p.flux);
-    const agent = p.flux?.defaultAgent;
-    if (agent !== undefined && !ctx.agents.includes(agent)) {
-      throw new DaemonError('agent_unavailable', `${agent} is not installed on the box`);
+    const harness = p.flux?.defaultHarness;
+    if (harness !== undefined && !ctx.agents.includes(harness)) {
+      throw new DaemonError('agent_unavailable', `${harness} is not installed on the box`);
     }
-    if (p.agent !== undefined) await ctx.agentConfig.write(p.agent);
+    if (p.harnessConfig !== undefined) await ctx.harnessConfig.write(p.harnessConfig);
     if (p.flux !== undefined) ctx.settings.set(p.flux);
     return readSettings(ctx);
   },

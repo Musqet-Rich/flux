@@ -1,13 +1,14 @@
-import type { AgentKind } from './event-payloads.ts';
+import type { HarnessKind } from './event-payloads.ts';
 import { guards } from './guards.ts';
 
 // What `settings.get` returns and `settings.set` patches (protocol.md § 7). `flux` is the box's
 // runtime configuration that may change while the daemon runs; `env` is what only its
-// environment sets and is reported read-only; `agent` is the agent's own global config files.
+// environment sets and is reported read-only; `harnessConfig` is the harness's own global config
+// files (ADR 0023 § 1).
 
 export interface FluxSettings {
   reposDir: string;
-  defaultAgent: AgentKind;
+  defaultHarness: HarnessKind;
   notifyOnAsk: boolean;
   notifyOnIdle: boolean;
   notifyOnDone: boolean;
@@ -22,7 +23,7 @@ export interface EnvSettings {
 }
 
 // Raw file contents: `~/.claude/CLAUDE.md` and `~/.claude/settings.json` of the flux user.
-export interface AgentConfig {
+export interface HarnessConfig {
   claudeMd: string;
   settingsJson: string;
 }
@@ -30,29 +31,29 @@ export interface AgentConfig {
 export interface Settings {
   flux: FluxSettings;
   env: EnvSettings;
-  agent: AgentConfig;
+  harnessConfig: HarnessConfig;
 }
 
 export interface SettingsPatch {
   flux?: Partial<FluxSettings>;
-  agent?: Partial<AgentConfig>;
+  harnessConfig?: Partial<HarnessConfig>;
 }
 
 const { isString, isBoolean, isRecord, isOneOf, isOptional } = guards;
 
-const isAgentKind = (v: unknown): v is AgentKind => isOneOf(v, ['claude', 'pi']);
+const isHarnessKind = (v: unknown): v is HarnessKind => isOneOf(v, ['claude', 'pi']);
 
 // A patch may name only fields that exist; a misspelt key would otherwise be silently ignored.
 const onlyKeys = (v: Record<string, unknown>, keys: readonly string[]): boolean =>
   Object.keys(v).every((k) => keys.includes(k));
 
-const fluxKeys = ['reposDir', 'defaultAgent', 'notifyOnAsk', 'notifyOnIdle', 'notifyOnDone'];
-const agentKeys = ['claudeMd', 'settingsJson'];
+const fluxKeys = ['reposDir', 'defaultHarness', 'notifyOnAsk', 'notifyOnIdle', 'notifyOnDone'];
+const harnessConfigKeys = ['claudeMd', 'settingsJson'];
 
 const isFlux = (v: unknown): v is FluxSettings =>
   isRecord(v) &&
   isString(v['reposDir']) &&
-  isAgentKind(v['defaultAgent']) &&
+  isHarnessKind(v['defaultHarness']) &&
   isBoolean(v['notifyOnAsk']) &&
   isBoolean(v['notifyOnIdle']) &&
   isBoolean(v['notifyOnDone']);
@@ -61,7 +62,7 @@ const isFluxPatch = (v: unknown): v is Partial<FluxSettings> =>
   isRecord(v) &&
   onlyKeys(v, fluxKeys) &&
   isOptional(v['reposDir'], isString) &&
-  isOptional(v['defaultAgent'], isAgentKind) &&
+  isOptional(v['defaultHarness'], isHarnessKind) &&
   isOptional(v['notifyOnAsk'], isBoolean) &&
   isOptional(v['notifyOnIdle'], isBoolean) &&
   isOptional(v['notifyOnDone'], isBoolean);
@@ -74,22 +75,22 @@ const isEnv = (v: unknown): v is EnvSettings =>
   isString(v['pushSubject']) &&
   isString(v['claudeCommand']);
 
-const isAgent = (v: unknown): v is AgentConfig =>
+const isHarnessConfig = (v: unknown): v is HarnessConfig =>
   isRecord(v) && isString(v['claudeMd']) && isString(v['settingsJson']);
 
-const isAgentPatch = (v: unknown): v is Partial<AgentConfig> =>
+const isHarnessConfigPatch = (v: unknown): v is Partial<HarnessConfig> =>
   isRecord(v) &&
-  onlyKeys(v, agentKeys) &&
+  onlyKeys(v, harnessConfigKeys) &&
   isOptional(v['claudeMd'], isString) &&
   isOptional(v['settingsJson'], isString);
 
 const is = (v: unknown): v is Settings =>
-  isRecord(v) && isFlux(v['flux']) && isEnv(v['env']) && isAgent(v['agent']);
+  isRecord(v) && isFlux(v['flux']) && isEnv(v['env']) && isHarnessConfig(v['harnessConfig']);
 
 const isPatch = (v: unknown): v is SettingsPatch =>
   isRecord(v) &&
-  onlyKeys(v, ['flux', 'agent']) &&
+  onlyKeys(v, ['flux', 'harnessConfig']) &&
   isOptional(v['flux'], isFluxPatch) &&
-  isOptional(v['agent'], isAgentPatch);
+  isOptional(v['harnessConfig'], isHarnessConfigPatch);
 
 export const settings: { is: typeof is; isPatch: typeof isPatch } = { is, isPatch };

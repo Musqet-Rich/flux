@@ -1,7 +1,7 @@
 import type {
-  AgentKind,
   Device,
   FluxEvent,
+  HarnessKind,
   RateWindow,
   SessionSummary,
   Settings,
@@ -110,8 +110,8 @@ export interface StoreState {
   error: StoreError | null;
   push: PushState;
   sessions: SessionSummary[];
-  // Agents the box can run, from `hello`; a daemon that predates the field has claude only.
-  agents: AgentKind[];
+  // Harnesses the box can run, from `hello`; a daemon that predates the field has claude only.
+  agents: HarnessKind[];
   rateWindows: RateWindow[];
   logs: Record<string, LogView>;
   drafts: Record<string, Draft>;

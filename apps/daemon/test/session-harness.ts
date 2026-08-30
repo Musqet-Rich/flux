@@ -73,7 +73,7 @@ export const sessionHarness = async (
     worktree,
     branch: 'b',
     base: 'HEAD',
-    agent: 'claude',
+    harness: 'claude',
   });
   const emitted: FluxEvent[] = [];
   const ephemeral: Ephemeral[] = [];
