@@ -14,6 +14,7 @@ const agents: AgentSpec[] = [
     tools: { mode: 'deny', list: ['Bash'] },
   },
   { name: 'bare' },
+  { name: 'boss', manager: true },
 ];
 
 test('a named agent supplies model, effort, role and tools', () => {
@@ -49,6 +50,14 @@ test('inline values apply with no agent, and unset fields are omitted', () => {
 
 test('an agent with no fields set resolves to nothing', () => {
   expect(resolveAgent({ agent: 'bare' }, agents)).toEqual({});
+});
+
+// The manager flag (ADR 0025) is Agent-only and carried only when it is on, so an ordinary
+// session's record leaves it unset (read as not a manager by the authorisation check).
+test('manager is carried only from an agent that turned it on', () => {
+  expect(resolveAgent({ agent: 'boss' }, agents)).toEqual({ manager: true });
+  expect('manager' in resolveAgent({ agent: 'bare' }, agents)).toBe(false);
+  expect('manager' in resolveAgent({ agent: 'reviewer' }, agents)).toBe(false);
 });
 
 // The wire code (`bad_params`) is asserted end-to-end in create-daemon.test.ts; here the type.

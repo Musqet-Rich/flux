@@ -150,6 +150,21 @@ test('persists the resolved tool policy as JSON and re-reads it across a restart
   expect(reopened.get('t2').tools).toEqual({ mode: 'none' });
 });
 
+test('persists the manager flag and re-reads it across a restart, absent when off', () => {
+  const db = openDatabase(':memory:');
+  const store = createSessionStore({ db, lastSeq: () => 0 });
+  store.create({ ...input, session: 'boss', manager: true });
+  store.create({ ...input, session: 'worker' });
+  expect(store.get('boss').manager).toBe(true);
+  expect('manager' in store.get('worker')).toBe(false);
+  // Daemon-internal (ADR 0025): never on the wire summary.
+  expect(store.list().some((s) => 'manager' in s)).toBe(false);
+  // The authorisation check rests on this surviving a restart.
+  const reopened = createSessionStore({ db, lastSeq: () => 0 });
+  expect(reopened.get('boss').manager).toBe(true);
+  expect('manager' in reopened.get('worker')).toBe(false);
+});
+
 test('reads a stored tool policy that no longer parses as none, not a failure', () => {
   const db = openDatabase(':memory:');
   const store = createSessionStore({ db, lastSeq: () => 0 });

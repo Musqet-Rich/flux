@@ -196,6 +196,19 @@ const cases: [EventType, unknown, boolean][] = [
     { trigger: 'manual', preTokens: 60065, postTokens: 6202, durationMs: 59369, result: 5 },
     false,
   ],
+  [
+    'manager.acted',
+    { actor: 's1', action: 'open', target: 's2', detail: 'claude on flux/x' },
+    true,
+  ],
+  ['manager.acted', { actor: 's1', action: 'send', target: 's2', detail: 'hi' }, true],
+  ['manager.acted', { actor: 's1', action: 'close', target: 's2', detail: 'archived' }, true],
+  ['manager.acted', { actor: 's1', action: 'read', target: 's2', detail: '3 events' }, true],
+  // `list` is read-only and not audited, so it is not an action value.
+  ['manager.acted', { actor: 's1', action: 'list', target: 's2', detail: 'x' }, false],
+  ['manager.acted', { actor: 's1', action: 'send', target: 's2' }, false],
+  ['manager.acted', { actor: 's1', action: 'send', target: 5, detail: 'x' }, false],
+  ['manager.acted', { actor: 1, action: 'send', target: 's2', detail: 'x' }, false],
   ['raw', { agent: 'claude', data: { anything: true } }, true],
   ['raw', { agent: 'claude' }, false],
 ];

@@ -24,7 +24,7 @@ test('resolves the agents present and the per-agent spawn options', () => {
     provider: 'anthropic',
     model: 'claude-haiku-4-5',
   });
-  expect(config.pool.mcpConfig?.('s1')).toBe(join(dataDir, 'mcp', 's1.json'));
+  expect(config.pool.mcpConfig?.('s1', false)).toBe(join(dataDir, 'mcp', 's1.json'));
   expect(config.pool.env?.('s1')).toMatchObject({
     FLUX_CONTROL_SOCKET: '/run/flux.sock',
     FLUX_SESSION: 's1',

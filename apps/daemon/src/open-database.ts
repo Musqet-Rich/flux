@@ -32,6 +32,7 @@ const schema = `
     effort TEXT,
     role TEXT,
     tools TEXT,
+    manager INTEGER,
     agent_session_id TEXT,
     state TEXT NOT NULL,
     archived INTEGER NOT NULL DEFAULT 0,
@@ -91,6 +92,7 @@ const addedColumns = [
   { table: 'sessions', column: 'effort', type: 'TEXT' },
   { table: 'sessions', column: 'role', type: 'TEXT' },
   { table: 'sessions', column: 'tools', type: 'TEXT' },
+  { table: 'sessions', column: 'manager', type: 'INTEGER' },
 ];
 
 const addMissingColumns = (db: DatabaseSync): void => {

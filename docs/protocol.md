@@ -243,6 +243,17 @@ type FluxEvent =
       }
     > // Claude Code compacted the conversation (architecture.md § Adapter)
 
+  // manager surface (ADR 0025)
+  | Envelope<
+      'manager.acted',
+      {
+        actor: string; // the manager session that acted
+        action: 'open' | 'send' | 'close' | 'read'; // `list` is read-only and not audited
+        target: string; // the session acted on (the new session for `open`)
+        detail: string; // one-line description of what the manager did
+      }
+    > // a manager agent acted on another session; appended to the target session's log
+
   // escape hatch
   | Envelope<'raw', { agent: string; data: unknown }>
 
@@ -298,6 +309,7 @@ Rules:
 - `parent` is set on every event a subagent produced (its prompt as `msg.user`, its `msg.assistant`, `tool.start`, `tool.end`, `files.changed`, `hook.failed`, `raw`, …) and names the Agent call that spawned it, which is the `toolUseId` of a `task.started` in the same log. It is absent, never `null`, on top-level events, so a log without subagents is what it was before the field and a device that predates it ignores it. Nested subagents chain: a grandchild's `parent` is the child's own Agent call, so the tree is walked through `task.started` rows; the `task.*` rows themselves carry the `parent` of the agent that spawned the task (none at the top level). Task boundaries are not synthesised: a task with no `task.ended` when the session leaves `running` (its `session.state` `idle` or `ended`, or `session.cleared`) was interrupted, and the device shows it so. `ask` and `notify` are always top-level: the Flux tools reach the box over the control socket, not the agent's stream.
 - `pr.published` is logged when the agent opens a pull request itself and when the operator opens one through `git.pr`, so a session's PR is always the latest `pr.published` in its log. `repo` and `identifier` are empty strings when the URL is not a GitHub pull request URL.
 - `hook.failed` is logged only for a hook whose outcome is not `success`; `stderr` is capped at 2 KiB by the adapter. `exitCode` is absent when the agent did not report one.
+- `manager.acted` is appended to the **target** session's log each time a manager agent (ADR 0025) successfully runs a mutating verb against another session: `open` (on the newly created session), `send`, `close` (archive) or `read`. `list` is read-only, has no single target and is not audited, so it is not an `action` value. `actor` is the manager's own session; `detail` is a short human-readable line. It is additive (§ 8): a daemon that predates it never emits it, and a device that predates it renders it as an opaque row.
 - `compact.boundary` is logged once when Claude Code finishes compacting the conversation (a `/compact` turn, or an automatic compaction), carrying the before/after context sizes and how long it took. `result` is read from the `compact_result` on the separate status line Claude emits for the compaction (`success`, `failure`; an open set), defaulting to `success` when that line was not seen. The compaction is a black box with no incremental progress, so the device infers an indeterminate "Compacting…" indicator client-side — the session is `running`, the latest top-level `msg.user` is exactly `/compact`, and no `compact.boundary` has arrived since — and this event ends it. Additive (§ 8): a daemon that predates it never emits it, and a device that predates it renders it as an opaque row.
 
 ## 6. Ephemeral messages
@@ -417,7 +429,9 @@ interface Settings {
 // loose non-empty strings the box compiles to harness flags, each omitted when unset. `role` is
 // appended after the Flux system prompt on both harnesses, never replacing it. `tools` is the
 // Agent's tool policy (§ 4), omitted when unset (== mode `all`). Names are unique within the list;
-// a blank or duplicate name fails `settings.set` with `bad_params`.
+// a blank or duplicate name fails `settings.set` with `bad_params`. `manager` (ADR 0025) opts the
+// Agent into the audited fleet-control tools (list/open/send/close/read on OTHER sessions);
+// omitted (never `false`) when off, which is every ordinary Agent.
 interface AgentSpec {
   name: string;
   harness?: 'claude' | 'pi';
@@ -425,6 +439,7 @@ interface AgentSpec {
   effort?: string;
   role?: string;
   tools?: AgentTools;
+  manager?: boolean;
 }
 
 // An Agent's tool policy (ADR 0023 § 4/§ 5). `all` is today's behaviour (the full toolset). `allow`
@@ -498,6 +513,8 @@ Error codes: `bad_params`, `not_found`, `not_paired`, `agent_unavailable`, `git_
 `protocol: 2` is exchanged in `hello`, in both handshake hellos (`v`) and in the relay's first message. Additive changes (new event types, new optional fields, new RPC methods) do not bump the version. Removing or changing the meaning of anything bumps the version.
 
 The `daemon.update` method, the `update.progress` / `update.failed` ephemerals and the `unsupported` error code (self-update, ADR 0022) are all additive: a new method, two new session-less ephemerals and a new error string, none of which change an existing shape, so `protocol` stays 2. `daemon.checkUpdate` (update discovery + the verify-only dry-run, ADR 0021/0022) is additive in the same way — one new method, no existing shape changed — so a PWA served after it ships may hit an older self-updated daemon that lacks it; that daemon answers `not_found`, which the PWA treats as "cannot check" and degrades, never a hard failure.
+
+The `manager.acted` event and the optional `AgentSpec.manager` boolean (the manager agent, ADR 0025) are additive in the same way — one new event type and one new optional field, no existing shape changed — so `protocol` stays 2. The manager surface adds **no** RPC method: it is control-socket-only, agent↔daemon. A device that predates the event renders it as an opaque row (§ 8); a daemon that predates the field ignores it (guards check the fields they know).
 
 The `skills.list` / `skills.write` / `skills.delete` methods (box-side skill files under the flux user's `~/.claude/skills`) are additive in the same way — three new methods, no existing shape changed — so `protocol` stays 2. A PWA served after they ship may hit an older self-updated daemon that lacks them; that daemon answers `not_found`, which the PWA reads as "no skills" and degrades (no skills editor, no slash-command autocomplete), never a hard failure.
 

@@ -118,6 +118,16 @@ export interface EventPayloads {
     durationMs: number;
     result: string;
   };
+  // A manager agent (ADR 0025) acted on another session: `actor` is the manager's own session,
+  // `action` the verb it ran (`list` is read-only and not audited, so it is not a value here),
+  // `target` the session it acted on, `detail` a one-line description. Appended to the target
+  // session's log so the operator can always reconstruct what the manager did.
+  'manager.acted': {
+    actor: string;
+    action: 'open' | 'send' | 'close' | 'read';
+    target: string;
+    detail: string;
+  };
   raw: { agent: string; data: unknown };
 }
 
@@ -247,5 +257,11 @@ export const eventPayloads: PayloadGuards = {
     isInteger(v['postTokens']) &&
     isInteger(v['durationMs']) &&
     isString(v['result']),
+  'manager.acted': (v): v is EventPayloads['manager.acted'] =>
+    isRecord(v) &&
+    isString(v['actor']) &&
+    isOneOf(v['action'], ['open', 'send', 'close', 'read']) &&
+    isString(v['target']) &&
+    isString(v['detail']),
   raw: (v): v is EventPayloads['raw'] => isRecord(v) && isString(v['agent']) && 'data' in v,
 };

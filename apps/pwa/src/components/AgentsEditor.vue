@@ -19,6 +19,8 @@ interface Row {
   toolsMode: ToolsMode;
   // Free-text tool names for allow/deny, one per line or comma-separated (loose, not an enum).
   toolsText: string;
+  // Opts this Agent into the manager tools (ADR 0025): list/open/message/read/archive OTHER sessions.
+  manager: boolean;
 }
 
 const toolsModes: ToolsMode[] = ['all', 'allow', 'deny', 'none'];
@@ -56,6 +58,7 @@ const toRow = (a: AgentSpec): Row => ({
   role: a.role ?? '',
   toolsMode: a.tools?.mode ?? 'all',
   toolsText: a.tools?.list?.join('\n') ?? '',
+  manager: a.manager ?? false,
 });
 
 const clean = (row: Row): AgentSpec => ({
@@ -65,6 +68,7 @@ const clean = (row: Row): AgentSpec => ({
   ...(row.effort.trim() === '' ? {} : { effort: row.effort.trim() }),
   ...(row.role.trim() === '' ? {} : { role: row.role.trim() }),
   ...toolsOf(row),
+  ...(row.manager ? { manager: true } : {}),
 });
 
 const cleaned = computed((): AgentSpec[] => rows.value.map((r) => clean(r)));
@@ -198,6 +202,13 @@ const save = async (): Promise<void> => {
             </label>
             <p class="tools-note">flux_ask and flux_notify stay available in every mode.</p>
           </div>
+          <label class="manager-label">
+            <input v-model="row.manager" type="checkbox" class="agent-manager" :disabled="busy" />
+            Manager
+          </label>
+          <p class="tools-note manager-note">
+            A manager can open, message, read and archive other sessions.
+          </p>
           <button
             type="button"
             class="secondary agent-delete"
@@ -287,6 +298,18 @@ label {
   color: var(--muted);
   font-size: 0.8rem;
   margin: 0;
+}
+
+.manager-label {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+  color: inherit;
+  font-size: 0.9rem;
+}
+
+.manager-note {
+  margin-top: -0.2rem;
 }
 
 .agent-delete {

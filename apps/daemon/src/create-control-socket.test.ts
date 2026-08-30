@@ -117,6 +117,50 @@ test('rejects a compact request with a blank/missing session or non-string focus
   expect(seen).toHaveLength(0);
 });
 
+test('accepts the manager verbs with valid shapes (ADR 0025)', async () => {
+  const requests = [
+    { type: 'sessions.list', session: 'm' },
+    { type: 'session.open', session: 'm', repo: '/r', branch: 'b', harness: 'claude' },
+    {
+      type: 'session.open',
+      session: 'm',
+      repo: '/r',
+      branch: 'b',
+      harness: 'pi',
+      agent: 'a',
+      title: '',
+    },
+    { type: 'session.send', session: 'm', target: 's2', text: 'hi' },
+    { type: 'session.close', session: 'm', target: 's2' },
+    { type: 'session.read', session: 'm', target: 's2', limit: 5 },
+  ];
+  const replies = await roundTrip(requests.map((r) => JSON.stringify(r)));
+  expect(replies.map((r) => parse(r))).toEqual(requests.map(() => ({ ok: true, result: {} })));
+  expect(seen).toHaveLength(6);
+});
+
+test('rejects manager verbs with a blank/missing session or target or wrong harness', async () => {
+  const replies = await roundTrip([
+    JSON.stringify({ type: 'sessions.list', session: '' }),
+    JSON.stringify({ type: 'session.open', session: 'm', repo: '/r', branch: 'b', harness: 'gpt' }),
+    JSON.stringify({
+      type: 'session.open',
+      session: 'm',
+      repo: '',
+      branch: 'b',
+      harness: 'claude',
+    }),
+    JSON.stringify({ type: 'session.send', session: 'm', target: '', text: 'hi' }),
+    JSON.stringify({ type: 'session.send', session: 'm', target: 's2' }),
+    JSON.stringify({ type: 'session.close', target: 's2' }),
+    JSON.stringify({ type: 'session.read', session: 'm', target: 's2', limit: 0 }),
+  ]);
+  expect(replies.map((r) => parse(r))).toEqual(
+    replies.map(() => ({ ok: false, error: 'bad request' })),
+  );
+  expect(seen).toHaveLength(0);
+});
+
 test('a stale socket file is replaced on listen', async () => {
   await socket.close();
   const again = createControlSocket({ path, handle: () => Promise.resolve({}) });

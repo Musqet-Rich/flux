@@ -20,6 +20,10 @@ export interface SessionRecord extends SessionSummary {
   // to Claude flags on spawn, so a restart re-spawns identically. Daemon-internal, not on the
   // wire summary; absent when the Agent set none (mode `all`).
   tools?: AgentTools;
+  // The resolved Agent `manager` flag (ADR 0025), persisted at create so the authorisation check
+  // (create-control-handler.ts) is stable across a restart even if the Agent is later edited.
+  // Daemon-internal, not on the wire summary; absent (never false) when the Agent is not a manager.
+  manager?: boolean;
   agentSessionId: string | null;
   archived: boolean;
 }
@@ -39,6 +43,8 @@ export interface NewSession {
   role?: string;
   // The resolved Agent tool policy (ADR 0023 § 4); omitted when the Agent set none.
   tools?: AgentTools;
+  // The resolved Agent `manager` flag (ADR 0025); omitted (never false) for an ordinary Agent.
+  manager?: boolean;
 }
 
 export interface SessionStore {
@@ -100,11 +106,11 @@ const stateOf = (value: unknown): SessionState => {
 };
 
 const columns =
-  'session, title, repo, worktree, branch, base, agent, model, effort, role, tools, agent_session_id, state, archived, created_at, updated_at';
+  'session, title, repo, worktree, branch, base, agent, model, effort, role, tools, manager, agent_session_id, state, archived, created_at, updated_at';
 
 // The insert's bound values in column order; optional fields become NULL when unset. The tool
 // policy is serialised to JSON text.
-const insertParams = (i: NewSession, ts: string): (string | null)[] => [
+const insertParams = (i: NewSession, ts: string): (string | number | null)[] => [
   i.session,
   i.title,
   i.repo,
@@ -116,6 +122,7 @@ const insertParams = (i: NewSession, ts: string): (string | null)[] => [
   i.effort ?? null,
   i.role ?? null,
   i.tools === undefined ? null : JSON.stringify(i.tools),
+  i.manager === true ? 1 : null,
   ts,
   ts,
 ];
@@ -131,6 +138,7 @@ const toRecord = (row: Record<string, unknown>, lastSeq: number): SessionRecord 
   ...optionals(stringOrUndefined(row['model']), stringOrUndefined(row['effort'])),
   ...(stringOrUndefined(row['role']) === undefined ? {} : { role: String(row['role']) }),
   ...toolsField(row['tools']),
+  ...(row['manager'] === 1 ? { manager: true } : {}),
   agentSessionId: typeof row['agent_session_id'] === 'string' ? row['agent_session_id'] : null,
   state: stateOf(row['state']),
   archived: row['archived'] === 1,
@@ -159,7 +167,7 @@ const prepareStatements = (db: DatabaseSync) => {
     db.prepare(`UPDATE sessions SET ${column} = ?, updated_at = ? WHERE session = ?`);
   return {
     insert: db.prepare(
-      `INSERT INTO sessions (${columns}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'idle', 0, ?, ?)`,
+      `INSERT INTO sessions (${columns}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'idle', 0, ?, ?)`,
     ),
     select: db.prepare(`SELECT ${columns} FROM sessions WHERE session = ?`),
     selectAll: db.prepare(`SELECT ${columns} FROM sessions ORDER BY updated_at DESC`),

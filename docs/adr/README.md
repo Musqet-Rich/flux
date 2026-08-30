@@ -30,3 +30,4 @@ Format: Context, Decision, Consequences. Keep each under a page.
 | 0022 | Daemon self-update: signed bundle, verify then re-exec, systemd/launchd    | accepted |
 | 0023 | Harness vs Agent: harness is the runtime, Agent a preset compiled to flags | accepted |
 | 0024 | Boot-time SQLite migrations, versioned by user_version, forward-only       | accepted |
+| 0025 | Manager agent: opt-in, audited fleet-control surface for agents            | accepted |

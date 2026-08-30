@@ -4,6 +4,7 @@
   "private": true,
   "bin": {
     "flux": "./dist/index.mjs",
+    "flux-manager-mcp": "./dist/flux-manager-mcp.mjs",
     "flux-mcp": "./dist/flux-mcp.mjs"
   },
   "type": "module",

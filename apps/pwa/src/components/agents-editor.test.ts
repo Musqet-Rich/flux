@@ -97,6 +97,39 @@ test('blocks save when an allow-list or deny-list has no tool names', async () =
   box.store.stop();
 });
 
+test('the manager checkbox writes manager:true into the saved Agent (ADR 0025)', async () => {
+  const box = await pairedStore([], {
+    'settings.get': () => settingsFixture({ agents: [{ name: 'boss' }] }),
+    'settings.set': () => settingsFixture({ agents: [{ name: 'boss', manager: true }] }),
+  });
+  await box.store.refreshSettings();
+  const wrapper = mount(AgentsEditor, { props: { store: box.store } });
+  expect(wrapper.find<HTMLInputElement>('.agent-manager').element.checked).toBe(false);
+  await wrapper.find('.agent-manager').setValue(true);
+  expect(wrapper.find('.manager-note').text()).toContain('open, message, read and archive');
+  await wrapper.find('form').trigger('submit');
+  await until(() => box.calls('settings.set').length === 1);
+  await flushPromises();
+  expect(box.calls('settings.set')).toEqual([{ agents: [{ name: 'boss', manager: true }] }]);
+  box.store.stop();
+});
+
+test('an unchecked manager omits the field entirely', async () => {
+  const box = await pairedStore([], {
+    'settings.get': () => settingsFixture({ agents: [{ name: 'boss', manager: true }] }),
+    'settings.set': () => settingsFixture({ agents: [{ name: 'boss' }] }),
+  });
+  await box.store.refreshSettings();
+  const wrapper = mount(AgentsEditor, { props: { store: box.store } });
+  expect(wrapper.find<HTMLInputElement>('.agent-manager').element.checked).toBe(true);
+  await wrapper.find('.agent-manager').setValue(false);
+  await wrapper.find('form').trigger('submit');
+  await until(() => box.calls('settings.set').length === 1);
+  await flushPromises();
+  expect(box.calls('settings.set')).toEqual([{ agents: [{ name: 'boss' }] }]);
+  box.store.stop();
+});
+
 test('deletes an agent and sends the shortened list', async () => {
   const box = await pairedStore([], {
     'settings.get': () => settingsFixture({ agents: [{ name: 'a' }, { name: 'b' }] }),

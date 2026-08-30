@@ -73,6 +73,7 @@ test('lists every event type from protocol.md § 5', () => {
       'pr.published',
       'hook.failed',
       'compact.boundary',
+      'manager.acted',
       'raw',
     ].toSorted(),
   );

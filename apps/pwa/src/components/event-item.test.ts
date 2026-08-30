@@ -128,6 +128,32 @@ test('a long detail is truncated with a marker', async () => {
   expect(text.endsWith('… truncated at 64 KiB')).toBe(true);
 });
 
+// A manager agent's action (ADR 0025) is its own system note, one row per verb.
+test('a manager.acted event renders a note for each action', () => {
+  const cases: [string, string][] = [
+    ['open', 'Manager · opened session s2'],
+    ['close', 'Manager · archived s2'],
+    ['read', 'Manager · read s2'],
+  ];
+  for (const [action, expected] of cases) {
+    const item = mount(EventItem, {
+      props: { event: ev('manager.acted', { actor: 'm1', action, target: 's2', detail: '' }) },
+    });
+    expect(item.find('.note').text()).toBe(expected);
+  }
+  const sent = mount(EventItem, {
+    props: {
+      event: ev('manager.acted', {
+        actor: 'm1',
+        action: 'send',
+        target: 's2',
+        detail: 'run tests',
+      }),
+    },
+  });
+  expect(sent.find('.note').text()).toBe('Manager · sent to s2: run tests');
+});
+
 test('a cleared context is a rule across the timeline', () => {
   const wrapper = mount(EventItem, { props: { event: ev('session.cleared', {}) } });
   expect(wrapper.find('.item').classes()).toContain('divider');
