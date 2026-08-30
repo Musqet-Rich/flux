@@ -1,4 +1,4 @@
-import type { AgentKind, EnvSettings } from '@flux/protocol';
+import type { EnvSettings, HarnessKind } from '@flux/protocol';
 
 import type { SessionRecord } from './create-session-store.ts';
 import type { SessionSupervisor } from './create-session-supervisor.ts';
@@ -22,8 +22,8 @@ export interface HandlerContext {
   vapidPublicKey: string;
   // What only the environment sets; reported read-only by `settings.get`.
   env: EnvSettings;
-  // Agents whose binary was found at start (detect-agents.ts); the rest are `agent_unavailable`.
-  agents: AgentKind[];
+  // Harnesses whose binary was found at start (detect-agents.ts); the rest are `agent_unavailable`.
+  agents: HarnessKind[];
   worktreesDir: string;
   log: Services['log'];
   sessions: Services['sessions'];
@@ -32,7 +32,7 @@ export interface HandlerContext {
   attachments: Services['attachments'];
   push: Services['push'];
   settings: Services['settings'];
-  agentConfig: Services['agentConfig'];
+  harnessConfig: Services['harnessConfig'];
   asks: Services['asks'];
   git: Services['git'];
   supervisor: (record: SessionRecord) => SessionSupervisor;

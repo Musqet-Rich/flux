@@ -24,7 +24,7 @@ const summary = {
   title: 't',
   repo: '/r',
   branch: 'b',
-  agent: 'claude' as const,
+  harness: 'claude' as const,
   state: 'idle' as const,
   lastSeq: 0,
   createdAt: 'now',

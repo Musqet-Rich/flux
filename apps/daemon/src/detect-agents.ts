@@ -1,4 +1,4 @@
-import type { AgentKind } from '@flux/protocol';
+import type { HarnessKind } from '@flux/protocol';
 import { accessSync, constants } from 'node:fs';
 import { delimiter, isAbsolute, join } from 'node:path';
 
@@ -26,9 +26,9 @@ const found = (command: string, path: string): boolean => {
   return path.split(delimiter).some((dir) => dir !== '' && executable(join(dir, command)));
 };
 
-export const detectAgents = (options: DetectAgentsOptions): AgentKind[] => {
+export const detectAgents = (options: DetectAgentsOptions): HarnessKind[] => {
   const path = options.path ?? process.env['PATH'] ?? '';
-  const agents: AgentKind[] = [];
+  const agents: HarnessKind[] = [];
   if (found(options.claude, path)) agents.push('claude');
   if (found(options.pi, path)) agents.push('pi');
   return agents;

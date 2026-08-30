@@ -55,7 +55,7 @@ const pairedSession = async () => {
   const created = (await call(d, 'sessions.create', {
     repo,
     branch: 'flux/attach',
-    agent: 'claude',
+    harness: 'claude',
   })) as { session: string };
   return { d, session: created.session, root };
 };

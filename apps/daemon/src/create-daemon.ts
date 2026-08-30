@@ -1,4 +1,4 @@
-import type { AgentKind, FluxEvent } from '@flux/protocol';
+import type { FluxEvent, HarnessKind } from '@flux/protocol';
 
 import { createAgentCommands } from './create-agent-commands.ts';
 import type { AttachedControl } from './attach-control.ts';
@@ -58,7 +58,7 @@ export interface Daemon {
   removeDevice: (deviceId: string) => Promise<void>;
   status: () => TransportStatus;
   controlSocket: string;
-  agents: AgentKind[];
+  agents: HarnessKind[];
 }
 
 interface Parts {
@@ -67,7 +67,7 @@ interface Parts {
   transport: HostTransport;
   control: AttachedControl;
   gate: PairingGate;
-  agents: AgentKind[];
+  agents: HarnessKind[];
 }
 
 // Store first so a device that is already gone from trust cannot re-handshake while its channel
@@ -162,7 +162,7 @@ const emitter =
 
 interface ContextExtra {
   notifier: { vapidPublicKey: string };
-  agents: AgentKind[];
+  agents: HarnessKind[];
   supervisors: SupervisorPool;
   forget: (session: string) => void;
   revokeDevice: (deviceId: string) => Promise<void>;

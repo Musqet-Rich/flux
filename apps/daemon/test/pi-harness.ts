@@ -46,7 +46,7 @@ export const piHarness = async (
     worktree,
     branch: 'b',
     base: 'HEAD',
-    agent: 'pi',
+    harness: 'pi',
   });
   const emitted: FluxEvent[] = [];
   const ephemeral: Ephemeral[] = [];

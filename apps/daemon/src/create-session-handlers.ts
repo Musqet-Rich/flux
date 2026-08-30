@@ -60,10 +60,10 @@ const cost = (ctx: HandlerContext, session: string) => {
 
 const createSession = async (
   ctx: HandlerContext,
-  params: { repo: string; branch: string; base?: string; agent: 'claude' | 'pi'; title?: string },
+  params: RpcMethods['sessions.create']['params'],
 ): Promise<SessionSummary> => {
-  if (!ctx.agents.includes(params.agent)) {
-    throw new DaemonError('agent_unavailable', `${params.agent} is not installed on the box`);
+  if (!ctx.agents.includes(params.harness)) {
+    throw new DaemonError('agent_unavailable', `${params.harness} is not installed on the box`);
   }
   const repo = inside(ctx.settings.get().reposDir, params.repo);
   const exists = (await ctx.git.branches(repo)).includes(params.branch);
@@ -78,12 +78,14 @@ const createSession = async (
     worktree,
     branch: params.branch,
     base,
-    agent: params.agent,
+    harness: params.harness,
+    ...(params.model === undefined ? {} : { model: params.model }),
+    ...(params.effort === undefined ? {} : { effort: params.effort }),
   });
   const { title } = record;
   ctx.log.append(session, {
     type: 'session.created',
-    payload: { repo, worktree, branch: params.branch, base, agent: params.agent, title },
+    payload: { repo, worktree, branch: params.branch, base, harness: params.harness, title },
   });
   const summary = ctx.sessions.list().find((s) => s.session === session);
   if (summary === undefined) throw new DaemonError('internal', 'session vanished');

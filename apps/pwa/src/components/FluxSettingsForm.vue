@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AgentKind, FluxSettings } from '@flux/protocol';
+import type { FluxSettings, HarnessKind } from '@flux/protocol';
 import { semver } from '@flux/protocol';
 import { computed, ref, watch } from 'vue';
 
@@ -49,9 +49,15 @@ const startUpdate = async (): Promise<void> => {
   await props.store.updateDaemon(appVersion);
 };
 
-const fields = ['reposDir', 'defaultAgent', 'notifyOnAsk', 'notifyOnIdle', 'notifyOnDone'] as const;
+const fields = [
+  'reposDir',
+  'defaultHarness',
+  'notifyOnAsk',
+  'notifyOnIdle',
+  'notifyOnDone',
+] as const;
 
-// A field follows the box only while it has no unsaved edit (see AgentConfigEditor).
+// A field follows the box only while it has no unsaved edit (see HarnessConfigEditor).
 watch(
   stored,
   (next, previous) => {
@@ -81,8 +87,9 @@ const changed = computed((): Partial<FluxSettings> => {
 });
 const dirty = computed(() => Object.keys(changed.value).length > 0);
 
-// Only agents the box found (`hello.agents`); the box refuses the others.
-const agents = computed((): AgentKind[] => props.store.state.agents);
+// Only harnesses the box found (`hello.agents`); the box refuses the others.
+const harnesses = computed((): HarnessKind[] => props.store.state.agents);
+const harnessLabel = (kind: HarnessKind): string => (kind === 'claude' ? 'Claude Code' : 'Pi');
 const triggers = [
   { field: 'notifyOnAsk', text: 'the agent asks a question' },
   { field: 'notifyOnIdle', text: 'the agent goes idle' },
@@ -110,9 +117,9 @@ const save = async (): Promise<void> => {
         autocomplete="off"
         :disabled="busy"
       />
-      <label for="flux-agent">Default agent</label>
-      <select id="flux-agent" v-model="form.defaultAgent" :disabled="busy">
-        <option v-for="a in agents" :key="a" :value="a">{{ a }}</option>
+      <label for="flux-harness">Default harness</label>
+      <select id="flux-harness" v-model="form.defaultHarness" :disabled="busy">
+        <option v-for="h in harnesses" :key="h" :value="h">{{ harnessLabel(h) }}</option>
       </select>
       <fieldset class="notify">
         <legend>Notify me when</legend>

@@ -1,4 +1,4 @@
-import type { AgentKind, SessionState, TokenUsage } from './event-payloads.ts';
+import type { HarnessKind, SessionState, TokenUsage } from './event-payloads.ts';
 import { fluxEvent } from './flux-event.ts';
 import { guards } from './guards.ts';
 import type {
@@ -23,9 +23,9 @@ const { isString, isBoolean, isNumber, isInteger, isRecord, isArrayOf, isOneOf, 
   guards;
 
 const sessionStates: readonly SessionState[] = ['idle', 'running', 'waiting_user', 'ended'];
-const agentKinds: readonly AgentKind[] = ['claude', 'pi'];
+const harnessKinds: readonly HarnessKind[] = ['claude', 'pi'];
 
-const isAgentKind = (v: unknown): v is AgentKind => isOneOf(v, agentKinds);
+const isHarnessKind = (v: unknown): v is HarnessKind => isOneOf(v, harnessKinds);
 
 const isEmpty = (v: unknown): v is Record<string, never> => isRecord(v);
 
@@ -35,7 +35,9 @@ const isSessionSummary = (v: unknown): v is SessionSummary =>
   isString(v['title']) &&
   isString(v['repo']) &&
   isString(v['branch']) &&
-  isAgentKind(v['agent']) &&
+  isHarnessKind(v['harness']) &&
+  isOptional(v['model'], isString) &&
+  isOptional(v['effort'], isString) &&
   isOneOf(v['state'], sessionStates) &&
   isInteger(v['lastSeq'], 0) &&
   isOptional(v['createdAt'], isString) &&
@@ -91,7 +93,7 @@ export const rpcResults: ResultGuards = {
     isString(v['daemon']) &&
     isArrayOf(v['sessions'], isSessionSummary) &&
     isOptional(v['vapidPublicKey'], isString) &&
-    isOptional(v['agents'], (a): a is AgentKind[] => isArrayOf(a, isAgentKind)) &&
+    isOptional(v['agents'], (a): a is HarnessKind[] => isArrayOf(a, isHarnessKind)) &&
     isOptional(v['version'], isString),
   'events.sync': (v): v is RpcMethods['events.sync']['result'] =>
     isRecord(v) && isArrayOf(v['events'], fluxEvent.is) && isBoolean(v['complete']),

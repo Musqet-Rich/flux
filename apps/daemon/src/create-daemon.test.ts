@@ -67,7 +67,7 @@ const replyRoundTrip = async (d: Dev, session: string, repo: string): Promise<vo
   const other = (await call(d, 'sessions.create', {
     repo,
     branch: 'flux/other',
-    agent: 'claude',
+    harness: 'claude',
   })) as {
     session: string;
   };
@@ -106,7 +106,7 @@ test('pair, create a session, talk to the agent, sync the log', async () => {
   const created = await call(d, 'sessions.create', {
     repo,
     branch: 'flux/task',
-    agent: 'claude',
+    harness: 'claude',
     title: 'Task',
   });
   expect(created).toMatchObject({ title: 'Task', branch: 'flux/task', state: 'idle' });
@@ -153,7 +153,7 @@ test('clear, archive, reopen and delete a session', async () => {
   const created = (await call(d, 'sessions.create', {
     repo,
     branch: 'flux/gone',
-    agent: 'claude',
+    harness: 'claude',
   })) as { session: string };
   const { session } = created;
   const worktree = join(root, 'data', 'worktrees', session);
@@ -219,7 +219,7 @@ test('a second device pairs while the first is connected and both receive events
   const created = (await call(a, 'sessions.create', {
     repo,
     branch: 'flux/one',
-    agent: 'claude',
+    harness: 'claude',
   })) as { session: string };
   await call(a, 'agent.send', { session: created.session, text: 'go' });
   await untilEvent(a, 'turn.ended');
@@ -263,19 +263,15 @@ test('flux devices rm over the control socket cuts a connected device off', asyn
   expect(await controlRm(bId)).toMatchObject({ ok: false });
 });
 
-test('settings: runtime values persist, env is read-only, agent config files are edited', async () => {
+test('settings: runtime values persist, env is read-only, harness config files are edited', async () => {
   const { repos, claudeDir } = await setup({ piCommand: fake });
   const d = await device();
   await pair(d);
-  const initial = (await call(d, 'settings.get', {})) as {
-    flux: unknown;
-    env: unknown;
-    agent: unknown;
-  };
+  const initial = await call(d, 'settings.get', {});
   expect(initial).toEqual({
     flux: {
       reposDir: repos,
-      defaultAgent: 'claude',
+      defaultHarness: 'claude',
       notifyOnAsk: true,
       notifyOnIdle: true,
       notifyOnDone: true,
@@ -287,15 +283,15 @@ test('settings: runtime values persist, env is read-only, agent config files are
       pushSubject: 'mailto:ops@example.com',
       claudeCommand: fake,
     },
-    agent: { claudeMd: '', settingsJson: '' },
+    harnessConfig: { claudeMd: '', settingsJson: '' },
   });
   const updated = await call(d, 'settings.set', {
-    flux: { notifyOnIdle: false, defaultAgent: 'pi' },
-    agent: { claudeMd: '# Be terse\n', settingsJson: '{"model":"opus"}' },
+    flux: { notifyOnIdle: false, defaultHarness: 'pi' },
+    harnessConfig: { claudeMd: '# Be terse\n', settingsJson: '{"model":"opus"}' },
   });
   expect(updated).toMatchObject({
-    flux: { notifyOnIdle: false, defaultAgent: 'pi', reposDir: repos },
-    agent: { claudeMd: '# Be terse\n', settingsJson: '{"model":"opus"}' },
+    flux: { notifyOnIdle: false, defaultHarness: 'pi', reposDir: repos },
+    harnessConfig: { claudeMd: '# Be terse\n', settingsJson: '{"model":"opus"}' },
   });
   expect(await readFile(join(claudeDir, 'CLAUDE.md'), 'utf8')).toBe('# Be terse\n');
   expect(await call(d, 'settings.get', {})).toEqual(updated);
@@ -305,12 +301,15 @@ test('settings.set refuses a bad patch whole, and a repos dir change applies at 
   const { repos, claudeDir } = await setup();
   const d = await device();
   await pair(d);
-  const updated = await call(d, 'settings.set', { agent: { claudeMd: 'kept' } });
+  const updated = await call(d, 'settings.set', { harnessConfig: { claudeMd: 'kept' } });
   await expect(
-    call(d, 'settings.set', { flux: { reposDir: repos }, agent: { settingsJson: '{' } }),
+    call(d, 'settings.set', { flux: { reposDir: repos }, harnessConfig: { settingsJson: '{' } }),
   ).rejects.toThrow('bad_params');
   await expect(
-    call(d, 'settings.set', { flux: { reposDir: '/nowhere' }, agent: { claudeMd: 'lost' } }),
+    call(d, 'settings.set', {
+      flux: { reposDir: '/nowhere' },
+      harnessConfig: { claudeMd: 'lost' },
+    }),
   ).rejects.toThrow('not a directory');
   await expect(call(d, 'settings.set', { flux: { reposDir: 'relative' } })).rejects.toThrow(
     'bad_params',
@@ -336,7 +335,7 @@ const pairedSession = async () => {
   const created = (await call(d, 'sessions.create', {
     repo,
     branch: 'flux/edit',
-    agent: 'claude',
+    harness: 'claude',
   })) as { session: string };
   const { session } = created;
   const worktree = join(root, 'data', 'worktrees', session);
@@ -419,7 +418,7 @@ test('a comment added by one device is an event on both, before the result', asy
   const created = await call(first, 'sessions.create', {
     repo,
     branch: 'flux/two',
-    agent: 'claude',
+    harness: 'claude',
   });
   const { session } = created as { session: string };
   // The second device has the session.created broadcast queued; read past it first.
@@ -462,7 +461,7 @@ test('git.pr logs pr.published, seen by the caller before the result', async () 
   process.env['PATH'] = path;
   const d = await device();
   await pair(d);
-  const created = await call(d, 'sessions.create', { repo, branch: 'flux/pr', agent: 'claude' });
+  const created = await call(d, 'sessions.create', { repo, branch: 'flux/pr', harness: 'claude' });
   const { session } = created as { session: string };
   const rpc: Wire = { kind: 'rpc', id: 'p1', method: 'git.pr', params: { session, title: 'Ship' } };
   relay.send(await d.channel.seal(bytes.fromUtf8(JSON.stringify(rpc))));
@@ -484,17 +483,17 @@ test('git.pr logs pr.published, seen by the caller before the result', async () 
   expect(synced.events.map((e) => e.type)).toEqual(['session.created', 'pr.published']);
 });
 
-test('refuses to create a session for an agent the box does not have', async () => {
+test('refuses to create a session for a harness the box does not have', async () => {
   const { repo } = await setup();
   const d = await device();
   await pair(d);
   await expect(
-    call(d, 'sessions.create', { repo, branch: 'flux/pi', agent: 'pi' }),
+    call(d, 'sessions.create', { repo, branch: 'flux/pi', harness: 'pi' }),
   ).rejects.toThrow('agent_unavailable');
-  await expect(call(d, 'settings.set', { flux: { defaultAgent: 'pi' } })).rejects.toThrow(
+  await expect(call(d, 'settings.set', { flux: { defaultHarness: 'pi' } })).rejects.toThrow(
     'agent_unavailable',
   );
-  expect(await call(d, 'settings.set', { flux: { defaultAgent: 'claude' } })).toMatchObject({
-    flux: { defaultAgent: 'claude' },
+  expect(await call(d, 'settings.set', { flux: { defaultHarness: 'claude' } })).toMatchObject({
+    flux: { defaultHarness: 'claude' },
   });
 });

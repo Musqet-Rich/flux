@@ -16,7 +16,7 @@ const created: FluxEvent = {
     worktree: '/w',
     branch: 'flux/one',
     base: 'abc123',
-    agent: 'claude',
+    harness: 'claude',
   },
 };
 

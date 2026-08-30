@@ -13,7 +13,7 @@ import { piAdapter } from './pi/pi-adapter.ts';
 import { spawnPi } from './pi/spawn-pi.ts';
 
 // One supervisor per live session, created on first use and closed on archive, restart or stop.
-// The session's agent kind picks the adapter pair (ADR 0007 for claude, ADR 0016 for pi).
+// The session's harness picks the adapter pair (ADR 0007 for claude, ADR 0016 for pi).
 
 export interface SupervisorPool {
   get: (record: SessionRecord) => SessionSupervisor;
@@ -56,39 +56,46 @@ const closing = (options: SupervisorPoolOptions, session: string): CloseChildOpt
 });
 
 const claudeSpawn =
-  (options: SupervisorPoolOptions) =>
+  (options: SupervisorPoolOptions, record: SessionRecord) =>
   (request: SpawnRequest): AgentProcess =>
     spawnClaude({
       cwd: request.cwd,
       ...(request.resume === undefined ? {} : { resume: request.resume }),
       ...(options.claudeCommand === undefined ? {} : { command: options.claudeCommand }),
       ...(options.mcpConfig === undefined ? {} : { mcpConfig: options.mcpConfig(request.session) }),
+      ...(record.model === undefined ? {} : { model: record.model }),
+      ...(record.effort === undefined ? {} : { effort: record.effort }),
       close: closing(options, request.session),
     });
 
+// The per-session model overrides pi's env default (`pi.model`); effort maps to `--thinking`.
+// With neither set, pi keeps today's behaviour (its `FLUX_PI_MODEL` default and own settings).
 const piSpawn =
-  (options: SupervisorPoolOptions, pi: PiOptions) =>
-  (request: SpawnRequest): AgentProcess =>
-    spawnPi({
+  (options: SupervisorPoolOptions, pi: PiOptions, record: SessionRecord) =>
+  (request: SpawnRequest): AgentProcess => {
+    const model = record.model ?? pi.model;
+    return spawnPi({
       cwd: request.cwd,
       session: request.session,
       sessionDir: pi.sessionDir,
       ...(pi.command === undefined ? {} : { command: pi.command }),
       ...(pi.extension === undefined ? {} : { extension: pi.extension }),
       ...(pi.provider === undefined ? {} : { provider: pi.provider }),
-      ...(pi.model === undefined ? {} : { model: pi.model }),
+      ...(model === undefined ? {} : { model }),
+      ...(record.effort === undefined ? {} : { thinking: record.effort }),
       ...(options.env === undefined ? {} : { env: options.env(request.session) }),
       close: closing(options, request.session),
     });
+  };
 
 const forAgent = (
   options: SupervisorPoolOptions,
   record: SessionRecord,
 ): { spawn: (request: SpawnRequest) => AgentProcess; adapter: AgentAdapter } => {
-  if (record.agent === 'pi' && options.pi !== undefined) {
-    return { spawn: piSpawn(options, options.pi), adapter: piAdapter(record.worktree) };
+  if (record.harness === 'pi' && options.pi !== undefined) {
+    return { spawn: piSpawn(options, options.pi, record), adapter: piAdapter(record.worktree) };
   }
-  return { spawn: claudeSpawn(options), adapter: claudeAdapter(record.worktree) };
+  return { spawn: claudeSpawn(options, record), adapter: claudeAdapter(record.worktree) };
 };
 
 export const createSupervisorPool = (options: SupervisorPoolOptions): SupervisorPool => {

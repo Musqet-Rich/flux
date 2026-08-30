@@ -8,7 +8,7 @@ const summary = {
   title: 'T',
   repo: '/r',
   branch: 'main',
-  agent: 'claude',
+  harness: 'claude',
   state: 'idle',
   lastSeq: 0,
   createdAt: '2026-01-01T00:00:00Z',
@@ -27,13 +27,13 @@ const device = { deviceId: 'd', pairedAt: '2026-01-01T00:00:00Z', current: true 
 const settings = {
   flux: {
     reposDir: '/r',
-    defaultAgent: 'claude',
+    defaultHarness: 'claude',
     notifyOnAsk: true,
     notifyOnIdle: true,
     notifyOnDone: true,
   },
   env: { relayUrl: 'r', dataDir: 'd', daemonName: 'n', pushSubject: 'p', claudeCommand: 'c' },
-  agent: { claudeMd: '', settingsJson: '{}' },
+  harnessConfig: { claudeMd: '', settingsJson: '{}' },
 };
 
 // One accepted and one rejected value per method; the table is the spec of protocol.md § 7.
@@ -90,7 +90,7 @@ const cases: { [M in RpcMethod]: [ok: unknown, bad: unknown] } = {
   'push.subscribe': [{}, false],
   'devices.list': [[device, { ...device, name: 'phone', lastSeenAt: 't' }], [{ deviceId: 'd' }]],
   'devices.remove': [{}, 0],
-  'settings.get': [settings, { ...settings, agent: {} }],
+  'settings.get': [settings, { ...settings, harnessConfig: {} }],
   'settings.set': [settings, { flux: settings.flux }],
   'attach.begin': [{ attachmentId: 'a' }, {}],
   'attach.chunk': [{}, null],
@@ -145,4 +145,7 @@ test('optional fields may be present or absent, never wrong', () => {
   );
   expect(rpcResults['sessions.list']([{ ...summary, archived: 'yes' }])).toBe(false);
   expect(rpcResults['sessions.list']([{ ...summary, worktreeExists: 0 }])).toBe(false);
+  expect(rpcResults['sessions.list']([{ ...summary, model: 'opus', effort: 'high' }])).toBe(true);
+  expect(rpcResults['sessions.list']([{ ...summary, model: 1 }])).toBe(false);
+  expect(rpcResults['sessions.list']([{ ...summary, effort: 1 }])).toBe(false);
 });

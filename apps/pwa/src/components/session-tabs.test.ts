@@ -14,7 +14,7 @@ const s = (
   title: `T ${session}`,
   repo: '/r',
   branch: 'b',
-  agent: 'claude',
+  harness: 'claude',
   state,
   lastSeq,
   createdAt,

@@ -78,6 +78,31 @@ test('passes the rpc, session, trust and extension arguments and replays one run
   ]);
 });
 
+test('passes --thinking when effort is set', async () => {
+  const argsFile = join(tmpdir(), `flux-pi-thinking-${process.pid}.json`);
+  const agent = spawnPi({
+    cwd: process.cwd(),
+    session: 'sess-1',
+    sessionDir: '/data/pi-sessions',
+    command: fake,
+    thinking: 'high',
+    env: {
+      ...process.env,
+      FLUX_FAKE_FIXTURE: piFixture('text-reply'),
+      FLUX_FAKE_ARGS_FILE: argsFile,
+    },
+  });
+  const first = run(agent);
+  agent.send('go');
+  await first;
+  const args = JSON.parse(readFileSync(argsFile, 'utf8')) as string[];
+  expect(args.slice(args.indexOf('--thinking'), args.indexOf('--thinking') + 2)).toEqual([
+    '--thinking',
+    'high',
+  ]);
+  expect(await agent.close()).toBe(0);
+});
+
 test('interrupt sends abort and the run still settles; the process stays alive for the next prompt', async () => {
   const agent = start({}, ['interrupt', 'text-reply']);
   const seen: string[] = [];

@@ -3,9 +3,9 @@ import { computed, ref, watch } from 'vue';
 
 import type { Store } from '../store/create-store.ts';
 
-// The agent's global config as two plain text areas: `~/.claude/CLAUDE.md` and
-// `~/.claude/settings.json` on the box. The JSON is checked here before it is sent and again
-// on the box; only the fields that changed go over the wire.
+// The harness's global config as two plain text areas: `~/.claude/CLAUDE.md` and
+// `~/.claude/settings.json` on the box (ADR 0023 § 1). The JSON is checked here before it is sent
+// and again on the box; only the fields that changed go over the wire.
 
 const props = defineProps<{ store: Store }>();
 
@@ -14,7 +14,7 @@ const settingsJson = ref('');
 const busy = ref(false);
 const failure = ref<string | null>(null);
 
-const stored = computed(() => props.store.state.settings?.agent ?? null);
+const stored = computed(() => props.store.state.settings?.harnessConfig ?? null);
 
 // A field follows the box only while it has no unsaved edit: the other section's save
 // replaces `settings` too and must not wipe what is being typed here.
@@ -57,25 +57,25 @@ const save = async (): Promise<void> => {
     ...(mdDirty.value ? { claudeMd: claudeMd.value } : {}),
     ...(jsonDirty.value ? { settingsJson: settingsJson.value } : {}),
   };
-  const ok = await props.store.saveSettings({ agent: patch });
+  const ok = await props.store.saveSettings({ harnessConfig: patch });
   if (!ok) failure.value = props.store.state.error?.message ?? null;
   busy.value = false;
 };
 </script>
 
 <template>
-  <form class="agent" @submit.prevent="save">
-    <h2>Agent config</h2>
+  <form class="harness-config" @submit.prevent="save">
+    <h2>Harness config</h2>
     <p v-if="stored === null" class="hint">Loading…</p>
     <template v-else>
       <div class="editors">
         <div class="editor">
-          <label for="agent-md">
+          <label for="harness-md">
             CLAUDE.md
             <span v-if="mdDirty" class="dirty">edited</span>
           </label>
           <textarea
-            id="agent-md"
+            id="harness-md"
             v-model="claudeMd"
             rows="10"
             spellcheck="false"
@@ -83,12 +83,12 @@ const save = async (): Promise<void> => {
           />
         </div>
         <div class="editor">
-          <label for="agent-json">
+          <label for="harness-json">
             settings.json
             <span v-if="jsonDirty" class="dirty">edited</span>
           </label>
           <textarea
-            id="agent-json"
+            id="harness-json"
             v-model="settingsJson"
             rows="10"
             spellcheck="false"
@@ -107,7 +107,7 @@ const save = async (): Promise<void> => {
 </template>
 
 <style scoped>
-.agent {
+.harness-config {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;

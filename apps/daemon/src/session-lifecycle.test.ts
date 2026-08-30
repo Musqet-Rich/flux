@@ -47,7 +47,7 @@ const setup = async () => {
       worktree,
       branch: `flux/${session}`,
       base,
-      agent: 'claude',
+      harness: 'claude',
     });
   };
   return { root, repo, worktreesDir, ctx, git, sessions, log, closed, forgotten, create };
@@ -81,7 +81,7 @@ test('only a worktree under the data directory is ever removed', async () => {
     worktree: repo,
     branch: 'main',
     base,
-    agent: 'claude',
+    harness: 'claude',
   });
   await expect(
     sessionLifecycle.archive(ctx, { session: 's1', removeWorktree: true, discard: true }),

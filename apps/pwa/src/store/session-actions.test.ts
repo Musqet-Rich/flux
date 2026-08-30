@@ -13,7 +13,7 @@ const listed: SessionSummary = {
   title: 'First',
   repo: '/repos/r',
   branch: 'flux/one',
-  agent: 'claude',
+  harness: 'claude',
   state: 'idle',
   lastSeq: 0,
   createdAt: '2026-01-01T00:00:00Z',

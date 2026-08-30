@@ -1,4 +1,4 @@
-import type { AgentKind } from '@flux/protocol';
+import type { HarnessKind } from '@flux/protocol';
 import { readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -7,7 +7,7 @@ import type { SupervisorPoolOptions } from './create-supervisor-pool.ts';
 import { detectAgents } from './detect-agents.ts';
 import { piExtensionPath } from './pi/pi-extension-path.ts';
 
-// Everything about the agent binaries (not their config files, that is create-agent-config.ts) the daemon resolves once at start: which ones exist, and
+// Everything about the harness binaries (not their config files, that is create-harness-config.ts) the daemon resolves once at start: which ones exist, and
 // the spawn-time options the supervisor pool needs for each (ADR 0007, ADR 0008, ADR 0016).
 
 export interface AgentCommandsInput {
@@ -20,7 +20,7 @@ export interface AgentCommandsInput {
 }
 
 export interface AgentCommands {
-  agents: AgentKind[];
+  agents: HarnessKind[];
   pool: Pick<SupervisorPoolOptions, 'claudeCommand' | 'pi' | 'mcpConfig' | 'env'>;
   // Drops what the agent kept for a session once it is archived: pi's session file (Claude's
   // transcript stays; ADR 0007 reads it as a source).

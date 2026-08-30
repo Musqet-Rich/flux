@@ -24,6 +24,8 @@ const schema = `
     branch TEXT NOT NULL,
     base TEXT NOT NULL,
     agent TEXT NOT NULL,
+    model TEXT,
+    effort TEXT,
     agent_session_id TEXT,
     state TEXT NOT NULL,
     archived INTEGER NOT NULL DEFAULT 0,
@@ -79,6 +81,8 @@ const schema = `
 const addedColumns = [
   { table: 'devices', column: 'last_seen_at', type: 'TEXT' },
   { table: 'events', column: 'parent', type: 'TEXT' },
+  { table: 'sessions', column: 'model', type: 'TEXT' },
+  { table: 'sessions', column: 'effort', type: 'TEXT' },
 ];
 
 const addMissingColumns = (db: DatabaseSync): void => {

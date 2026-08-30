@@ -1,8 +1,8 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import type { AgentConfigFiles } from './create-agent-config.ts';
-import { createAgentConfig } from './create-agent-config.ts';
+import type { HarnessConfigFiles } from './create-harness-config.ts';
+import { createHarnessConfig } from './create-harness-config.ts';
 import type { AskRegistry } from './create-ask-registry.ts';
 import { createAskRegistry } from './create-ask-registry.ts';
 import type { GitService } from './create-git-service.ts';
@@ -16,14 +16,14 @@ import type { Settled } from './settle-orphans.ts';
 import { settleOrphans } from './settle-orphans.ts';
 
 // Everything under the data directory plus the process-local services, opened together: the
-// one SQLite file (ADR 0006), the worktrees directory, the agent's config files, the ask
+// one SQLite file (ADR 0006), the worktrees directory, the harness's config files, the ask
 // registry and the git service. Owning the directory (`lock`) and settling what a dead daemon
 // left in it (`settle`) are the daemon's to call on start, not `flux devices`', which opens
 // the same directory beside a running daemon.
 
 export interface Services extends Stores {
   worktreesDir: string;
-  agentConfig: AgentConfigFiles;
+  harnessConfig: HarnessConfigFiles;
   asks: AskRegistry;
   git: GitService;
   // Refuses (`conflict`) while another daemon holds the directory (ADR 0017).
@@ -49,7 +49,7 @@ export const openServices = (options: ServicesOptions): Services => {
   return {
     ...stores,
     worktreesDir,
-    agentConfig: createAgentConfig(options.claudeDir),
+    harnessConfig: createHarnessConfig(options.claudeDir),
     asks,
     git: createGitService(),
     lock: () => acquireDaemonLock(options.dataDir),

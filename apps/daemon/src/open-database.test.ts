@@ -11,7 +11,7 @@ test('creates the schema and is idempotent on reopen', async () => {
   const path = join(dir, 'flux.sqlite');
   const first = openDatabase(path);
   first.exec(
-    "INSERT INTO sessions VALUES ('s', 't', '/r', '/w', 'b', 'base', 'claude', NULL, 'idle', 0, 'now', 'now')",
+    "INSERT INTO sessions (session, title, repo, worktree, branch, base, agent, state, created_at, updated_at) VALUES ('s', 't', '/r', '/w', 'b', 'base', 'claude', 'idle', 'now', 'now')",
   );
   first.close();
   const second = openDatabase(path);
@@ -51,6 +51,26 @@ test('adds the last_seen_at column to a devices table created before it', async 
 test('works in memory for tests', () => {
   const db = openDatabase(':memory:');
   expect(db.prepare('SELECT COUNT(*) AS n FROM events').get()?.['n']).toBe(0);
+  db.close();
+});
+
+// A box built before ADR 0023 has a sessions table without `model`/`effort`; both are added on
+// open so a session created after the upgrade can persist them.
+test('adds the sessions.model and sessions.effort columns to a table created before them', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'flux-db-'));
+  const path = join(dir, 'flux.sqlite');
+  const old = new DatabaseSync(path);
+  old.exec(
+    'CREATE TABLE sessions (session TEXT PRIMARY KEY, title TEXT NOT NULL, repo TEXT NOT NULL, worktree TEXT NOT NULL, branch TEXT NOT NULL, base TEXT NOT NULL, agent TEXT NOT NULL, agent_session_id TEXT, state TEXT NOT NULL, archived INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)',
+  );
+  old.exec(
+    "INSERT INTO sessions (session, title, repo, worktree, branch, base, agent, state, created_at, updated_at) VALUES ('s', 't', '/r', '/w', 'b', 'base', 'claude', 'idle', 'now', 'now')",
+  );
+  old.close();
+  const db = openDatabase(path);
+  const row = db.prepare('SELECT model, effort FROM sessions').get();
+  expect(row?.['model']).toBeNull();
+  expect(row?.['effort']).toBeNull();
   db.close();
 });
 

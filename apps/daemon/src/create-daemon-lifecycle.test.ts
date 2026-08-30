@@ -69,7 +69,7 @@ test('stop answers an ask in flight as aborted on its connection and in the log'
   const d = await device();
   await pair(d);
   await call(d, 'hello', { protocol: 1 });
-  const created = (await call(d, 'sessions.create', { repo, branch: 'b', agent: 'claude' })) as {
+  const created = (await call(d, 'sessions.create', { repo, branch: 'b', harness: 'claude' })) as {
     session: string;
   };
   const asked = controlAsk(created.session);
@@ -94,7 +94,7 @@ test('clear answers an ask in flight as aborted, logged before the marker', asyn
   const d = await device();
   await pair(d);
   await call(d, 'hello', { protocol: 1 });
-  const created = (await call(d, 'sessions.create', { repo, branch: 'b', agent: 'claude' })) as {
+  const created = (await call(d, 'sessions.create', { repo, branch: 'b', harness: 'claude' })) as {
     session: string;
   };
   const asked = controlAsk(created.session);

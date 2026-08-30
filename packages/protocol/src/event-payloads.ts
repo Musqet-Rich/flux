@@ -9,8 +9,8 @@ import { isCodeRef } from './is-code-ref.ts';
 const { isString, isBoolean, isNumber, isInteger, isRecord, isArrayOf, isOneOf, isOptional } =
   guards;
 
-const agentKinds = ['claude', 'pi'] as const;
-export type AgentKind = (typeof agentKinds)[number];
+const harnessKinds = ['claude', 'pi'] as const;
+export type HarnessKind = (typeof harnessKinds)[number];
 
 const sessionStates = ['idle', 'running', 'waiting_user', 'ended'] as const;
 export type SessionState = (typeof sessionStates)[number];
@@ -51,7 +51,7 @@ export interface EventPayloads {
     worktree: string;
     branch: string;
     base: string;
-    agent: AgentKind;
+    harness: HarnessKind;
     agentSessionId?: string;
     title?: string;
   };
@@ -143,7 +143,7 @@ export const eventPayloads: PayloadGuards = {
     isString(v['worktree']) &&
     isString(v['branch']) &&
     isString(v['base']) &&
-    isOneOf(v['agent'], agentKinds) &&
+    isOneOf(v['harness'], harnessKinds) &&
     isOptional(v['agentSessionId'], isString) &&
     isOptional(v['title'], isString),
   'session.state': (v): v is EventPayloads['session.state'] =>

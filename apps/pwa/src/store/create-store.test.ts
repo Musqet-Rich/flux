@@ -16,7 +16,7 @@ const summary = (session: string, extra: Partial<SessionSummary> = {}): SessionS
   title: session,
   repo: '/repos/r',
   branch: 'main',
-  agent: 'claude',
+  harness: 'claude',
   state: 'idle',
   lastSeq: 0,
   createdAt: '2026-01-01T00:00:00Z',
@@ -38,7 +38,7 @@ const boxLog: FluxEvent[] = [
     worktree: '/w',
     branch: 'main',
     base: 'abc',
-    agent: 'claude',
+    harness: 'claude',
   }),
   ev(2, 'msg.user', { text: 'hi' }),
 ];
@@ -65,7 +65,7 @@ const boxHandlers = (): Handlers => ({
   ],
   'devices.remove': () => ({}),
   'settings.get': () => settingsFixture(),
-  'settings.set': () => settingsFixture({ agent: { claudeMd: '# x', settingsJson: '' } }),
+  'settings.set': () => settingsFixture({ harnessConfig: { claudeMd: '# x', settingsJson: '' } }),
   'git.commit': (p) => ({ sha: `sha-${p.paths?.length ?? 'all'}` }),
   'git.push': () => ({ remote: 'origin', branch: 'main' }),
   'fs.write': (p) => {
@@ -381,7 +381,7 @@ test('tracks sessions: state patches, unknown sessions refresh the list, creatio
   await relay.emit(ev(2, 'rate_limit', { windows }, 's2'));
   await until(() => store.state.rateWindows.length === 1);
   expect(store.state.rateWindows).toEqual(windows);
-  const created = await store.createSession({ repo: '/repos/r', branch: 'b', agent: 'claude' });
+  const created = await store.createSession({ repo: '/repos/r', branch: 'b', harness: 'claude' });
   expect(created.branch).toBe('b');
   expect(store.state.sessions.map((s) => s.session)).toEqual(['s1', 's2', 's3']);
   await store.refreshSessions();
@@ -465,9 +465,9 @@ test('reads and saves settings', async () => {
   expect(store.state.settings).toBeNull();
   expect(await store.refreshSettings()).toBe(true);
   expect(store.state.settings?.flux.reposDir).toBe('/home/flux/repos');
-  expect(await store.saveSettings({ agent: { claudeMd: '# x' } })).toBe(true);
-  expect(called('settings.set')[0]?.params).toEqual({ agent: { claudeMd: '# x' } });
-  expect(store.state.settings?.agent.claudeMd).toBe('# x');
+  expect(await store.saveSettings({ harnessConfig: { claudeMd: '# x' } })).toBe(true);
+  expect(called('settings.set')[0]?.params).toEqual({ harnessConfig: { claudeMd: '# x' } });
+  expect(store.state.settings?.harnessConfig.claudeMd).toBe('# x');
 });
 
 // Dogfooding 2026-08-29: an error stayed at the bottom of the screen for good. An action's

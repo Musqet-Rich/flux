@@ -4,7 +4,7 @@ import type { Settings } from '@flux/protocol';
 export const settingsFixture = (overrides: Partial<Settings> = {}): Settings => ({
   flux: {
     reposDir: '/home/flux/repos',
-    defaultAgent: 'claude',
+    defaultHarness: 'claude',
     notifyOnAsk: true,
     notifyOnIdle: true,
     notifyOnDone: false,
@@ -16,6 +16,6 @@ export const settingsFixture = (overrides: Partial<Settings> = {}): Settings => 
     pushSubject: 'mailto:ops@example.com',
     claudeCommand: 'claude',
   },
-  agent: { claudeMd: '# Rules\n', settingsJson: '{"model":"opus"}' },
+  harnessConfig: { claudeMd: '# Rules\n', settingsJson: '{"model":"opus"}' },
   ...overrides,
 });

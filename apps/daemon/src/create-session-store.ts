@@ -1,4 +1,4 @@
-import type { AgentKind, SessionState, SessionSummary } from '@flux/protocol';
+import type { HarnessKind, SessionState, SessionSummary } from '@flux/protocol';
 import { existsSync } from 'node:fs';
 import type { DatabaseSync } from 'node:sqlite';
 
@@ -23,7 +23,10 @@ export interface NewSession {
   worktree: string;
   branch: string;
   base: string;
-  agent: AgentKind;
+  harness: HarnessKind;
+  // Configured model and effort (ADR 0023 § 3); omitted when the box spawns on its defaults.
+  model?: string;
+  effort?: string;
 }
 
 export interface SessionStore {
@@ -46,7 +49,19 @@ export interface SessionStoreOptions {
   worktreeExists?: (path: string) => boolean;
 }
 
-const agentOf = (value: unknown): AgentKind => (value === 'pi' ? 'pi' : 'claude');
+// The `agent` column predates ADR 0023 and stores the harness value (`claude`/`pi`); the value
+// does not migrate, so the column keeps its name while the field is `harness`.
+const harnessOf = (value: unknown): HarnessKind => (value === 'pi' ? 'pi' : 'claude');
+
+const stringOrUndefined = (value: unknown): string | undefined =>
+  typeof value === 'string' && value.length > 0 ? value : undefined;
+
+// exactOptionalPropertyTypes: omit `model`/`effort` entirely when unset, never set them to
+// `undefined`.
+const optionals = (model: string | undefined, effort: string | undefined) => ({
+  ...(model === undefined ? {} : { model }),
+  ...(effort === undefined ? {} : { effort }),
+});
 
 const stateOf = (value: unknown): SessionState => {
   switch (value) {
@@ -60,7 +75,7 @@ const stateOf = (value: unknown): SessionState => {
 };
 
 const columns =
-  'session, title, repo, worktree, branch, base, agent, agent_session_id, state, archived, created_at, updated_at';
+  'session, title, repo, worktree, branch, base, agent, model, effort, agent_session_id, state, archived, created_at, updated_at';
 
 const toRecord = (row: Record<string, unknown>, lastSeq: number): SessionRecord => ({
   session: String(row['session']),
@@ -69,7 +84,8 @@ const toRecord = (row: Record<string, unknown>, lastSeq: number): SessionRecord 
   worktree: String(row['worktree']),
   branch: String(row['branch']),
   base: String(row['base']),
-  agent: agentOf(row['agent']),
+  harness: harnessOf(row['agent']),
+  ...optionals(stringOrUndefined(row['model']), stringOrUndefined(row['effort'])),
   agentSessionId: typeof row['agent_session_id'] === 'string' ? row['agent_session_id'] : null,
   state: stateOf(row['state']),
   archived: row['archived'] === 1,
@@ -83,7 +99,8 @@ const toSummary = (record: SessionRecord, worktreeExists: boolean): SessionSumma
   title: record.title,
   repo: record.repo,
   branch: record.branch,
-  agent: record.agent,
+  harness: record.harness,
+  ...optionals(record.model, record.effort),
   state: record.state,
   lastSeq: record.lastSeq,
   createdAt: record.createdAt,
@@ -97,7 +114,7 @@ const prepareStatements = (db: DatabaseSync) => {
     db.prepare(`UPDATE sessions SET ${column} = ?, updated_at = ? WHERE session = ?`);
   return {
     insert: db.prepare(
-      `INSERT INTO sessions (${columns}) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 'idle', 0, ?, ?)`,
+      `INSERT INTO sessions (${columns}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'idle', 0, ?, ?)`,
     ),
     select: db.prepare(`SELECT ${columns} FROM sessions WHERE session = ?`),
     selectAll: db.prepare(`SELECT ${columns} FROM sessions ORDER BY updated_at DESC`),
@@ -135,8 +152,10 @@ export const createSessionStore = (options: SessionStoreOptions): SessionStore =
 
   const create = (input: NewSession): SessionRecord => {
     const ts = now().toISOString();
-    const { session, title, repo, worktree, branch, base, agent } = input;
-    st.insert.run(session, title, repo, worktree, branch, base, agent, ts, ts);
+    const { session, title, repo, worktree, branch, base, harness } = input;
+    const model = input.model ?? null;
+    const effort = input.effort ?? null;
+    st.insert.run(session, title, repo, worktree, branch, base, harness, model, effort, ts, ts);
     return get(session);
   };
 

@@ -9,7 +9,7 @@ import { openDatabase } from './open-database.ts';
 
 const defaults = {
   reposDir: '/home/flux/repos',
-  defaultAgent: 'claude' as const,
+  defaultHarness: 'claude' as const,
   notifyOnAsk: true,
   notifyOnIdle: true,
   notifyOnDone: true,
@@ -27,7 +27,7 @@ test('returns the defaults until something is set, then the stored values surviv
   });
   const reopened = createSettingsStore({ db, reposDir: '/elsewhere' });
   expect(reopened.get()).toEqual({ ...defaults, notifyOnIdle: false, reposDir: dir });
-  expect(reopened.set({}).defaultAgent).toBe('claude');
+  expect(reopened.set({}).defaultHarness).toBe('claude');
 });
 
 test('reposDir is resolved and must be a directory; check refuses what set would', async () => {
@@ -55,7 +55,7 @@ test('refuses a relative repos directory and ignores an unreadable stored row', 
   db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('flux', ?)").run('{"x":1}');
   expect(store.get()).toEqual(defaults);
   db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('flux', ?)").run(
-    '{"defaultAgent":"gpt"}',
+    '{"defaultHarness":"gpt"}',
   );
   expect(store.get()).toEqual(defaults);
 });
