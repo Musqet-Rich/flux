@@ -24,7 +24,7 @@ Group=flux
 WorkingDirectory=/opt/flux/apps/relay
 EnvironmentFile=/etc/flux/flux.env
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
-# /usr/bin/node is where the NodeSource package puts it (README § Relay).
+# /usr/bin/node is where the NodeSource package puts it (SELF_HOSTING.md § Relay).
 ExecStart=/usr/bin/node /opt/flux/apps/relay/dist/index.mjs
 # Behind Caddy every socket is 127.0.0.1; this makes the per-IP limit count the real client.
 Environment=FLUX_TRUST_PROXY=1

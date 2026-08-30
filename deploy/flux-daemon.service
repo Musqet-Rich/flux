@@ -7,7 +7,7 @@
 #   sudo systemctl daemon-reload && sudo systemctl enable --now flux-daemon
 #   sudo journalctl -fu flux-daemon
 #
-# Paths assume the checkout is /home/flux/flux (README § Box). Adjust ExecStart if not.
+# Paths assume the checkout is /home/flux/flux (SELF_HOSTING.md § Box). Adjust ExecStart if not.
 
 [Unit]
 Description=Flux daemon (agent box)
@@ -24,7 +24,7 @@ EnvironmentFile=/etc/flux/flux.env
 # `claude` and `git` are resolved on this PATH; ~/.local/bin is where the Claude Code installer
 # puts its binary. Set FLUX_CLAUDE in flux.env instead if it lives elsewhere.
 Environment=PATH=/home/flux/.local/bin:/usr/local/bin:/usr/bin:/bin
-# /usr/bin/node is where the NodeSource package puts it (README § Box).
+# /usr/bin/node is where the NodeSource package puts it (SELF_HOSTING.md § Box).
 ExecStart=/usr/bin/node /home/flux/flux/apps/daemon/dist/index.mjs daemon
 Restart=always
 RestartSec=5
