@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { AgentKind, FluxSettings } from '@flux/protocol';
+import { semver } from '@flux/protocol';
 import { computed, ref, watch } from 'vue';
 
 import type { Store } from '../store/create-store.ts';
@@ -28,11 +29,25 @@ const env = computed(() => {
 });
 
 // Read-only version rows (ADR 0021): this app's own build version, and the daemon's from `hello`
-// (`unknown` for a daemon built before it sent one). No comparison or update action yet.
+// (`unknown` for a daemon built before it sent one).
 const versions = computed(() => [
   { name: 'Daemon version', value: props.store.state.daemonVersion ?? 'unknown' },
   { name: 'App version', value: appVersion },
 ]);
+
+// Self-update (ADR 0022). An update is on offer when the box reports a version older than this
+// app's; the button installs the app's own version. While installing, `update` follows the
+// progress ephemerals; on success the reconnect clears it and the offer goes away.
+const update = computed(() => props.store.state.update);
+const updateAvailable = computed(() => {
+  const daemonVersion = props.store.state.daemonVersion;
+  return daemonVersion !== null && semver.isNewer(appVersion, daemonVersion);
+});
+const showUpdate = computed(() => updateAvailable.value || update.value.target !== null);
+const phaseLabel = computed(() => update.value.phase ?? 'starting');
+const startUpdate = async (): Promise<void> => {
+  await props.store.updateDaemon(appVersion);
+};
 
 const fields = ['reposDir', 'defaultAgent', 'notifyOnAsk', 'notifyOnIdle', 'notifyOnDone'] as const;
 
@@ -116,6 +131,18 @@ const save = async (): Promise<void> => {
         <dd>{{ row.value }}</dd>
       </template>
     </dl>
+    <div v-if="showUpdate" class="update">
+      <button v-if="update.target === null" type="button" class="update-btn" @click="startUpdate">
+        Update daemon to {{ appVersion }}
+      </button>
+      <template v-else>
+        <p v-if="update.failed !== null" class="update-error">Update failed: {{ update.failed }}</p>
+        <p v-else class="hint">Updating to {{ update.target }}… {{ phaseLabel }}</p>
+        <button v-if="update.failed !== null" type="button" class="secondary" @click="startUpdate">
+          Retry
+        </button>
+      </template>
+    </div>
     <dl v-if="env.length > 0" class="env">
       <template v-for="row in env" :key="row.name">
         <dt>{{ row.name }}</dt>
@@ -179,5 +206,18 @@ dd {
   margin: 0;
   overflow-wrap: anywhere;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.update {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0.75rem 0 0;
+}
+
+.update-error {
+  color: var(--danger);
+  margin: 0;
 }
 </style>

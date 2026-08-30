@@ -3,8 +3,9 @@ import type { AgentKind, FluxEvent } from '@flux/protocol';
 import { createAgentCommands } from './create-agent-commands.ts';
 import type { AttachedControl } from './attach-control.ts';
 import { attachControl } from './attach-control.ts';
+import type { HostTransport, TransportStatus } from './connect-relay.ts';
 import { connectRelay } from './connect-relay.ts';
-import type { HostTransport, TransportStatus } from './create-host-transport.ts';
+import { createUpdateService } from './create-update-service.ts';
 import type { NotifierOptions } from './create-notifier.ts';
 import { createNotifier } from './create-notifier.ts';
 import type { PairingGate } from './create-pairing-gate.ts';
@@ -34,6 +35,11 @@ export interface DaemonConfig {
   claudeDir: string;
   // How patiently each agent is closed on stop, per stage (close-child.ts).
   closeGraceMs?: number;
+  // The installed bundle directory (siblings of the running index.mjs), or null when run from
+  // source (ADR 0022); self-update is refused on a dev build. index.ts detects it from argv.
+  distDir?: string | null;
+  // Release repo slug for self-update fetches (`FLUX_RELEASE_REPO`); defaults inside fetchRelease.
+  releaseRepo?: string;
 }
 
 export interface Daemon {
@@ -154,15 +160,37 @@ const emitter =
     void notifier.notify(event);
   };
 
+interface ContextExtra {
+  notifier: { vapidPublicKey: string };
+  agents: AgentKind[];
+  supervisors: SupervisorPool;
+  forget: (session: string) => void;
+  revokeDevice: (deviceId: string) => Promise<void>;
+  update: ReturnType<typeof createUpdateService>;
+}
+
+// The handler context (handler-context.ts): the stores plus the daemon-level services an RPC
+// handler may touch. Built here so the composition root stays short.
+const daemonContext = (services: Services, config: DaemonConfig, extra: ContextExtra) => ({
+  ...services,
+  daemonName: config.daemonName,
+  vapidPublicKey: extra.notifier.vapidPublicKey,
+  env: env(config),
+  agents: extra.agents,
+  supervisor: extra.supervisors.get,
+  closeSupervisor: extra.supervisors.close,
+  forgetAgentSession: extra.forget,
+  revokeDevice: extra.revokeDevice,
+  update: extra.update,
+});
+
 export const createDaemon = async (config: DaemonConfig): Promise<Daemon> => {
-  const { dataDir } = config;
+  const { dataDir, relayUrl, pushSubject: subject } = config;
   const services = openServices(servicesOptions(config));
   const identity = await services.devices.identity();
-  const { relayUrl, pushSubject: subject } = config;
   const gate = createPairingGate({ relayUrl, boxPub: identity.publicKey, ...services });
   const { push } = services;
   const notifier = await createNotifier({ push, subject, enabled: notifyEnabled(services) });
-  // Transport and supervisors are created below; nothing calls these before start.
   const emit = emitter(notifier, () => transport);
   const control = attachControl({
     ...services,
@@ -180,20 +208,21 @@ export const createDaemon = async (config: DaemonConfig): Promise<Daemon> => {
     emitEphemeral: (data) => void transport.broadcast({ kind: 'ephemeral', data }),
     ...(config.closeGraceMs === undefined ? {} : { closeGraceMs: config.closeGraceMs }),
   });
-  const handlers = createRpcHandlers(
-    {
-      ...services,
-      daemonName: config.daemonName,
-      vapidPublicKey: notifier.vapidPublicKey,
-      env: env(config),
-      agents,
-      supervisor: supervisors.get,
-      closeSupervisor: supervisors.close,
-      forgetAgentSession: forget,
-      revokeDevice: revoker(services, () => transport),
-    },
-    emit,
+  const update = createUpdateService(
+    config,
+    dataDir,
+    () => transport,
+    () => daemon.stop(),
   );
+  const ctx = daemonContext(services, config, {
+    notifier,
+    agents,
+    supervisors,
+    forget,
+    revokeDevice: revoker(services, () => transport),
+    update,
+  });
+  const handlers = createRpcHandlers(ctx, emit);
   const transport = await connectRelay({
     relayUrl: config.relayUrl,
     identity,
@@ -201,5 +230,6 @@ export const createDaemon = async (config: DaemonConfig): Promise<Daemon> => {
     pairingOpen: gate.open,
     handlers,
   });
-  return assemble({ services, supervisors, transport, control, gate, agents });
+  const daemon = assemble({ services, supervisors, transport, control, gate, agents });
+  return daemon;
 };

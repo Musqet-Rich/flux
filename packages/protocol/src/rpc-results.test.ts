@@ -100,6 +100,7 @@ const cases: { [M in RpcMethod]: [ok: unknown, bad: unknown] } = {
     { data: 'AA==', size: 1, mime: 'image/png' },
   ],
   'attach.delete': [{}, 0],
+  'daemon.update': [{}, 0],
 };
 
 test.each(Object.entries(cases))('%s result guard accepts and rejects', (method, [ok, bad]) => {

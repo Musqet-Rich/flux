@@ -10,6 +10,10 @@ import { createRpcRouter } from './create-rpc-router.ts';
 // The box's link to its devices: room derivations, per-device channels, RPC routing and the
 // relay transport, assembled in one place so the composition root stays readable.
 
+// The composition root talks to the transport through this module, so the transport's shape
+// travels with `connectRelay` rather than as a second import of `create-host-transport`.
+export type { HostTransport, TransportStatus } from './create-host-transport.ts';
+
 export interface ConnectRelayOptions {
   relayUrl: string;
   identity: BoxIdentity;

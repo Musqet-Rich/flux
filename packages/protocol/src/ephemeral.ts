@@ -10,13 +10,38 @@ export type Ephemeral =
   | { type: 'agent.thinking'; session: string; active: boolean; estimatedTokens?: number }
   | { type: 'agent.context'; session: string; tokens: number; model: string; window?: number }
   | { type: 'vcs.changed'; session: string; kind: string }
-  | { type: 'device.revoked'; deviceId: string };
+  | { type: 'device.revoked'; deviceId: string }
+  // Self-update progress and failure (ADR 0022), session-less like `device.revoked`: the daemon
+  // reports each phase as it fetches, verifies, installs and restarts, or the reason it aborted.
+  // Success has no event; the daemon exits and the device reads the new `hello.version`.
+  | { type: 'update.progress'; phase: UpdatePhase }
+  | { type: 'update.failed'; reason: UpdateFailReason };
+
+export type UpdatePhase = 'fetching' | 'verifying' | 'installing' | 'restarting';
+
+export type UpdateFailReason =
+  | 'bad_signature'
+  | 'download_failed'
+  | 'already_current'
+  | 'unsupported'
+  | 'disk_error';
+
+const updatePhases: readonly UpdatePhase[] = ['fetching', 'verifying', 'installing', 'restarting'];
+const updateFailReasons: readonly UpdateFailReason[] = [
+  'bad_signature',
+  'download_failed',
+  'already_current',
+  'unsupported',
+  'disk_error',
+];
 
 const { isString, isInteger, isBoolean, isRecord, isOneOf, isOptional } = guards;
 
 const is = (v: unknown): v is Ephemeral => {
   if (!isRecord(v)) return false;
   if (v['type'] === 'device.revoked') return isString(v['deviceId']);
+  if (v['type'] === 'update.progress') return isOneOf(v['phase'], updatePhases);
+  if (v['type'] === 'update.failed') return isOneOf(v['reason'], updateFailReasons);
   if (!isString(v['session'])) return false;
   switch (v['type']) {
     case 'delta':

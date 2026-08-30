@@ -8,7 +8,7 @@ export { bytes } from './bytes.ts';
 export { compress } from './compress.ts';
 export type { Channel, ChannelOptions } from './create-channel.ts';
 export { createChannel } from './create-channel.ts';
-export type { Ephemeral } from './ephemeral.ts';
+export type { Ephemeral, UpdateFailReason, UpdatePhase } from './ephemeral.ts';
 export { ephemeral } from './ephemeral.ts';
 export type {
   AgentKind,
@@ -46,6 +46,7 @@ export { relayEndpoint } from './relay-endpoint.ts';
 export type { RelayControl, RelayJoin, RelayJoinError, RelayJoinReply } from './relay-message.ts';
 export { relayMessage } from './relay-message.ts';
 export { room } from './room.ts';
+export { semver } from './semver.ts';
 export type {
   Commit,
   Device,

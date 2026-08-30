@@ -128,6 +128,9 @@ const cases: [RpcMethod, unknown, boolean][] = [
   ['attach.read', { attachmentId: 1, offset: 0, length: 1 }, false],
   ['attach.delete', { attachmentId: 'a' }, true],
   ['attach.delete', {}, false],
+  ['daemon.update', { version: '1.2.3' }, true],
+  ['daemon.update', { version: 1 }, false],
+  ['daemon.update', {}, false],
 ];
 
 test.each(cases)('%s params %j accepted=%s', (method, value, expected) => {
@@ -135,5 +138,5 @@ test.each(cases)('%s params %j accepted=%s', (method, value, expected) => {
 });
 
 test('covers every method in protocol.md § 7', () => {
-  expect(Object.keys(rpcMethods)).toHaveLength(37);
+  expect(Object.keys(rpcMethods)).toHaveLength(38);
 });

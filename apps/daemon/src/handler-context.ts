@@ -4,6 +4,15 @@ import type { SessionRecord } from './create-session-store.ts';
 import type { SessionSupervisor } from './create-session-supervisor.ts';
 import type { Services } from './open-services.ts';
 
+// What the `daemon.update` handler needs (ADR 0022): the running version and the shared semver
+// decide whether a target is installable; `distDir` is null on a dev build (run from source),
+// which is refused; `apply` fires the async fetch→verify→swap→exit and returns at once.
+export interface UpdateService {
+  currentVersion: string;
+  distDir: string | null;
+  apply: (target: string) => void;
+}
+
 // Everything an RPC handler may touch (architecture.md § Daemon). Handlers get this and nothing
 // else, so what the wire can reach is visible in one place. The service types are named through
 // `Services` rather than imported one by one to stay inside the per-file import budget.
@@ -32,6 +41,8 @@ export interface HandlerContext {
   forgetAgentSession: (session: string) => void;
   // Forgets a device everywhere: trust list, push subscriptions, live channels.
   revokeDevice: (deviceId: string) => Promise<void>;
+  // Self-update (ADR 0022): validates a `daemon.update` target and kicks off the install.
+  update: UpdateService;
 }
 
 // A types-only module still needs a runtime export named as the file for the module shape rule

@@ -12,6 +12,8 @@ export interface SettingsActions {
   removeDevice: (deviceId: string) => Promise<boolean>;
   refreshSettings: () => Promise<boolean>;
   saveSettings: (patch: SettingsPatch) => Promise<boolean>;
+  // Asks the daemon to install `target` (ADR 0022); progress and failure arrive as ephemerals.
+  updateDaemon: (target: string) => Promise<boolean>;
 }
 
 const refreshDevices = async (i: StoreInternals): Promise<void> => {
@@ -30,6 +32,19 @@ const saveSettings = async (i: StoreInternals, patch: SettingsPatch): Promise<vo
   i.state.settings = await boxLink.call(i, 'settings.set', patch);
 };
 
+// Mark the update as starting so Settings shows progress, then ask the box. A refusal (an
+// `unsupported` target, say) clears the marker and rethrows so the failure reaches `state.error`;
+// on success the ephemerals drive the phase and the reconnect clears the marker.
+const updateDaemon = async (i: StoreInternals, target: string): Promise<void> => {
+  i.state.update = { target, phase: null, failed: null };
+  try {
+    await boxLink.call(i, 'daemon.update', { version: target });
+  } catch (error) {
+    i.state.update = { target: null, phase: null, failed: null };
+    throw error;
+  }
+};
+
 export const settingsActions = (i: StoreInternals): SettingsActions => ({
   refreshDevices: () => boxLink.attempt(i, () => refreshDevices(i)),
   removeDevice: (deviceId) => boxLink.attempt(i, () => removeDevice(i, deviceId)),
@@ -38,4 +53,5 @@ export const settingsActions = (i: StoreInternals): SettingsActions => ({
       i.state.settings = await boxLink.call(i, 'settings.get', {});
     }),
   saveSettings: (patch) => boxLink.attempt(i, () => saveSettings(i, patch)),
+  updateDaemon: (target) => boxLink.attempt(i, () => updateDaemon(i, target)),
 });
