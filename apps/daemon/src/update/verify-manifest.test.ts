@@ -52,6 +52,16 @@ test('a signature with a flipped byte is bad_signature', () => {
   expect(result).toEqual({ ok: false, reason: 'bad_signature' });
 });
 
+test('a wrong-length signature is bad_signature, never a thrown error', () => {
+  const result = verifyManifest({
+    manifest: signed.manifest,
+    signature: new Uint8Array(10),
+    files: filesOf(),
+    keys: [pem],
+  });
+  expect(result).toEqual({ ok: false, reason: 'bad_signature' });
+});
+
 test('a manifest signed by a key outside the trusted set is bad_signature', () => {
   const other = generateKeyPairSync('ed25519');
   const elsewhere = signManifest(inputs, '1.2.3', other.privateKey);
