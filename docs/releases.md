@@ -116,7 +116,9 @@ the new code, and keep it always-on and start-on-boot besides (ADR 0022 § 6). R
 install` once per box; it detects the host and writes the right supervisor manifest, baking in the
 running node binary, the installed `index.mjs`, the invoking user and the daemon's `FLUX_*`/`PATH`
 environment. `flux service status` reports whether the manifest is installed and loaded, and `flux
-service uninstall` reverses it.
+service uninstall` reverses it. Run it from the installed daemon, not a source checkout: `flux
+service install` refuses a daemon started with `node src/index.ts` (which has no runnable
+`index.mjs` to supervise and cannot self-update anyway, ADR 0022 § 3).
 
 - **Linux (systemd).** As root it writes a hardened `/etc/systemd/system/flux-daemon.service`
   (modelled on `deploy/flux-daemon.service`) and runs `systemctl enable --now flux-daemon`. Not
