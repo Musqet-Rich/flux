@@ -166,7 +166,10 @@ label {
 textarea {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.85rem;
-  white-space: pre;
+  /* Wrap long lines to the box width rather than scrolling off-screen; `anywhere` breaks
+     unbroken tokens (paths, URLs) too so they never force a horizontal scrollbar. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 textarea.invalid {
