@@ -353,3 +353,42 @@ test('a top-level user line with text is other, not a subagent prompt', () => {
     parent: 'toolu_1',
   });
 });
+
+// A real compaction: the boundary line carries the before/after token counts, the status line
+// (status null) its result. Both were dropped before; now they parse to their own kinds.
+test('the compaction boundary and its null-status result line both parse', () => {
+  const boundary = {
+    type: 'system',
+    subtype: 'compact_boundary',
+    session_id: 's',
+    compact_metadata: {
+      trigger: 'manual',
+      pre_tokens: 60065,
+      post_tokens: 6202,
+      duration_ms: 59369,
+    },
+  };
+  expect(parseStreamLine(JSON.stringify(boundary))).toEqual({
+    kind: 'compact_boundary',
+    trigger: 'manual',
+    preTokens: 60065,
+    postTokens: 6202,
+    durationMs: 59369,
+  });
+  const status = { type: 'system', subtype: 'status', status: null, compact_result: 'failure' };
+  expect(parseStreamLine(JSON.stringify(status))).toEqual({
+    kind: 'compact_status',
+    result: 'failure',
+  });
+});
+
+test('a compact_boundary with no metadata or a non-integer count stays other', () => {
+  const noMeta = { type: 'system', subtype: 'compact_boundary', session_id: 's' };
+  expect(parseStreamLine(JSON.stringify(noMeta))?.kind).toBe('other');
+  const bad = {
+    type: 'system',
+    subtype: 'compact_boundary',
+    compact_metadata: { pre_tokens: '60065', post_tokens: 6202, duration_ms: 59369 },
+  };
+  expect(parseStreamLine(JSON.stringify(bad))?.kind).toBe('other');
+});
