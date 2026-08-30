@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { expect, test } from 'vitest';
 
+import { createEventLog } from './create-event-log.ts';
 import { openDatabase } from './open-database.ts';
 
 test('creates the schema and is idempotent on reopen', async () => {
@@ -86,5 +87,30 @@ test('adds the events.parent column to an events table created before it', async
   old.close();
   const db = openDatabase(path);
   expect(db.prepare('SELECT parent FROM events').get()?.['parent']).toBeNull();
+  db.close();
+});
+
+// A box paired before PR #50 has `session.created` rows shaped with `agent`; opening the database
+// runs the migrations (run-migrations.ts) so the event log can read them without throwing.
+test('migrates a pre-harness session.created row on open so the event log reads it', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'flux-db-'));
+  const path = join(dir, 'flux.sqlite');
+  const old = new DatabaseSync(path);
+  old.exec(
+    'CREATE TABLE events (session TEXT NOT NULL, seq INTEGER NOT NULL, ts TEXT NOT NULL, type TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY (session, seq)) WITHOUT ROWID',
+  );
+  old.exec(
+    `INSERT INTO events VALUES ('s', 1, 't', 'session.created', '{"repo":"/r","worktree":"/w","branch":"b","base":"abc","agent":"claude"}')`,
+  );
+  old.close();
+  const db = openDatabase(path);
+  expect(db.prepare('PRAGMA user_version').get()?.['user_version']).toBe(1);
+  expect(createEventLog({ db }).read('s', 0).events[0]?.payload).toEqual({
+    repo: '/r',
+    worktree: '/w',
+    branch: 'b',
+    base: 'abc',
+    harness: 'claude',
+  });
   db.close();
 });

@@ -1,8 +1,12 @@
 import { DatabaseSync } from 'node:sqlite';
 
+import { runMigrations } from './run-migrations.ts';
+
 // One SQLite file for everything the daemon persists (ADR 0006). The schema is applied on every
-// open with IF NOT EXISTS; there are no migrations yet, and there will be none until a release.
-// The one exception is a column added after the first build, applied below if it is missing.
+// open with IF NOT EXISTS, then columns a pre-release database lacks are added in place, then the
+// ordered boot-time migrations run (run-migrations.ts) — so a persisted-shape change survives a
+// self-update (ADR 0021/0022) instead of bricking the next read. This is the db-setup seam: the
+// db comes back schema-current and migrated, before any store reads it.
 
 const schema = `
   PRAGMA journal_mode = WAL;
@@ -98,5 +102,6 @@ export const openDatabase = (path: string): DatabaseSync => {
   const db = new DatabaseSync(path);
   db.exec(schema);
   addMissingColumns(db);
+  runMigrations(db);
   return db;
 };
