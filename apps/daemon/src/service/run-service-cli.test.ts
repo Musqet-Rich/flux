@@ -10,6 +10,7 @@ const input: ServiceInput = {
   platform: 'linux',
   hasSystemd: false,
   isRoot: false,
+  installed: true,
   user: 'node',
   home: '/home/node',
   node: '/usr/local/bin/node',

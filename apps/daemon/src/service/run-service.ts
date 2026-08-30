@@ -17,7 +17,21 @@ export interface ServiceDeps {
 
 export const runService = (sub: string | undefined, deps: ServiceDeps): Promise<string[]> => {
   const config = buildServiceConfig(deps.input);
-  if (sub === 'install') return installService(config, deps.io);
+  if (sub === 'install') {
+    // Baking a source-checkout path into a supervisor unit would write an `ExecStart`/plist that
+    // plain `node` cannot run, and such a daemon cannot self-update anyway (ADR 0022 § 3). Refuse
+    // it here, consistent with self-update's own dev-checkout refusal.
+    if (!deps.input.installed) {
+      return Promise.reject(
+        new DaemonError(
+          'unsupported',
+          'flux service install needs an installed daemon bundle; this looks like a source ' +
+            'checkout (run it from the installed index.mjs)',
+        ),
+      );
+    }
+    return installService(config, deps.io);
+  }
   if (sub === 'uninstall') return uninstallService(config, deps.io);
   if (sub === 'status') return serviceStatus(config, deps.io);
   return Promise.reject(

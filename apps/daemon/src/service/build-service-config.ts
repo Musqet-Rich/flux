@@ -10,6 +10,11 @@ export interface ServiceInput {
   platform: NodeJS.Platform;
   hasSystemd: boolean;
   isRoot: boolean;
+  // Whether the running process is an installed bundle (`detectDistDir` non-null): a daemon
+  // launched from a source checkout (`node src/index.ts`) has no runnable `index.mjs` to bake into
+  // a unit and cannot self-update (ADR 0022 § 3), so `service install` refuses it rather than write
+  // a supervisor that would run a path plain `node` cannot execute.
+  installed: boolean;
   user: string;
   home: string;
   // The absolute node binary and the installed `index.mjs`, baked into the manifest so the

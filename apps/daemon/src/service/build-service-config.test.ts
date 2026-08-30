@@ -7,6 +7,7 @@ const base: ServiceInput = {
   platform: 'linux',
   hasSystemd: true,
   isRoot: false,
+  installed: true,
   user: 'flux',
   home: '/home/flux',
   node: '/usr/bin/node',

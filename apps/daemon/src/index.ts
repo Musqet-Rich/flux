@@ -131,6 +131,9 @@ if (command === 'service') {
       platform: process.platform,
       hasSystemd: existsSync('/run/systemd/system'),
       isRoot: process.getuid?.() === 0,
+      // Only an installed bundle can be supervised: its `ExecStart` runs the sibling `index.mjs`
+      // under plain node. A source checkout has none, so `service install` refuses it (ADR 0022).
+      installed: detectDistDir(process.argv[1] ?? '', { exists: existsSync }) !== null,
       user: userInfo().username,
       home,
       node: process.execPath,

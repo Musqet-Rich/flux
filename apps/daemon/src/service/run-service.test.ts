@@ -9,6 +9,7 @@ const input: ServiceInput = {
   platform: 'linux',
   hasSystemd: false,
   isRoot: false,
+  installed: true,
   user: 'node',
   home: '/home/node',
   node: '/usr/local/bin/node',
@@ -56,4 +57,24 @@ test('an unknown subcommand rejects with a bad_params DaemonError', async () => 
   const { io } = fakeIo(new Set());
   await expect(runService('bogus', { io, input })).rejects.toThrow(DaemonError);
   await expect(runService(undefined, { io, input })).rejects.toThrow('install|uninstall|status');
+});
+
+test('install from a source checkout is refused and writes nothing', async () => {
+  const { io, writes } = fakeIo(new Set());
+  await expect(
+    runService('install', { io, input: { ...input, installed: false } }),
+  ).rejects.toThrow('installed daemon bundle');
+  expect(writes).toEqual([]);
+});
+
+test('uninstall and status still work from a source checkout', async () => {
+  const path = '/workspace/.flux/flux-daemon-run.sh';
+  const uninstall = fakeIo(new Set([path]));
+  await runService('uninstall', { io: uninstall.io, input: { ...input, installed: false } });
+  expect(uninstall.removes).toEqual([path]);
+  const status = await runService('status', {
+    io: fakeIo(new Set()).io,
+    input: { ...input, installed: false },
+  });
+  expect(status[0]).toContain('restart-loop wrapper');
 });
