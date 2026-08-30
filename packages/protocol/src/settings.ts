@@ -28,20 +28,39 @@ export interface HarnessConfig {
   settingsJson: string;
 }
 
+// A saved Agent (ADR 0023 § 2): a named, reusable spec the operator picks at session create.
+// `harness` pins the runtime when set (advisory — the create call's harness still wins, § 3);
+// `model`/`effort`/`role` are loose free-text the box compiles to harness flags, each omitted
+// when unset. `tools` is a later step and deliberately absent here.
+export interface AgentSpec {
+  name: string;
+  harness?: HarnessKind;
+  model?: string;
+  effort?: string;
+  role?: string;
+}
+
 export interface Settings {
   flux: FluxSettings;
   env: EnvSettings;
   harnessConfig: HarnessConfig;
+  // Saved Agents (ADR 0023 § 2); a `settings.set` patch with `agents` replaces the whole list.
+  agents: AgentSpec[];
 }
 
 export interface SettingsPatch {
   flux?: Partial<FluxSettings>;
   harnessConfig?: Partial<HarnessConfig>;
+  // Replaces the whole saved-Agents list (patch semantics are per-collection, not per-element).
+  agents?: AgentSpec[];
 }
 
-const { isString, isBoolean, isRecord, isOneOf, isOptional } = guards;
+const { isString, isBoolean, isRecord, isArrayOf, isOneOf, isOptional } = guards;
 
 const isHarnessKind = (v: unknown): v is HarnessKind => isOneOf(v, ['claude', 'pi']);
+
+// `model`/`effort`/`role` are loose free-text (ADR 0023 § 3): non-empty, not enum membership.
+const isFilledString = (v: unknown): v is string => isString(v) && v.length > 0;
 
 // A patch may name only fields that exist; a misspelt key would otherwise be silently ignored.
 const onlyKeys = (v: Record<string, unknown>, keys: readonly string[]): boolean =>
@@ -49,6 +68,21 @@ const onlyKeys = (v: Record<string, unknown>, keys: readonly string[]): boolean 
 
 const fluxKeys = ['reposDir', 'defaultHarness', 'notifyOnAsk', 'notifyOnIdle', 'notifyOnDone'];
 const harnessConfigKeys = ['claudeMd', 'settingsJson'];
+const agentKeys = ['name', 'harness', 'model', 'effort', 'role'];
+
+const isAgentSpec = (v: unknown): v is AgentSpec =>
+  isRecord(v) &&
+  onlyKeys(v, agentKeys) &&
+  isFilledString(v['name']) &&
+  isOptional(v['harness'], isHarnessKind) &&
+  isOptional(v['model'], isFilledString) &&
+  isOptional(v['effort'], isFilledString) &&
+  isOptional(v['role'], isFilledString);
+
+// The whole saved-Agents list: every element valid and names unique, so `settings.set` returns
+// `bad_params` for a duplicate name rather than silently keeping the last of the pair.
+const isAgentList = (v: unknown): v is AgentSpec[] =>
+  isArrayOf(v, isAgentSpec) && new Set(v.map((a) => a.name)).size === v.length;
 
 const isFlux = (v: unknown): v is FluxSettings =>
   isRecord(v) &&
@@ -85,12 +119,17 @@ const isHarnessConfigPatch = (v: unknown): v is Partial<HarnessConfig> =>
   isOptional(v['settingsJson'], isString);
 
 const is = (v: unknown): v is Settings =>
-  isRecord(v) && isFlux(v['flux']) && isEnv(v['env']) && isHarnessConfig(v['harnessConfig']);
+  isRecord(v) &&
+  isFlux(v['flux']) &&
+  isEnv(v['env']) &&
+  isHarnessConfig(v['harnessConfig']) &&
+  isAgentList(v['agents']);
 
 const isPatch = (v: unknown): v is SettingsPatch =>
   isRecord(v) &&
-  onlyKeys(v, ['flux', 'harnessConfig']) &&
+  onlyKeys(v, ['flux', 'harnessConfig', 'agents']) &&
   isOptional(v['flux'], isFluxPatch) &&
-  isOptional(v['harnessConfig'], isHarnessConfigPatch);
+  isOptional(v['harnessConfig'], isHarnessConfigPatch) &&
+  isOptional(v['agents'], isAgentList);
 
 export const settings: { is: typeof is; isPatch: typeof isPatch } = { is, isPatch };

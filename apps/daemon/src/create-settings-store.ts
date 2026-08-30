@@ -1,4 +1,4 @@
-import type { FluxSettings } from '@flux/protocol';
+import type { AgentSpec, FluxSettings } from '@flux/protocol';
 import { settings } from '@flux/protocol';
 import { statSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -15,6 +15,10 @@ export interface SettingsStore {
   // Throws bad_params for a patch `set` would refuse.
   check: (patch: Partial<FluxSettings>) => void;
   set: (patch: Partial<FluxSettings>) => FluxSettings;
+  // Saved Agents (ADR 0023 § 2), stored as their own JSON row; `setAgents` replaces the whole
+  // list. A malformed or foreign-build row reads as no Agents rather than throwing.
+  getAgents: () => AgentSpec[];
+  setAgents: (agents: AgentSpec[]) => AgentSpec[];
 }
 
 export interface SettingsStoreOptions {
@@ -24,6 +28,7 @@ export interface SettingsStoreOptions {
 }
 
 const key = 'flux';
+const agentsKey = 'agents';
 
 const defaults = (reposDir: string): FluxSettings => ({
   reposDir,
@@ -40,6 +45,18 @@ const parse = (value: unknown): Partial<FluxSettings> => {
     return settings.isPatch(wrapped) ? (wrapped.flux ?? {}) : {};
   } catch {
     return {};
+  }
+};
+
+// The saved-Agents row, validated whole through the protocol guard; an unknown key or a bad
+// element reads as no Agents rather than corrupting the list.
+const parseAgents = (value: unknown): AgentSpec[] => {
+  if (typeof value !== 'string') return [];
+  try {
+    const wrapped: { agents: unknown } = { agents: JSON.parse(value) };
+    return settings.isPatch(wrapped) ? (wrapped.agents ?? []) : [];
+  } catch {
+    return [];
   }
 };
 
@@ -79,6 +96,7 @@ export const createSettingsStore = (options: SettingsStoreOptions): SettingsStor
   const upsert = options.db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
   const base = defaults(options.reposDir);
   const get = (): FluxSettings => merge(base, parse(select.get(key)?.['value']));
+  const getAgents = (): AgentSpec[] => parseAgents(select.get(agentsKey)?.['value']);
   return {
     get,
     check: (patch) => {
@@ -88,6 +106,11 @@ export const createSettingsStore = (options: SettingsStoreOptions): SettingsStor
       const next = merge(get(), cleanReposDir(patch));
       upsert.run(key, JSON.stringify(next));
       return next;
+    },
+    getAgents,
+    setAgents: (agents) => {
+      upsert.run(agentsKey, JSON.stringify(agents));
+      return agents;
     },
   };
 };

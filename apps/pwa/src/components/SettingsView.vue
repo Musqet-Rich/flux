@@ -2,6 +2,7 @@
 import { onMounted } from 'vue';
 
 import type { Store } from '../store/create-store.ts';
+import AgentsEditor from './AgentsEditor.vue';
 import HarnessConfigEditor from './HarnessConfigEditor.vue';
 import DevicesSection from './DevicesSection.vue';
 import FluxSettingsForm from './FluxSettingsForm.vue';
@@ -27,6 +28,7 @@ onMounted(() => {
     <div class="sections">
       <DevicesSection :store="store" />
       <FluxSettingsForm :store="store" />
+      <AgentsEditor :store="store" />
       <HarnessConfigEditor :store="store" />
     </div>
   </section>
@@ -74,7 +76,8 @@ h1 {
     grid-template-columns: 1fr 1fr;
     grid-template-areas:
       'devices flux'
-      'agent agent';
+      'agents agents'
+      'config config';
     align-items: start;
     gap: 1.5rem;
   }
@@ -88,7 +91,11 @@ h1 {
   }
 
   .sections > :nth-child(3) {
-    grid-area: agent;
+    grid-area: agents;
+  }
+
+  .sections > :nth-child(4) {
+    grid-area: config;
   }
 }
 </style>

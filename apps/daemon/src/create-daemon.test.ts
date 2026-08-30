@@ -284,6 +284,7 @@ test('settings: runtime values persist, env is read-only, harness config files a
       claudeCommand: fake,
     },
     harnessConfig: { claudeMd: '', settingsJson: '' },
+    agents: [],
   });
   const updated = await call(d, 'settings.set', {
     flux: { notifyOnIdle: false, defaultHarness: 'pi' },

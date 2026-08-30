@@ -12,6 +12,9 @@ export interface SessionRecord extends SessionSummary {
   createdAt: string;
   worktree: string;
   base: string;
+  // The resolved Agent role (ADR 0023 § 2), persisted at create and compiled to an appended
+  // system prompt on spawn. Daemon-internal, not on `SessionSummary`; absent when none was set.
+  role?: string;
   agentSessionId: string | null;
   archived: boolean;
 }
@@ -27,6 +30,8 @@ export interface NewSession {
   // Configured model and effort (ADR 0023 § 3); omitted when the box spawns on its defaults.
   model?: string;
   effort?: string;
+  // The resolved Agent role (ADR 0023 § 2); omitted when no Agent set one.
+  role?: string;
 }
 
 export interface SessionStore {
@@ -75,7 +80,23 @@ const stateOf = (value: unknown): SessionState => {
 };
 
 const columns =
-  'session, title, repo, worktree, branch, base, agent, model, effort, agent_session_id, state, archived, created_at, updated_at';
+  'session, title, repo, worktree, branch, base, agent, model, effort, role, agent_session_id, state, archived, created_at, updated_at';
+
+// The insert's bound values in column order; optional fields become NULL when unset.
+const insertParams = (i: NewSession, ts: string): (string | null)[] => [
+  i.session,
+  i.title,
+  i.repo,
+  i.worktree,
+  i.branch,
+  i.base,
+  i.harness,
+  i.model ?? null,
+  i.effort ?? null,
+  i.role ?? null,
+  ts,
+  ts,
+];
 
 const toRecord = (row: Record<string, unknown>, lastSeq: number): SessionRecord => ({
   session: String(row['session']),
@@ -86,6 +107,7 @@ const toRecord = (row: Record<string, unknown>, lastSeq: number): SessionRecord 
   base: String(row['base']),
   harness: harnessOf(row['agent']),
   ...optionals(stringOrUndefined(row['model']), stringOrUndefined(row['effort'])),
+  ...(stringOrUndefined(row['role']) === undefined ? {} : { role: String(row['role']) }),
   agentSessionId: typeof row['agent_session_id'] === 'string' ? row['agent_session_id'] : null,
   state: stateOf(row['state']),
   archived: row['archived'] === 1,
@@ -114,7 +136,7 @@ const prepareStatements = (db: DatabaseSync) => {
     db.prepare(`UPDATE sessions SET ${column} = ?, updated_at = ? WHERE session = ?`);
   return {
     insert: db.prepare(
-      `INSERT INTO sessions (${columns}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'idle', 0, ?, ?)`,
+      `INSERT INTO sessions (${columns}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'idle', 0, ?, ?)`,
     ),
     select: db.prepare(`SELECT ${columns} FROM sessions WHERE session = ?`),
     selectAll: db.prepare(`SELECT ${columns} FROM sessions ORDER BY updated_at DESC`),
@@ -151,12 +173,8 @@ export const createSessionStore = (options: SessionStoreOptions): SessionStore =
   };
 
   const create = (input: NewSession): SessionRecord => {
-    const ts = now().toISOString();
-    const { session, title, repo, worktree, branch, base, harness } = input;
-    const model = input.model ?? null;
-    const effort = input.effort ?? null;
-    st.insert.run(session, title, repo, worktree, branch, base, harness, model, effort, ts, ts);
-    return get(session);
+    st.insert.run(...insertParams(input, now().toISOString()));
+    return get(input.session);
   };
 
   const summary = (row: Record<string, unknown>): SessionSummary => {

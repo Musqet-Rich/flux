@@ -125,6 +125,38 @@ test('passes --model and --effort when set, and omits them when unset', async ()
   expect(plain).not.toContain('--effort');
 });
 
+test('appends role after the flux prompt in --append-system-prompt, never replacing it', async () => {
+  const withRoleFile = join(tmpdir(), `flux-claude-args-role-${process.pid}.json`);
+  const withRole = spawnClaude({
+    cwd: process.cwd(),
+    command: fake,
+    mcpConfig: '/tmp/flux-mcp.json',
+    role: 'You write terse TypeScript.',
+    env: { ...process.env, FLUX_FAKE_FIXTURE: fixture, FLUX_FAKE_ARGS_FILE: withRoleFile },
+    close: { graceMs: 100 },
+  });
+  const args = await argsOf(withRole, withRoleFile);
+  const prompt = args[args.indexOf('--append-system-prompt') + 1];
+  expect(prompt).toMatch(/^You are running unattended under Flux\./u);
+  expect(prompt).toMatch(/\n\nYou write terse TypeScript\.$/u);
+  // The MCP tools floor is untouched.
+  expect(args.slice(args.indexOf('--mcp-config'), args.indexOf('--mcp-config') + 2)).toEqual([
+    '--mcp-config',
+    '/tmp/flux-mcp.json',
+  ]);
+  // With no role, the append-system-prompt is the flux prompt alone.
+  const noRoleFile = join(tmpdir(), `flux-claude-args-norole-${process.pid}.json`);
+  const noRole = spawnClaude({
+    cwd: process.cwd(),
+    command: fake,
+    mcpConfig: '/tmp/flux-mcp.json',
+    env: { ...process.env, FLUX_FAKE_FIXTURE: fixture, FLUX_FAKE_ARGS_FILE: noRoleFile },
+    close: { graceMs: 100 },
+  });
+  const bare = await argsOf(noRole, noRoleFile);
+  expect(bare[bare.indexOf('--append-system-prompt') + 1]).not.toMatch(/terse/u);
+});
+
 // The message with an image block is written exactly as the capture that produced
 // fixtures/claude/session-image-block was fed (its meta.json records the input; the real
 // binary answered from the image), so the shape the daemon sends is the one verified to work.

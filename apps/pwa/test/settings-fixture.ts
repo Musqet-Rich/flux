@@ -17,5 +17,6 @@ export const settingsFixture = (overrides: Partial<Settings> = {}): Settings => 
     claudeCommand: 'claude',
   },
   harnessConfig: { claudeMd: '# Rules\n', settingsJson: '{"model":"opus"}' },
+  agents: [],
   ...overrides,
 });

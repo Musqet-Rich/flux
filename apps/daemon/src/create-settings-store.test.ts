@@ -59,3 +59,25 @@ test('refuses a relative repos directory and ignores an unreadable stored row', 
   );
   expect(store.get()).toEqual(defaults);
 });
+
+test('saved agents round-trip whole and survive a reopen; a bad row reads as none', () => {
+  const db = openDatabase(':memory:');
+  const store = createSettingsStore({ db, reposDir: defaults.reposDir });
+  expect(store.getAgents()).toEqual([]);
+  const agents = [
+    { name: 'reviewer', harness: 'claude' as const, model: 'opus', effort: 'high', role: 'terse' },
+    { name: 'writer', role: 'be kind' },
+  ];
+  store.setAgents(agents);
+  const reopened = createSettingsStore({ db, reposDir: '/elsewhere' });
+  expect(reopened.getAgents()).toEqual(agents);
+  // A patch replaces the whole list.
+  reopened.setAgents([{ name: 'solo' }]);
+  expect(reopened.getAgents()).toEqual([{ name: 'solo' }]);
+  db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('agents', ?)").run('not json');
+  expect(store.getAgents()).toEqual([]);
+  db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('agents', ?)").run(
+    '[{"name":"a"},{"name":"a"}]',
+  );
+  expect(store.getAgents()).toEqual([]);
+});

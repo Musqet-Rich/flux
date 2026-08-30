@@ -103,6 +103,31 @@ test('passes --thinking when effort is set', async () => {
   expect(await agent.close()).toBe(0);
 });
 
+test('appends role after the flux prompt in --append-system-prompt, never replacing it', async () => {
+  const argsFile = join(tmpdir(), `flux-pi-role-${process.pid}.json`);
+  const agent = spawnPi({
+    cwd: process.cwd(),
+    session: 'sess-1',
+    sessionDir: '/data/pi-sessions',
+    command: fake,
+    extension: '/ext/flux-pi-extension.ts',
+    role: 'You write terse TypeScript.',
+    env: {
+      ...process.env,
+      FLUX_FAKE_FIXTURE: piFixture('text-reply'),
+      FLUX_FAKE_ARGS_FILE: argsFile,
+    },
+  });
+  const first = run(agent);
+  agent.send('go');
+  await first;
+  const args = JSON.parse(readFileSync(argsFile, 'utf8')) as string[];
+  const prompt = args[args.indexOf('--append-system-prompt') + 1];
+  expect(prompt).toMatch(/flux_ask/u);
+  expect(prompt).toMatch(/\n\nYou write terse TypeScript\.$/u);
+  expect(await agent.close()).toBe(0);
+});
+
 test('interrupt sends abort and the run still settles; the process stays alive for the next prompt', async () => {
   const agent = start({}, ['interrupt', 'text-reply']);
   const seen: string[] = [];

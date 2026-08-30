@@ -119,3 +119,16 @@ test('persists model and effort and omits them when unset', () => {
   expect('model' in bare).toBe(false);
   expect('effort' in bare).toBe(false);
 });
+
+test('persists the resolved role and reads it back across a reopen, absent when unset', () => {
+  const db = openDatabase(':memory:');
+  const store = createSessionStore({ db, lastSeq: () => 0 });
+  store.create({ ...input, session: 'r1', role: 'You write terse TypeScript.' });
+  store.create({ ...input, session: 'r2' });
+  // The role is daemon-internal, on the record, not on the wire summary.
+  expect(store.get('r1').role).toBe('You write terse TypeScript.');
+  expect('role' in store.get('r2')).toBe(false);
+  expect(store.list().some((s) => 'role' in s)).toBe(false);
+  const reopened = createSessionStore({ db, lastSeq: () => 0 });
+  expect(reopened.get('r1').role).toBe('You write terse TypeScript.');
+});

@@ -133,3 +133,59 @@ test('the picker follows the box default and the harness list, and says when the
   expect(wrapper.find('button[type=submit]').attributes('disabled')).toBeDefined();
   box.store.stop();
 });
+
+const withAgents = () =>
+  pairedStore([], {
+    'repos.list': () => ({ repos: [{ path: '/repos/a', name: 'a', branches: ['main'] }] }),
+    'settings.get': () =>
+      settingsFixture({ agents: [{ name: 'reviewer', model: 'opus', effort: 'high', role: 't' }] }),
+    'sessions.create': (p) => ({
+      session: 's9',
+      title: p.branch,
+      repo: p.repo,
+      branch: p.branch,
+      harness: p.harness,
+      state: 'idle' as const,
+      lastSeq: 0,
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    }),
+    'agent.send': () => ({ seq: 1 }),
+  });
+
+test('an agent picker prefills model and effort and sends the agent name', async () => {
+  const box = await withAgents();
+  const wrapper = mount(NewSessionView, { props: { store: box.store } });
+  await until(() => Reflect.get(wrapper.vm, 'agents').length === 1);
+  await flushPromises();
+  expect(wrapper.find('#new-agent').exists()).toBe(true);
+  await wrapper.find('#new-agent').setValue('reviewer');
+  expect(wrapper.find<HTMLInputElement>('#new-model').element.value).toBe('opus');
+  expect(wrapper.find<HTMLInputElement>('#new-effort').element.value).toBe('high');
+  await wrapper.find('#new-prompt').setValue('go');
+  await wrapper.find('form').trigger('submit');
+  await until(() => box.calls('agent.send').length === 1);
+  expect(box.calls('sessions.create')).toEqual([
+    {
+      repo: '/repos/a',
+      branch: expect.stringMatching(/^flux\//u),
+      harness: 'claude',
+      agent: 'reviewer',
+      model: 'opus',
+      effort: 'high',
+    },
+  ]);
+  box.store.stop();
+});
+
+test('leaving the agent picker on None omits agent on create', async () => {
+  const box = await withAgents();
+  const wrapper = mount(NewSessionView, { props: { store: box.store } });
+  await until(() => Reflect.get(wrapper.vm, 'agents').length === 1);
+  await flushPromises();
+  await wrapper.find('#new-prompt').setValue('go');
+  await wrapper.find('form').trigger('submit');
+  await until(() => box.calls('agent.send').length === 1);
+  expect(box.calls('sessions.create')[0]).not.toHaveProperty('agent');
+  box.store.stop();
+});

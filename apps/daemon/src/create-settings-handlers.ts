@@ -34,6 +34,7 @@ const readSettings = async (ctx: HandlerContext): Promise<Settings> => ({
   flux: ctx.settings.get(),
   env: ctx.env,
   harnessConfig: await ctx.harnessConfig.read(),
+  agents: ctx.settings.getAgents(),
 });
 
 export const createSettingsHandlers = (ctx: HandlerContext): SettingsHandlers => ({
@@ -57,6 +58,8 @@ export const createSettingsHandlers = (ctx: HandlerContext): SettingsHandlers =>
     }
     if (p.harnessConfig !== undefined) await ctx.harnessConfig.write(p.harnessConfig);
     if (p.flux !== undefined) ctx.settings.set(p.flux);
+    // The protocol guard has already rejected a blank or duplicate Agent name as `bad_params`.
+    if (p.agents !== undefined) ctx.settings.setAgents(p.agents);
     return readSettings(ctx);
   },
 });

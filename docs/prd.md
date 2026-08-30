@@ -69,6 +69,7 @@ Ordered by priority. P1 is the minimum useful product.
 - Pair a second device. Revoke a device.
 - Basic git actions from the PWA: commit, push, open PR (via `gh` on the box).
 - pi.dev adapter.
+- Save named Agents (a model + effort + role preset) in Settings and pick one when starting a session (ADR 0023).
 
 ### P3
 
