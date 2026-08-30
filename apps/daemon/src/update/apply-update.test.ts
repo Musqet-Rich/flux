@@ -1,6 +1,6 @@
 import type { Ephemeral } from '@flux/protocol';
 import { generateKeyPairSync } from 'node:crypto';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, test } from 'vitest';
@@ -67,8 +67,7 @@ afterEach(() => {
 
 const harness = async (target: string, assets: Map<string, Uint8Array>): Promise<Harness> => {
   const distDir = await mkdtemp(join(tmpdir(), 'flux-dist-'));
-  const dataDir = await mkdtemp(join(tmpdir(), 'flux-data-'));
-  dirs.push(distDir, dataDir);
+  dirs.push(distDir);
   await Promise.all(bundle.map((name) => writeFile(join(distDir, name), enc(`old ${name}`))));
   const events: string[] = [];
   const emitted: Ephemeral[] = [];
@@ -87,7 +86,6 @@ const harness = async (target: string, assets: Map<string, Uint8Array>): Promise
       events.push('exit');
     },
     distDir,
-    dataDir,
     keys: trusted,
   };
   return { deps, events, emitted, distDir };
@@ -102,6 +100,22 @@ test('the happy path fetches, verifies, installs, swaps the files, then stops an
   expect(events).toEqual(['fetching', 'verifying', 'installing', 'restarting', 'stop', 'exit']);
   const installed = await Promise.all(bundle.map((name) => readFile(join(distDir, name), 'utf8')));
   expect(installed).toEqual(bundle.map((name) => `new ${name}`));
+});
+
+test('stages inside distDir and renames within it, leaving no staging behind', async () => {
+  // Regression for the cross-filesystem swap: staging must sit beside the installed files so every
+  // rename stays on one mount (fs.rename throws EXDEV across mounts). The only directory apply-update
+  // is given is distDir; a successful swap that leaves distDir holding exactly the bundle — no
+  // `.update-*` staging dir — proves staging happened here and was cleaned up, not on a data mount.
+  const { deps, distDir } = await harness(
+    '1.2.3',
+    releaseAssets('1.2.3', () => {}),
+  );
+  await applyUpdate(deps);
+  const installed = await Promise.all(bundle.map((name) => readFile(join(distDir, name), 'utf8')));
+  expect(installed).toEqual(bundle.map((name) => `new ${name}`));
+  const entries = await readdir(distDir);
+  expect(entries.toSorted()).toEqual([...bundle].toSorted());
 });
 
 test('a fetch failure reports download_failed and never swaps or exits', async () => {

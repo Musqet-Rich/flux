@@ -22,10 +22,9 @@ export interface ApplyUpdateDeps {
   // The daemon's bounded shutdown (ADR 0017); run before exit so in-flight agents stop first.
   stop: () => Promise<void>;
   exit: (code: number) => void;
-  // The installed bundle directory (siblings of the running index.mjs); swaps land here.
+  // The installed bundle directory (siblings of the running index.mjs); staging and swaps both
+  // land here, so every rename stays within one filesystem (see installFiles).
   distDir: string;
-  // Staging happens under here, then each file is renamed over its installed path.
-  dataDir: string;
   // Trusted keys override for tests; defaults to the vendored set inside verifyManifest.
   keys?: string[];
   // Release repo override (`FLUX_RELEASE_REPO`); defaults to the constant in fetchRelease.
@@ -40,16 +39,15 @@ type VerifyFailReason = Extract<VerifyResult, { ok: false }>['reason'];
 const mapVerifyReason = (reason: VerifyFailReason): UpdateFailReason =>
   reason === 'malformed' ? 'download_failed' : 'bad_signature';
 
-// Write every verified file to a temp dir under the data dir, then rename each over its installed
-// path. Rename is atomic within a filesystem, so a crash mid-swap leaves either the old or the new
-// file, never a torn one; a file already renamed when a later one fails stays in place. Any fs
-// error resolves false (a `disk_error`), and the staging dir is always cleaned up.
-const installFiles = async (
-  files: Map<string, Uint8Array>,
-  distDir: string,
-  dataDir: string,
-): Promise<boolean> => {
-  const staging = join(dataDir, `update-${randomUUID()}`);
+// Write every verified file to a temp dir INSIDE the install directory, then rename each over its
+// installed path. Staging beside the target keeps every rename on one filesystem: `fs.rename` is
+// atomic within a filesystem but throws `EXDEV` across mounts, so staging under the data dir (a
+// separate mount on many real deployments — a tmpfs `/tmp`, a `/opt` install) would fail every
+// swap. A crash mid-swap therefore leaves either the old or the new file, never a torn one; a file
+// already renamed when a later one fails stays in place. Any fs error resolves false (a
+// `disk_error`), and the staging dir is always cleaned up.
+const installFiles = async (files: Map<string, Uint8Array>, distDir: string): Promise<boolean> => {
+  const staging = join(distDir, `.update-${randomUUID()}`);
   const staged = [...files].map(([name, bytes]) => ({ name, bytes, temp: join(staging, name) }));
   try {
     await mkdir(staging, { recursive: true });
@@ -96,7 +94,7 @@ export const applyUpdate = async (deps: ApplyUpdateDeps): Promise<void> => {
   }
 
   deps.emit({ type: 'update.progress', phase: 'installing' });
-  if (!(await installFiles(release.files, deps.distDir, deps.dataDir))) {
+  if (!(await installFiles(release.files, deps.distDir))) {
     deps.emit({ type: 'update.failed', reason: 'disk_error' });
     return;
   }

@@ -210,7 +210,6 @@ export const createDaemon = async (config: DaemonConfig): Promise<Daemon> => {
   });
   const update = createUpdateService(
     config,
-    dataDir,
     () => transport,
     () => daemon.stop(),
   );

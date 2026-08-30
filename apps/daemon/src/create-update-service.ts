@@ -18,7 +18,6 @@ export interface UpdateServiceConfig {
 
 export const createUpdateService = (
   config: UpdateServiceConfig,
-  dataDir: string,
   transport: () => HostTransport,
   stop: () => Promise<void>,
 ): UpdateService => {
@@ -32,7 +31,6 @@ export const createUpdateService = (
       stop,
       exit: (code) => process.exit(code),
       distDir,
-      dataDir,
       ...(config.releaseRepo === undefined ? {} : { repo: config.releaseRepo }),
     });
   };
