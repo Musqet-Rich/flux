@@ -125,6 +125,39 @@ test('passes --model and --effort when set, and omits them when unset', async ()
   expect(plain).not.toContain('--effort');
 });
 
+test('compiles the tool policy to flags: deny disallows, none is --tools "", all omits', async () => {
+  const denyFile = join(tmpdir(), `flux-claude-args-deny-${process.pid}.json`);
+  const deny = spawnClaude({
+    cwd: process.cwd(),
+    command: fake,
+    tools: { mode: 'deny', list: ['Bash', 'Edit'] },
+    env: { ...process.env, FLUX_FAKE_FIXTURE: fixture, FLUX_FAKE_ARGS_FILE: denyFile },
+    close: { graceMs: 100 },
+  });
+  const denied = await argsOf(deny, denyFile);
+  expect(
+    denied.slice(denied.indexOf('--disallowedTools'), denied.indexOf('--disallowedTools') + 2),
+  ).toEqual(['--disallowedTools', 'Bash,Edit']);
+  expect(denied).not.toContain('--tools');
+  const noneFile = join(tmpdir(), `flux-claude-args-none-${process.pid}.json`);
+  const none = spawnClaude({
+    cwd: process.cwd(),
+    command: fake,
+    tools: { mode: 'none' },
+    env: { ...process.env, FLUX_FAKE_FIXTURE: fixture, FLUX_FAKE_ARGS_FILE: noneFile },
+    close: { graceMs: 100 },
+  });
+  const noneArgs = await argsOf(none, noneFile);
+  expect(noneArgs.slice(noneArgs.indexOf('--tools'), noneArgs.indexOf('--tools') + 2)).toEqual([
+    '--tools',
+    '',
+  ]);
+  const allFile = join(tmpdir(), `flux-claude-args-all-${process.pid}.json`);
+  const all = await argsOf(start({ FLUX_FAKE_ARGS_FILE: allFile }), allFile);
+  expect(all).not.toContain('--tools');
+  expect(all).not.toContain('--disallowedTools');
+});
+
 test('appends role after the flux prompt in --append-system-prompt, never replacing it', async () => {
   const withRoleFile = join(tmpdir(), `flux-claude-args-role-${process.pid}.json`);
   const withRole = spawnClaude({

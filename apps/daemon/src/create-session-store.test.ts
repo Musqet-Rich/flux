@@ -132,3 +132,29 @@ test('persists the resolved role and reads it back across a reopen, absent when 
   const reopened = createSessionStore({ db, lastSeq: () => 0 });
   expect(reopened.get('r1').role).toBe('You write terse TypeScript.');
 });
+
+test('persists the resolved tool policy as JSON and re-reads it across a restart', () => {
+  const db = openDatabase(':memory:');
+  const store = createSessionStore({ db, lastSeq: () => 0 });
+  store.create({ ...input, session: 't1', tools: { mode: 'deny', list: ['Bash', 'Edit'] } });
+  store.create({ ...input, session: 't2', tools: { mode: 'none' } });
+  store.create({ ...input, session: 't3' });
+  expect(store.get('t1').tools).toEqual({ mode: 'deny', list: ['Bash', 'Edit'] });
+  expect(store.get('t2').tools).toEqual({ mode: 'none' });
+  expect('tools' in store.get('t3')).toBe(false);
+  // Daemon-internal: never on the wire summary.
+  expect(store.list().some((s) => 'tools' in s)).toBe(false);
+  // A fresh store over the same file re-spawns identically.
+  const reopened = createSessionStore({ db, lastSeq: () => 0 });
+  expect(reopened.get('t1').tools).toEqual({ mode: 'deny', list: ['Bash', 'Edit'] });
+  expect(reopened.get('t2').tools).toEqual({ mode: 'none' });
+});
+
+test('reads a stored tool policy that no longer parses as none, not a failure', () => {
+  const db = openDatabase(':memory:');
+  const store = createSessionStore({ db, lastSeq: () => 0 });
+  db.exec(
+    "INSERT INTO sessions (session, title, repo, worktree, branch, base, agent, tools, state, created_at, updated_at) VALUES ('bad', 't', '/r', '/w', 'b', 'base', 'claude', 'not json', 'idle', 'now', 'now')",
+  );
+  expect('tools' in store.get('bad')).toBe(false);
+});

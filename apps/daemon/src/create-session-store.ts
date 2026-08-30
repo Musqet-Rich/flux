@@ -1,4 +1,5 @@
-import type { HarnessKind, SessionState, SessionSummary } from '@flux/protocol';
+import type { AgentTools, HarnessKind, SessionState, SessionSummary } from '@flux/protocol';
+import { settings } from '@flux/protocol';
 import { existsSync } from 'node:fs';
 import type { DatabaseSync } from 'node:sqlite';
 
@@ -15,6 +16,10 @@ export interface SessionRecord extends SessionSummary {
   // The resolved Agent role (ADR 0023 § 2), persisted at create and compiled to an appended
   // system prompt on spawn. Daemon-internal, not on `SessionSummary`; absent when none was set.
   role?: string;
+  // The resolved Agent tool policy (ADR 0023 § 4), persisted at create as JSON text and compiled
+  // to Claude flags on spawn, so a restart re-spawns identically. Daemon-internal, not on the
+  // wire summary; absent when the Agent set none (mode `all`).
+  tools?: AgentTools;
   agentSessionId: string | null;
   archived: boolean;
 }
@@ -32,6 +37,8 @@ export interface NewSession {
   effort?: string;
   // The resolved Agent role (ADR 0023 § 2); omitted when no Agent set one.
   role?: string;
+  // The resolved Agent tool policy (ADR 0023 § 4); omitted when the Agent set none.
+  tools?: AgentTools;
 }
 
 export interface SessionStore {
@@ -68,6 +75,19 @@ const optionals = (model: string | undefined, effort: string | undefined) => ({
   ...(effort === undefined ? {} : { effort }),
 });
 
+// The tool policy is stored as JSON text; a row from before this shipped, or any value that no
+// longer parses to a valid policy, reads back as none (mode `all`) rather than failing the read.
+const toolsField = (value: unknown): { tools?: AgentTools } => {
+  if (typeof value !== 'string' || value.length === 0) return {};
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return {};
+  }
+  return settings.isTools(parsed) ? { tools: parsed } : {};
+};
+
 const stateOf = (value: unknown): SessionState => {
   switch (value) {
     case 'running':
@@ -80,9 +100,10 @@ const stateOf = (value: unknown): SessionState => {
 };
 
 const columns =
-  'session, title, repo, worktree, branch, base, agent, model, effort, role, agent_session_id, state, archived, created_at, updated_at';
+  'session, title, repo, worktree, branch, base, agent, model, effort, role, tools, agent_session_id, state, archived, created_at, updated_at';
 
-// The insert's bound values in column order; optional fields become NULL when unset.
+// The insert's bound values in column order; optional fields become NULL when unset. The tool
+// policy is serialised to JSON text.
 const insertParams = (i: NewSession, ts: string): (string | null)[] => [
   i.session,
   i.title,
@@ -94,6 +115,7 @@ const insertParams = (i: NewSession, ts: string): (string | null)[] => [
   i.model ?? null,
   i.effort ?? null,
   i.role ?? null,
+  i.tools === undefined ? null : JSON.stringify(i.tools),
   ts,
   ts,
 ];
@@ -108,6 +130,7 @@ const toRecord = (row: Record<string, unknown>, lastSeq: number): SessionRecord 
   harness: harnessOf(row['agent']),
   ...optionals(stringOrUndefined(row['model']), stringOrUndefined(row['effort'])),
   ...(stringOrUndefined(row['role']) === undefined ? {} : { role: String(row['role']) }),
+  ...toolsField(row['tools']),
   agentSessionId: typeof row['agent_session_id'] === 'string' ? row['agent_session_id'] : null,
   state: stateOf(row['state']),
   archived: row['archived'] === 1,
@@ -136,7 +159,7 @@ const prepareStatements = (db: DatabaseSync) => {
     db.prepare(`UPDATE sessions SET ${column} = ?, updated_at = ? WHERE session = ?`);
   return {
     insert: db.prepare(
-      `INSERT INTO sessions (${columns}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'idle', 0, ?, ?)`,
+      `INSERT INTO sessions (${columns}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'idle', 0, ?, ?)`,
     ),
     select: db.prepare(`SELECT ${columns} FROM sessions WHERE session = ?`),
     selectAll: db.prepare(`SELECT ${columns} FROM sessions ORDER BY updated_at DESC`),

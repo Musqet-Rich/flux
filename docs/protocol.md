@@ -400,15 +400,29 @@ interface Settings {
 // A saved Agent (ADR 0023 § 2): a named, reusable preset picked at session create. `harness` pins
 // the runtime when set (advisory: the create call's harness wins); `model`/`effort`/`role` are
 // loose non-empty strings the box compiles to harness flags, each omitted when unset. `role` is
-// appended after the Flux system prompt on both harnesses, never replacing it. Names are unique
-// within the list; a blank or duplicate name fails `settings.set` with `bad_params`. (`tools` is
-// a later step and is not part of the spec yet.)
+// appended after the Flux system prompt on both harnesses, never replacing it. `tools` is the
+// Agent's tool policy (§ 4), omitted when unset (== mode `all`). Names are unique within the list;
+// a blank or duplicate name fails `settings.set` with `bad_params`.
 interface AgentSpec {
   name: string;
   harness?: 'claude' | 'pi';
   model?: string;
   effort?: string;
   role?: string;
+  tools?: AgentTools;
+}
+
+// An Agent's tool policy (ADR 0023 § 4/§ 5). `all` is today's behaviour (the full toolset). `allow`
+// and `deny` carry a non-empty `list` of loose tool names (built-ins such as `Bash`, `Edit`;
+// suggested, not an enum); `list` is omitted for `all`/`none`, and present-but-for-`all`/`none`, or
+// an empty/blank-membered list for `allow`/`deny`, fails `settings.set` with `bad_params`. `none`
+// removes every non-Flux tool. The Flux tools (`flux_ask`/`flux_notify`) stay available in every
+// mode — the box keeps them out of any denylist and they survive `none` (they ride on
+// `--mcp-config`). The resolved policy is persisted on the box's session row (not on the wire
+// summary) so a restart re-spawns identically.
+interface AgentTools {
+  mode: 'all' | 'allow' | 'deny' | 'none';
+  list?: string[];
 }
 
 interface FluxSettings {

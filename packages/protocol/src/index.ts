@@ -63,11 +63,13 @@ export { rpcMethods } from './rpc-methods.ts';
 export { rpcResults } from './rpc-results.ts';
 export type {
   AgentSpec,
+  AgentTools,
   EnvSettings,
   FluxSettings,
   HarnessConfig,
   Settings,
   SettingsPatch,
+  ToolsMode,
 } from './settings.ts';
 export { settings } from './settings.ts';
 export type { RpcError, Wire } from './wire.ts';

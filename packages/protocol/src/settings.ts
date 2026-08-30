@@ -28,16 +28,29 @@ export interface HarnessConfig {
   settingsJson: string;
 }
 
+// An Agent's tool policy (ADR 0023 § 4/§ 5). `all` is today's behaviour (the full toolset, no
+// tools flag). `allow`/`deny` carry a non-empty `list` of loose tool names (built-ins like `Bash`,
+// `Edit`; suggested, not an enum). `none` removes every non-Flux tool. `list` is omitted for
+// `all`/`none`. The Flux tools (`flux_ask`/`flux_notify`) stay available in every mode — the box
+// keeps them out of any denylist and they survive `none` (they ride on `--mcp-config`, § 5).
+export type ToolsMode = 'all' | 'allow' | 'deny' | 'none';
+
+export interface AgentTools {
+  mode: ToolsMode;
+  list?: string[];
+}
+
 // A saved Agent (ADR 0023 § 2): a named, reusable spec the operator picks at session create.
 // `harness` pins the runtime when set (advisory — the create call's harness still wins, § 3);
 // `model`/`effort`/`role` are loose free-text the box compiles to harness flags, each omitted
-// when unset. `tools` is a later step and deliberately absent here.
+// when unset. `tools` is the Agent's tool policy (§ 4), omitted when unset (== mode `all`).
 export interface AgentSpec {
   name: string;
   harness?: HarnessKind;
   model?: string;
   effort?: string;
   role?: string;
+  tools?: AgentTools;
 }
 
 export interface Settings {
@@ -70,7 +83,21 @@ const onlyKeys = (v: Record<string, unknown>, keys: readonly string[]): boolean 
 
 const fluxKeys = ['reposDir', 'defaultHarness', 'notifyOnAsk', 'notifyOnIdle', 'notifyOnDone'];
 const harnessConfigKeys = ['claudeMd', 'settingsJson'];
-const agentKeys = ['name', 'harness', 'model', 'effort', 'role'];
+const agentKeys = ['name', 'harness', 'model', 'effort', 'role', 'tools'];
+const toolsKeys = ['mode', 'list'];
+
+const isFilledStringList = (v: unknown): v is string[] =>
+  isArrayOf(v, isFilledString) && v.length > 0;
+
+// `allow`/`deny` require a non-empty list of non-empty names; `all`/`none` forbid a list, so a
+// present-but-unused `list` is a guard failure (→ `bad_params`), not silently dropped.
+const isAgentTools = (v: unknown): v is AgentTools =>
+  isRecord(v) &&
+  onlyKeys(v, toolsKeys) &&
+  isOneOf(v['mode'], ['all', 'allow', 'deny', 'none']) &&
+  (v['mode'] === 'allow' || v['mode'] === 'deny'
+    ? isFilledStringList(v['list'])
+    : v['list'] === undefined);
 
 const isAgentSpec = (v: unknown): v is AgentSpec =>
   isRecord(v) &&
@@ -79,7 +106,8 @@ const isAgentSpec = (v: unknown): v is AgentSpec =>
   isOptional(v['harness'], isHarnessKind) &&
   isOptional(v['model'], isFilledString) &&
   isOptional(v['effort'], isFilledString) &&
-  isOptional(v['role'], isFilledString);
+  isOptional(v['role'], isFilledString) &&
+  isOptional(v['tools'], isAgentTools);
 
 // The whole saved-Agents list: every element valid and names unique, so `settings.set` returns
 // `bad_params` for a duplicate name rather than silently keeping the last of the pair.
@@ -134,4 +162,10 @@ const isPatch = (v: unknown): v is SettingsPatch =>
   isOptional(v['harnessConfig'], isHarnessConfigPatch) &&
   isOptional(v['agents'], isAgentList);
 
-export const settings: { is: typeof is; isPatch: typeof isPatch } = { is, isPatch };
+// `isTools` is exported so the box can re-validate a session's persisted tool policy (stored as
+// JSON text) when it reads a row back, the same guard the wire uses.
+export const settings: {
+  is: typeof is;
+  isPatch: typeof isPatch;
+  isTools: typeof isAgentTools;
+} = { is, isPatch, isTools: isAgentTools };

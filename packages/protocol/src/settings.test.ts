@@ -34,6 +34,25 @@ test.each([
   // `agents` is optional on the wire: a daemon built before it shipped omits it and still passes.
   [{ flux, env, harnessConfig }, true],
   [{ flux, env, harnessConfig, agents: undefined }, true],
+  // Tool policy rides on a saved Agent (ADR 0023 § 4).
+  [{ flux, env, harnessConfig, agents: [{ name: 'a', tools: { mode: 'all' } }] }, true],
+  [{ flux, env, harnessConfig, agents: [{ name: 'a', tools: { mode: 'none' } }] }, true],
+  [
+    { flux, env, harnessConfig, agents: [{ name: 'a', tools: { mode: 'deny', list: ['Bash'] } }] },
+    true,
+  ],
+  [
+    { flux, env, harnessConfig, agents: [{ name: 'a', tools: { mode: 'allow', list: ['Read'] } }] },
+    true,
+  ],
+  [
+    { flux, env, harnessConfig, agents: [{ name: 'a', tools: { mode: 'allow', list: [] } }] },
+    false,
+  ],
+  [
+    { flux, env, harnessConfig, agents: [{ name: 'a', tools: { mode: 'all', list: ['Bash'] } }] },
+    false,
+  ],
   [{ flux, env, harnessConfig, agents: [{ name: '' }] }, false],
   [{ flux, env, harnessConfig, agents: [{ name: 'a' }, { name: 'a' }] }, false],
   [{ flux, env, harnessConfig, agents: {} }, false],
@@ -69,6 +88,15 @@ test.each([
   [{ agents: [{ name: 'a', model: '' }] }, false],
   [{ agents: [{ name: 'a', effort: '' }] }, false],
   [{ agents: [{ name: 'a', role: '' }] }, false],
+  [{ agents: [{ name: 'a', tools: { mode: 'none' } }] }, true],
+  [{ agents: [{ name: 'a', tools: { mode: 'deny', list: ['Bash', 'Edit'] } }] }, true],
+  [{ agents: [{ name: 'a', tools: { mode: 'deny' } }] }, false],
+  [{ agents: [{ name: 'a', tools: { mode: 'allow', list: [''] } }] }, false],
+  [{ agents: [{ name: 'a', tools: { mode: 'allow', list: 'Bash' } }] }, false],
+  [{ agents: [{ name: 'a', tools: { mode: 'none', list: ['Bash'] } }] }, false],
+  [{ agents: [{ name: 'a', tools: { mode: 'read' } }] }, false],
+  [{ agents: [{ name: 'a', tools: { mode: 'all', extra: 1 } }] }, false],
+  [{ agents: [{ name: 'a', tools: 'all' }] }, false],
   [{ agents: [{ name: 'a', extra: 1 }] }, false],
   [{ agents: {} }, false],
   [[], false],

@@ -1,16 +1,18 @@
-import type { AgentSpec } from '@flux/protocol';
+import type { AgentSpec, AgentTools } from '@flux/protocol';
 
 import { DaemonError } from './daemon-error.ts';
 
-// Resolve a session's model/effort/role at create (ADR 0023 § 2/§ 3): each field is the inline
-// override if given, else the named Agent's, else unset (the box default). The create call's
-// harness always wins, so an Agent's own `harness` pin is advisory and not applied here. An
-// `agent` name that no saved Agent matches is `bad_params`, before any worktree is made.
+// Resolve a session's model/effort/role/tools at create (ADR 0023 § 2/§ 3): each field is the
+// inline override if given, else the named Agent's, else unset (the box default). `role` and
+// `tools` are Agent-only (no inline override). The create call's harness always wins, so an
+// Agent's own `harness` pin is advisory and not applied here. An `agent` name that no saved Agent
+// matches is `bad_params`, before any worktree is made.
 
 export interface AgentResolution {
   model?: string;
   effort?: string;
   role?: string;
+  tools?: AgentTools;
 }
 
 export const resolveAgent = (
@@ -25,9 +27,11 @@ export const resolveAgent = (
   const model = params.model ?? named?.model;
   const effort = params.effort ?? named?.effort;
   const role = named?.role;
+  const tools = named?.tools;
   return {
     ...(model === undefined ? {} : { model }),
     ...(effort === undefined ? {} : { effort }),
     ...(role === undefined ? {} : { role }),
+    ...(tools === undefined ? {} : { tools }),
   };
 };

@@ -49,6 +49,54 @@ test('flags a blank name and a duplicate name and blocks save', async () => {
   box.store.stop();
 });
 
+test('emits mode none as { mode: none } and a note names the Flux tools', async () => {
+  const box = await pairedStore([], {
+    'settings.get': () => settingsFixture({ agents: [{ name: 'ro' }] }),
+    'settings.set': () => settingsFixture({ agents: [{ name: 'ro' }] }),
+  });
+  await box.store.refreshSettings();
+  const wrapper = mount(AgentsEditor, { props: { store: box.store } });
+  expect(wrapper.find('.tools-note').text()).toContain('flux_ask and flux_notify');
+  await wrapper.find('.tools-mode').setValue('none');
+  await wrapper.find('form').trigger('submit');
+  await until(() => box.calls('settings.set').length === 1);
+  await flushPromises();
+  expect(box.calls('settings.set')).toEqual([
+    { agents: [{ name: 'ro', tools: { mode: 'none' } }] },
+  ]);
+  box.store.stop();
+});
+
+test('an allow-list carries its parsed tool names, comma- or newline-separated', async () => {
+  const box = await pairedStore([], {
+    'settings.get': () => settingsFixture({ agents: [{ name: 'ro' }] }),
+    'settings.set': () => settingsFixture({ agents: [{ name: 'ro' }] }),
+  });
+  await box.store.refreshSettings();
+  const wrapper = mount(AgentsEditor, { props: { store: box.store } });
+  await wrapper.find('.tools-mode').setValue('allow');
+  await wrapper.find('.tools-list').setValue('Bash, Edit\nRead');
+  await wrapper.find('form').trigger('submit');
+  await until(() => box.calls('settings.set').length === 1);
+  await flushPromises();
+  expect(box.calls('settings.set')).toEqual([
+    { agents: [{ name: 'ro', tools: { mode: 'allow', list: ['Bash', 'Edit', 'Read'] } }] },
+  ]);
+  box.store.stop();
+});
+
+test('blocks save when an allow-list or deny-list has no tool names', async () => {
+  const box = await pairedStore([], {
+    'settings.get': () => settingsFixture({ agents: [{ name: 'ro' }] }),
+  });
+  await box.store.refreshSettings();
+  const wrapper = mount(AgentsEditor, { props: { store: box.store } });
+  await wrapper.find('.tools-mode').setValue('deny');
+  expect(wrapper.find('.notice').text()).toBe('An allow-list or deny-list needs a tool name.');
+  expect(wrapper.find('button[type=submit]').attributes('disabled')).toBeDefined();
+  box.store.stop();
+});
+
 test('deletes an agent and sends the shortened list', async () => {
   const box = await pairedStore([], {
     'settings.get': () => settingsFixture({ agents: [{ name: 'a' }, { name: 'b' }] }),
