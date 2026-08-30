@@ -66,6 +66,7 @@ const claudeSpawn =
       ...(record.model === undefined ? {} : { model: record.model }),
       ...(record.effort === undefined ? {} : { effort: record.effort }),
       ...(record.role === undefined ? {} : { role: record.role }),
+      ...(record.tools === undefined ? {} : { tools: record.tools }),
       close: closing(options, request.session),
     });
 

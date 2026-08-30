@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import type { AgentSpec, HarnessKind } from '@flux/protocol';
+import type { AgentSpec, AgentTools, HarnessKind, ToolsMode } from '@flux/protocol';
 import { computed, ref, watch } from 'vue';
 
 import type { Store } from '../store/create-store.ts';
 
 // Saved Agents as an editable list (ADR 0023 § 2): each a name, an optional harness, free-text
-// model and effort, and a role. Save sends the whole list through `settings.set`. Blank and
-// duplicate names are caught here before the box also rejects them. No tools field (a later step).
+// model and effort, a role, and a tool policy (§ 4). Save sends the whole list through
+// `settings.set`. Blank/duplicate names and an empty allow/deny list are caught here before the
+// box also rejects them.
 
 interface Row {
   id: number;
@@ -15,7 +16,27 @@ interface Row {
   model: string;
   effort: string;
   role: string;
+  toolsMode: ToolsMode;
+  // Free-text tool names for allow/deny, one per line or comma-separated (loose, not an enum).
+  toolsText: string;
 }
+
+const toolsModes: ToolsMode[] = ['all', 'allow', 'deny', 'none'];
+const toolsModeLabel = (mode: ToolsMode): string =>
+  mode === 'all' ? 'All' : mode === 'allow' ? 'Allow-list' : mode === 'deny' ? 'Deny-list' : 'None';
+
+// Split the free-text names on commas or newlines, trimmed, blanks dropped.
+const parseTools = (text: string): string[] =>
+  text
+    .split(/[\n,]/u)
+    .map((name) => name.trim())
+    .filter((name) => name.length > 0);
+
+const toolsOf = (row: Row): { tools?: AgentTools } => {
+  if (row.toolsMode === 'all') return {};
+  if (row.toolsMode === 'none') return { tools: { mode: 'none' } };
+  return { tools: { mode: row.toolsMode, list: parseTools(row.toolsText) } };
+};
 
 const props = defineProps<{ store: Store }>();
 
@@ -33,6 +54,8 @@ const toRow = (a: AgentSpec): Row => ({
   model: a.model ?? '',
   effort: a.effort ?? '',
   role: a.role ?? '',
+  toolsMode: a.tools?.mode ?? 'all',
+  toolsText: a.tools?.list?.join('\n') ?? '',
 });
 
 const clean = (row: Row): AgentSpec => ({
@@ -41,6 +64,7 @@ const clean = (row: Row): AgentSpec => ({
   ...(row.model.trim() === '' ? {} : { model: row.model.trim() }),
   ...(row.effort.trim() === '' ? {} : { effort: row.effort.trim() }),
   ...(row.role.trim() === '' ? {} : { role: row.role.trim() }),
+  ...toolsOf(row),
 });
 
 const cleaned = computed((): AgentSpec[] => rows.value.map((r) => clean(r)));
@@ -65,9 +89,13 @@ watch(
 );
 
 const names = computed(() => rows.value.map((r) => r.name.trim()));
+const listMissing = (row: Row): boolean =>
+  (row.toolsMode === 'allow' || row.toolsMode === 'deny') && parseTools(row.toolsText).length === 0;
 const notice = computed((): string | null => {
   if (names.value.some((n) => n === '')) return 'Every agent needs a name.';
   if (new Set(names.value).size !== names.value.length) return 'Agent names must be unique.';
+  if (rows.value.some((r) => listMissing(r)))
+    return 'An allow-list or deny-list needs a tool name.';
   return null;
 });
 
@@ -146,6 +174,30 @@ const save = async (): Promise<void> => {
             Role
             <textarea v-model="row.role" class="agent-role" rows="3" :disabled="busy" />
           </label>
+          <div class="agent-tools">
+            <label>
+              Tools
+              <select v-model="row.toolsMode" class="tools-mode" :disabled="busy">
+                <option v-for="m in toolsModes" :key="m" :value="m">{{ toolsModeLabel(m) }}</option>
+              </select>
+            </label>
+            <label
+              v-if="row.toolsMode === 'allow' || row.toolsMode === 'deny'"
+              class="tools-list-label"
+            >
+              Tool names
+              <textarea
+                v-model="row.toolsText"
+                class="tools-list"
+                rows="2"
+                autocomplete="off"
+                placeholder="one per line or comma-separated"
+                :disabled="busy"
+              />
+              <span class="hint">e.g. Bash, Edit, Write, Read, Glob, Grep, WebFetch</span>
+            </label>
+            <p class="tools-note">flux_ask and flux_notify stay available in every mode.</p>
+          </div>
           <button
             type="button"
             class="secondary agent-delete"
@@ -217,11 +269,24 @@ label {
   font-size: 0.85rem;
 }
 
-.agent-role {
+.agent-role,
+.tools-list {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.85rem;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.agent-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.tools-note {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin: 0;
 }
 
 .agent-delete {

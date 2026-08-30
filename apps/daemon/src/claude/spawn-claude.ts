@@ -1,3 +1,4 @@
+import type { AgentTools } from '@flux/protocol';
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 
@@ -5,6 +6,7 @@ import type { ImageBlock } from '../attachment-images.ts';
 import type { CloseChildOptions } from '../close-child.ts';
 import { closeChild } from '../close-child.ts';
 import { killChildGroup } from '../kill-child-group.ts';
+import { compileClaudeTools } from './compile-claude-tools.ts';
 
 // Write side of the Claude adapter, StreamJsonInput (ADR 0007): one long-lived headless process
 // per session, user turns written as JSON lines to stdin, output read as JSON lines. The
@@ -37,6 +39,10 @@ export interface SpawnClaudeOptions {
   // The resolved Agent role (ADR 0023 § 2), appended after `fluxPrompt` in the same
   // `--append-system-prompt`; the Flux prompt and tools floor is never replaced.
   role?: string;
+  // The resolved Agent tool policy (ADR 0023 § 4), compiled to `--tools`/`--disallowedTools` by
+  // `compile-claude-tools.ts`; unset (or mode `all`) leaves the full toolset. The Flux tools stay
+  // available in every mode (§ 5).
+  tools?: AgentTools;
   env?: NodeJS.ProcessEnv;
   close?: CloseChildOptions;
 }
@@ -69,6 +75,7 @@ const claudeArgs = (options: SpawnClaudeOptions): string[] => [
   ...(options.resume === undefined ? [] : ['--resume', options.resume]),
   ...(options.model === undefined ? [] : ['--model', options.model]),
   ...(options.effort === undefined ? [] : ['--effort', options.effort]),
+  ...compileClaudeTools(options.tools),
   ...(options.mcpConfig === undefined
     ? []
     : ['--mcp-config', options.mcpConfig, '--append-system-prompt', systemPrompt(options.role)]),
