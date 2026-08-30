@@ -142,6 +142,8 @@ const cases: [RpcMethod, unknown, boolean][] = [
   ['daemon.update', { version: '1.2.3' }, true],
   ['daemon.update', { version: 1 }, false],
   ['daemon.update', {}, false],
+  ['daemon.checkUpdate', {}, true],
+  ['daemon.checkUpdate', { extra: 1 }, false],
 ];
 
 test.each(cases)('%s params %j accepted=%s', (method, value, expected) => {
@@ -149,5 +151,5 @@ test.each(cases)('%s params %j accepted=%s', (method, value, expected) => {
 });
 
 test('covers every method in protocol.md § 7', () => {
-  expect(Object.keys(rpcMethods)).toHaveLength(38);
+  expect(Object.keys(rpcMethods)).toHaveLength(39);
 });

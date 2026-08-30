@@ -208,6 +208,25 @@ export interface RpcMethods {
   // semver, not newer than the running build, below the 1.0.0 floor, or on a daemon run from
   // source.
   'daemon.update': { params: { version: string }; result: Record<string, never> };
+  // Update discovery + a verify-only dry-run (ADR 0021/0022): the daemon asks GitHub for the
+  // newest published release, and, when that release is one it could install, fetches and
+  // verifies it WITHOUT applying. `current` is the running build; `latest` is the newest
+  // published version or null (offline, no release, API error); `available` is whether a newer,
+  // floor-satisfying release could be installed (false on a source build, below-floor,
+  // up-to-date, or `latest===null`); `verified` is the dry-run result of that available release,
+  // or null when none ran; `reason` (non-empty when set) names the not-available or not-verified
+  // cause. The PWA never enables the Update button unless `available && verified`, and treats a
+  // `not_found`/`unsupported` reply (an older daemon that lacks this method) as "cannot check".
+  'daemon.checkUpdate': {
+    params: Record<string, never>;
+    result: {
+      current: string;
+      latest: string | null;
+      available: boolean;
+      verified: boolean | null;
+      reason?: string;
+    };
+  };
   // File attachments, chunked over the channel (ADR 0020): begin, sequential chunks of at most
   // `attachment.limits.chunkBytes` raw bytes as base64, then end with the sha256 hex of the
   // whole file. `too_large` past the per-file cap; an out-of-order or duplicate chunk and a
@@ -344,6 +363,7 @@ export const rpcMethods: ParamGuards = {
   'settings.set': settings.isPatch,
   'daemon.update': (v): v is RpcMethods['daemon.update']['params'] =>
     isRecord(v) && isString(v['version']),
+  'daemon.checkUpdate': isEmpty,
   'attach.begin': (v): v is RpcMethods['attach.begin']['params'] =>
     withSession(v) && isString(v['name']) && isString(v['mime']) && isInteger(v['size']),
   'attach.chunk': (v): v is RpcMethods['attach.chunk']['params'] =>

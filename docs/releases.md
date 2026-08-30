@@ -104,10 +104,26 @@ The operator will forget between releases. Follow these steps in order.
 ### Verify
 
 The published release has **five** assets: the three daemon files (`index.mjs`, `flux-mcp.mjs`,
-`flux-pi-extension.mjs`), `manifest.json`, and `manifest.json.sig`. The daemon's update path (a later
-PR) fetches these, checks each file's hash against the manifest and the signature against the trusted
+`flux-pi-extension.mjs`), `manifest.json`, and `manifest.json.sig`. The daemon's update path
+fetches these, checks each file's hash against the manifest and the signature against the trusted
 key set (`apps/daemon/src/update/verify-manifest.ts`), and runs the bundle only when all of that
 passes.
+
+After publishing, prove the release without installing it. From an installed daemon (or a fresh
+box) run:
+
+```sh
+flux update --check
+```
+
+It discovers the newest published release (`releases/latest`, drafts and prereleases excluded),
+fetches its five assets and verifies every file hash and the signature against the trusted keys —
+exactly what a self-update would check — and prints `current`, `latest` and the verify result
+(`verified ✓` or `not verified: <reason>`). It NEVER installs and NEVER runs the fetched bytes. The
+PWA's Settings screen does the same over the wire (`daemon.checkUpdate`) when it opens, and only
+offers **Update to X.Y.Z** once that verify has passed. This is the recommended confidence step
+before self-updating: if `flux update --check` does not say `verified ✓` against the real published
+release, do not roll it out.
 
 ## Supervision
 

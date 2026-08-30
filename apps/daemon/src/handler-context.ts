@@ -1,16 +1,19 @@
-import type { EnvSettings, HarnessKind } from '@flux/protocol';
+import type { EnvSettings, HarnessKind, RpcMethods } from '@flux/protocol';
 
 import type { SessionRecord } from './create-session-store.ts';
 import type { SessionSupervisor } from './create-session-supervisor.ts';
 import type { Services } from './open-services.ts';
 
-// What the `daemon.update` handler needs (ADR 0022): the running version and the shared semver
-// decide whether a target is installable; `distDir` is null on a dev build (run from source),
-// which is refused; `apply` fires the async fetch→verify→swap→exit and returns at once.
+// What the `daemon.update` / `daemon.checkUpdate` handlers need (ADR 0021/0022): the running
+// version and the shared semver decide whether a target is installable; `distDir` is null on a
+// dev build (run from source), which is refused; `apply` fires the async fetch→verify→swap→exit
+// and returns at once; `check` discovers the newest release and dry-run verifies it WITHOUT
+// applying (composition root wires it with the real fetch and repo).
 export interface UpdateService {
   currentVersion: string;
   distDir: string | null;
   apply: (target: string) => void;
+  check: () => Promise<RpcMethods['daemon.checkUpdate']['result']>;
 }
 
 // Everything an RPC handler may touch (architecture.md § Daemon). Handlers get this and nothing

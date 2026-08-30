@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { FluxSettings, HarnessKind } from '@flux/protocol';
-import { semver } from '@flux/protocol';
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 
 import type { Store } from '../store/create-store.ts';
 import { version as appVersion } from '../version.ts';
@@ -35,19 +34,67 @@ const versions = computed(() => [
   { name: 'App version', value: appVersion },
 ]);
 
-// Self-update (ADR 0022). An update is on offer when the box reports a version older than this
-// app's; the button installs the app's own version. While installing, `update` follows the
-// progress ephemerals; on success the reconnect clears it and the offer goes away.
+// Self-update (ADR 0021/0022). On open the box runs `daemon.checkUpdate`: it discovers the newest
+// published release and dry-run verifies it WITHOUT applying. The button installs that release,
+// and is offered ONLY when the box found a newer, floor-satisfying release AND its own verify
+// passed — a release that failed verify is shown but never installable, and a box that could not
+// check (offline, no release, or a daemon too old to have the method) degrades to a quiet notice.
+// While installing, `update` follows the progress ephemerals; on success the reconnect clears it.
 const update = computed(() => props.store.state.update);
-const updateAvailable = computed(() => {
-  const daemonVersion = props.store.state.daemonVersion;
-  return daemonVersion !== null && semver.isNewer(appVersion, daemonVersion);
-});
-const showUpdate = computed(() => updateAvailable.value || update.value.target !== null);
+const inProgress = computed(() => update.value.target !== null);
 const phaseLabel = computed(() => update.value.phase ?? 'starting');
+
+// A flat view so the template narrows on `kind` alone and never reaches into a union member.
+interface CheckView {
+  kind: 'unavailable' | 'up-to-date' | 'available';
+  label: string;
+  version: string;
+  verified: boolean;
+}
+
+const availableLabel = (version: string, verified: boolean, reason: string | undefined): string =>
+  verified
+    ? `Update available: ${version} — verified ✓`
+    : `Update available: ${version} — cannot verify (${reason ?? 'unknown'})`;
+
+const checkView = computed((): CheckView | null => {
+  const c = props.store.state.updateCheck;
+  if (c === null) return null;
+  if (c.latest === null) return { kind: 'unavailable', label: '', version: '', verified: false };
+  if (c.available) {
+    const verified = c.verified === true;
+    return {
+      kind: 'available',
+      label: availableLabel(c.latest, verified, c.reason),
+      version: c.latest,
+      verified,
+    };
+  }
+  return {
+    kind: 'up-to-date',
+    label: `Up to date (${c.current})`,
+    version: c.latest,
+    verified: false,
+  };
+});
+const showUpdate = computed(() => inProgress.value || checkView.value !== null);
+
+// Only ever install a release the box found AND verified itself: the button is already disabled
+// otherwise, and this guard makes that non-bypassable (security: never apply an unverified target).
 const startUpdate = async (): Promise<void> => {
-  await props.store.updateDaemon(appVersion);
+  const c = props.store.state.updateCheck;
+  if (c === null || c.latest === null || !c.available || c.verified !== true) return;
+  await props.store.updateDaemon(c.latest);
 };
+const retryUpdate = async (): Promise<void> => {
+  const target = update.value.target;
+  if (target === null) return;
+  await props.store.updateDaemon(target);
+};
+
+onMounted(() => {
+  void props.store.checkUpdate();
+});
 
 const fields = [
   'reposDir',
@@ -139,15 +186,31 @@ const save = async (): Promise<void> => {
       </template>
     </dl>
     <div v-if="showUpdate" class="update">
-      <button v-if="update.target === null" type="button" class="update-btn" @click="startUpdate">
-        Update daemon to {{ appVersion }}
-      </button>
-      <template v-else>
+      <template v-if="inProgress">
         <p v-if="update.failed !== null" class="update-error">Update failed: {{ update.failed }}</p>
         <p v-else class="hint">Updating to {{ update.target }}… {{ phaseLabel }}</p>
-        <button v-if="update.failed !== null" type="button" class="secondary" @click="startUpdate">
+        <button v-if="update.failed !== null" type="button" class="secondary" @click="retryUpdate">
           Retry
         </button>
+      </template>
+      <template v-else-if="checkView !== null">
+        <p v-if="checkView.kind === 'unavailable'" class="hint update-unavailable">
+          Couldn't check for updates.
+        </p>
+        <p v-else-if="checkView.kind === 'up-to-date'" class="hint update-current">
+          {{ checkView.label }}
+        </p>
+        <template v-else>
+          <p class="update-status">{{ checkView.label }}</p>
+          <button
+            type="button"
+            class="update-btn"
+            :disabled="!checkView.verified"
+            @click="startUpdate"
+          >
+            Update to {{ checkView.version }}
+          </button>
+        </template>
       </template>
     </div>
     <dl v-if="env.length > 0" class="env">
@@ -225,6 +288,10 @@ dd {
 
 .update-error {
   color: var(--danger);
+  margin: 0;
+}
+
+.update-status {
   margin: 0;
 }
 </style>

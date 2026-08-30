@@ -1,11 +1,22 @@
 import { expect, test } from 'vitest';
 
+import type { RpcMethods } from '@flux/protocol';
+
 import type { Peer } from './create-device-channels.ts';
 import { createUpdateHandlers } from './create-update-handlers.ts';
 import { DaemonError } from './daemon-error.ts';
 import type { HandlerContext, UpdateService } from './handler-context.ts';
 
 const peer = {} as unknown as Peer;
+
+type CheckResult = RpcMethods['daemon.checkUpdate']['result'];
+const idleCheck: CheckResult = {
+  current: '1.0.0',
+  latest: null,
+  available: false,
+  verified: null,
+  reason: 'unreachable',
+};
 
 interface Fixture {
   update: UpdateService;
@@ -20,6 +31,7 @@ const fixture = (over: Partial<UpdateService>): Fixture => {
     apply: (target) => {
       calls.push(target);
     },
+    check: () => Promise.resolve(idleCheck),
     ...over,
   };
   return { update, calls };
@@ -65,4 +77,16 @@ test('a target below the 1.0.0 floor is refused even when newer', async () => {
   const { update, calls } = fixture({ currentVersion: '0.5.0' });
   await expect(run(update, '0.9.0')).rejects.toMatchObject({ code: 'unsupported' });
   expect(calls).toEqual([]);
+});
+
+test('checkUpdate delegates to the update service and returns its result', async () => {
+  const available: CheckResult = {
+    current: '1.0.0',
+    latest: '1.2.0',
+    available: true,
+    verified: true,
+  };
+  const update: UpdateService = { ...fixture({}).update, check: () => Promise.resolve(available) };
+  const handlers = createUpdateHandlers({ update } as unknown as HandlerContext);
+  await expect(handlers['daemon.checkUpdate']({}, peer)).resolves.toEqual(available);
 });

@@ -4,6 +4,8 @@
 // non-200 or network error yields `{ ok: false }` (a `download_failed` to the caller); this never
 // throws. The repo slug is a constant, overridable by `FLUX_RELEASE_REPO` for tests.
 
+import { defaultRepo } from './default-repo.ts';
+
 export interface FetchResponse {
   ok: boolean;
   arrayBuffer: () => Promise<ArrayBuffer>;
@@ -19,8 +21,6 @@ export interface FetchReleaseDeps {
 export type FetchReleaseResult =
   | { ok: true; manifest: Uint8Array; signature: Uint8Array; files: Map<string, Uint8Array> }
   | { ok: false };
-
-const defaultRepo = 'Musqet-Rich/flux';
 
 // The three files that get swapped over the installed bundle; the manifest lists exactly these.
 const bundleFiles = ['index.mjs', 'flux-mcp.mjs', 'flux-pi-extension.mjs'];

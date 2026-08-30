@@ -3,6 +3,7 @@ import type { Ephemeral } from '@flux/protocol';
 import type { HostTransport } from './connect-relay.ts';
 import type { UpdateService } from './handler-context.ts';
 import { applyUpdate } from './update/apply-update.ts';
+import { checkUpdate } from './update/check-update.ts';
 import { version } from './version.ts';
 
 // Builds the self-update service the `daemon.update` handler drives (ADR 0022). `transport` and
@@ -34,5 +35,14 @@ export const createUpdateService = (
       ...(config.releaseRepo === undefined ? {} : { repo: config.releaseRepo }),
     });
   };
-  return { currentVersion: version, distDir, apply };
+  // Discovery + verify-only dry-run over the real fetch and repo; production verifies against the
+  // vendored trusted keys (no `keys` override). Never applies, never writes distDir.
+  const check = (): ReturnType<UpdateService['check']> =>
+    checkUpdate({
+      current: version,
+      distDir,
+      fetch: (url) => globalThis.fetch(url),
+      ...(config.releaseRepo === undefined ? {} : { repo: config.releaseRepo }),
+    });
+  return { currentVersion: version, distDir, apply, check };
 };
