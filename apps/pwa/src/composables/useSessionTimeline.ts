@@ -1,4 +1,5 @@
 import type { EventPayloads, FluxEvent } from '@flux/protocol';
+import { fluxEvent } from '@flux/protocol';
 import type { ComputedRef, Ref } from 'vue';
 import { computed, ref } from 'vue';
 
@@ -25,6 +26,20 @@ const pageSize = 200;
 // `task.progress` only feeds the agents strip.
 const hiddenTypes = new Set(['raw', 'rate_limit', 'files.changed', 'task.progress']);
 
+// A /compact turn is in flight when the latest top-level `msg.user` is exactly `/compact` and no
+// `compact.boundary` has been logged since. The compaction is a black box with no incremental
+// progress, so the indicator it drives is indeterminate; the caller adds that the session is
+// `running` (architecture.md § Adapter, protocol.md § 5).
+const awaitingCompact = (events: readonly FluxEvent[]): boolean => {
+  let awaiting = false;
+  for (const event of events) {
+    if (event.parent !== undefined || !fluxEvent.isKnown(event)) continue;
+    if (event.type === 'msg.user') awaiting = event.payload.text.trim() === '/compact';
+    else if (event.type === 'compact.boundary') awaiting = false;
+  }
+  return awaiting;
+};
+
 export interface SessionTimeline extends MessageReply {
   tasks: ComputedRef<SessionTask[]>;
   // The rows the strip lists: current tasks (store/session-tasks) and the open chat's task,
@@ -38,6 +53,9 @@ export interface SessionTimeline extends MessageReply {
   // Rows of the open chat left out of `timeline`; Show earlier brings them in.
   earlier: ComputedRef<number>;
   ask: ComputedRef<EventPayloads['ask'] | null>;
+  // A /compact turn with no boundary yet; the screen shows an indeterminate "Compacting…"
+  // indicator while this and `running` hold.
+  awaitingCompaction: ComputedRef<boolean>;
   select: (view: string | null) => void;
   showEarlier: () => void;
 }
@@ -58,6 +76,7 @@ export const useSessionTimeline = (events: () => readonly FluxEvent[]): SessionT
     earlier.value === 0 ? rows.value : rows.value.slice(earlier.value),
   );
   const ask = computed(() => openAsk(events()));
+  const awaitingCompaction = computed(() => awaitingCompact(events()));
   return {
     ...useMessageReply(events),
     tasks,
@@ -67,6 +86,7 @@ export const useSessionTimeline = (events: () => readonly FluxEvent[]): SessionT
     timeline,
     earlier,
     ask,
+    awaitingCompaction,
     select: (next) => {
       view.value = next;
       all.value = false;

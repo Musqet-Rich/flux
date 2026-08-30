@@ -50,6 +50,7 @@ export const claudeAdapter = (cwd: string, options: ClaudeAdapterOptions = {}): 
       pending.tools.clear();
       pending.agents.clear();
       pending.thinking = null;
+      delete pending.compactResult;
     },
   };
 };

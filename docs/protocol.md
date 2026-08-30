@@ -232,6 +232,16 @@ type FluxEvent =
       'hook.failed',
       { hookName: string; hookEvent: string; exitCode?: number; stderr: string }
     >
+  | Envelope<
+      'compact.boundary',
+      {
+        trigger: string; // 'manual' | 'auto' | whatever Claude adds; open set
+        preTokens: number; // context size before the compaction
+        postTokens: number; // context size after
+        durationMs: number; // how long the compaction took
+        result: string; // 'success' | 'failure'; open set, from the status line's compact_result
+      }
+    > // Claude Code compacted the conversation (architecture.md § Adapter)
 
   // escape hatch
   | Envelope<'raw', { agent: string; data: unknown }>
@@ -288,6 +298,7 @@ Rules:
 - `parent` is set on every event a subagent produced (its prompt as `msg.user`, its `msg.assistant`, `tool.start`, `tool.end`, `files.changed`, `hook.failed`, `raw`, …) and names the Agent call that spawned it, which is the `toolUseId` of a `task.started` in the same log. It is absent, never `null`, on top-level events, so a log without subagents is what it was before the field and a device that predates it ignores it. Nested subagents chain: a grandchild's `parent` is the child's own Agent call, so the tree is walked through `task.started` rows; the `task.*` rows themselves carry the `parent` of the agent that spawned the task (none at the top level). Task boundaries are not synthesised: a task with no `task.ended` when the session leaves `running` (its `session.state` `idle` or `ended`, or `session.cleared`) was interrupted, and the device shows it so. `ask` and `notify` are always top-level: the Flux tools reach the box over the control socket, not the agent's stream.
 - `pr.published` is logged when the agent opens a pull request itself and when the operator opens one through `git.pr`, so a session's PR is always the latest `pr.published` in its log. `repo` and `identifier` are empty strings when the URL is not a GitHub pull request URL.
 - `hook.failed` is logged only for a hook whose outcome is not `success`; `stderr` is capped at 2 KiB by the adapter. `exitCode` is absent when the agent did not report one.
+- `compact.boundary` is logged once when Claude Code finishes compacting the conversation (a `/compact` turn, or an automatic compaction), carrying the before/after context sizes and how long it took. `result` is read from the `compact_result` on the separate status line Claude emits for the compaction (`success`, `failure`; an open set), defaulting to `success` when that line was not seen. The compaction is a black box with no incremental progress, so the device infers an indeterminate "Compacting…" indicator client-side — the session is `running`, the latest top-level `msg.user` is exactly `/compact`, and no `compact.boundary` has arrived since — and this event ends it. Additive (§ 8): a daemon that predates it never emits it, and a device that predates it renders it as an opaque row.
 
 ## 6. Ephemeral messages
 

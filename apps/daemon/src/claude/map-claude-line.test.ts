@@ -395,3 +395,59 @@ test('task.started takes its agent type from the Agent call when the line lacks 
     background: false,
   });
 });
+
+// A real compaction is two lines: the status line names the result, the boundary carries the
+// token delta. The status line alone logs nothing (it was dropped before); the boundary joins
+// the two into one compact.boundary event.
+test('a compaction status line and boundary join into one event with the token delta', () => {
+  const pending = fresh();
+  const status = mapClaudeLine({ kind: 'compact_status', result: 'success' }, pending, cwd);
+  expect(status.events).toEqual([]);
+  const boundary = mapClaudeLine(
+    {
+      kind: 'compact_boundary',
+      trigger: 'manual',
+      preTokens: 60065,
+      postTokens: 6202,
+      durationMs: 59369,
+    },
+    pending,
+    cwd,
+  );
+  expect(boundary.events).toEqual([
+    {
+      type: 'compact.boundary',
+      payload: {
+        trigger: 'manual',
+        preTokens: 60065,
+        postTokens: 6202,
+        durationMs: 59369,
+        result: 'success',
+      },
+    },
+  ]);
+  // The stashed result is consumed, so a later boundary with no status line defaults to success.
+  const again = mapClaudeLine(
+    { kind: 'compact_boundary', trigger: '', preTokens: 1, postTokens: 1, durationMs: 1 },
+    pending,
+    cwd,
+  );
+  expect(again.events[0]?.payload).toMatchObject({ trigger: '', result: 'success' });
+});
+
+test('a failed compaction reflects the status line result on the boundary event', () => {
+  const pending = fresh();
+  mapClaudeLine({ kind: 'compact_status', result: 'failure' }, pending, cwd);
+  const boundary = mapClaudeLine(
+    {
+      kind: 'compact_boundary',
+      trigger: 'manual',
+      preTokens: 60065,
+      postTokens: 6202,
+      durationMs: 59369,
+    },
+    pending,
+    cwd,
+  );
+  expect(boundary.events[0]?.payload).toMatchObject({ result: 'failure' });
+});

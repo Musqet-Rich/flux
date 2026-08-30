@@ -28,7 +28,19 @@ const { scroller, behind, unread } = tail;
 const log = computed(() => props.store.state.logs[props.session]);
 const events = computed(() => log.value?.events ?? []);
 const chat = useSessionTimeline(() => events.value);
-const { strip, view, task, timeline, earlier, ask, reply, quoteOf, startReply, cancelReply } = chat;
+const {
+  strip,
+  view,
+  task,
+  timeline,
+  earlier,
+  ask,
+  awaitingCompaction,
+  reply,
+  quoteOf,
+  startReply,
+  cancelReply,
+} = chat;
 const streaming = computed(() => log.value?.streaming ?? '');
 // The delta buffer renders through the same Markdown pass as the final message, so an open
 // fence is a code block from its first line and the bubble never flickers back to raw text.
@@ -49,6 +61,9 @@ const busy = computed(() => summary.value?.state === 'running');
 // The streaming bubble and the thinking indicator are the main agent's (architecture.md
 // § Adapter: a subagent's ephemerals are dropped), so they show on main only.
 const onMain = computed(() => view.value === null);
+// A ~59s black box with nothing to draw a bar from, so this is an indeterminate indicator: a
+// running /compact turn on main with no boundary logged yet (useSessionTimeline).
+const compacting = computed(() => busy.value && onMain.value && awaitingCompaction.value);
 const ended = ref(false);
 // Replies go with the composer, which main alone has; a subagent's chat has none to reply from.
 const pick = (seq: number): void => {
@@ -174,6 +189,9 @@ watch(
           <span v-else class="thinking"
             ><span class="loader" aria-hidden="true" />{{ thinkingText }}</span
           >
+        </article>
+        <article v-if="onMain && compacting" class="streaming compacting">
+          <span class="thinking"><span class="loader" aria-hidden="true" />Compacting…</span>
         </article>
         <AskCard v-if="ask !== null" :key="ask.askId" :ask="ask" @answer="answer" />
       </div>

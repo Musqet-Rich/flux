@@ -51,6 +51,14 @@ const json = (value: unknown): string => {
 const money = (usd: number | undefined): string =>
   usd === undefined ? '' : ` · $${usd.toFixed(3)}`;
 
+// Token counts on the compaction divider, read compactly: 60065 → '60k', 6202 → '6.2k' (one
+// decimal below 10k, none at or above).
+const compactTokens = (n: number): string => {
+  if (n < 1000) return String(n);
+  const k = n / 1000;
+  return k >= 10 ? `${Math.round(k)}k` : `${k.toFixed(1)}k`;
+};
+
 const note = (text: string, tone: View['tone'] = null): View => ({
   kind: 'note',
   text,
@@ -128,6 +136,20 @@ const describeSignal = (event: KnownEvent): View | null => {
       const exit = exitCode === undefined ? '' : ` (exit ${exitCode})`;
       const detail = stderr === '' ? undefined : stderr;
       return { kind: 'warning', text: `Hook ${hookName} failed${exit}`, detail, tone: 'warn' };
+    }
+    case 'compact.boundary': {
+      const { preTokens, postTokens, durationMs, result } = event.payload;
+      if (result !== 'success') {
+        return { kind: 'divider', text: 'Compaction failed', detail: undefined, tone: 'warn' };
+      }
+      const secs = Math.round(durationMs / 1000);
+      const delta = `${compactTokens(preTokens)} → ${compactTokens(postTokens)} tokens`;
+      return {
+        kind: 'divider',
+        text: `Context compacted · ${delta} · ${secs}s`,
+        detail: undefined,
+        tone: null,
+      };
     }
     default:
       return null;
@@ -403,6 +425,10 @@ const quoteLine = computed(
   content: '';
   flex: 1;
   border-top: 1px solid var(--border);
+}
+
+.warn .rule {
+  color: var(--warn);
 }
 
 .disclosure {

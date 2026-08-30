@@ -135,6 +135,32 @@ test('a cleared context is a rule across the timeline', () => {
   expect(wrapper.text()).toBe('Context cleared');
 });
 
+// The compaction boundary rules across the timeline with the token delta read compactly and the
+// duration in whole seconds; a non-success result says so instead.
+test('a compaction boundary is a rule with the token delta and duration', () => {
+  const ok = ev('compact.boundary', {
+    trigger: 'manual',
+    preTokens: 60065,
+    postTokens: 6202,
+    durationMs: 59369,
+    result: 'success',
+  });
+  const wrapper = mount(EventItem, { props: { event: ok } });
+  expect(wrapper.find('.item').classes()).toContain('divider');
+  expect(wrapper.find('.rule').attributes('role')).toBe('separator');
+  expect(wrapper.text()).toBe('Context compacted · 60k → 6.2k tokens · 59s');
+  const failed = ev('compact.boundary', {
+    trigger: 'manual',
+    preTokens: 1,
+    postTokens: 1,
+    durationMs: 1,
+    result: 'failure',
+  });
+  const bad = mount(EventItem, { props: { event: failed } });
+  expect(bad.find('.item').classes()).toContain('warn');
+  expect(bad.text()).toBe('Compaction failed');
+});
+
 // A task row opens that subagent's chat; the report behind a task's end is what the parent
 // read, so it is kept whole, as Markdown, behind a disclosure rather than cut to one line.
 test('a started task is a tappable note, an ended task keeps its report behind a summary', async () => {

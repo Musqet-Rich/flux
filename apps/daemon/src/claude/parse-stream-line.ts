@@ -82,6 +82,16 @@ type ClaudeLineBody =
     }
   | { kind: 'vcs_changed'; vcsKind: string }
   | { kind: 'hook_failed'; hookName: string; hookEvent: string; exitCode?: number; stderr: string }
+  // Claude's compaction: the boundary line with the before/after token counts, and the status
+  // line (status null) carrying its `compact_result`. The mapper joins them into one event.
+  | {
+      kind: 'compact_boundary';
+      trigger: string;
+      preTokens: number;
+      postTokens: number;
+      durationMs: number;
+    }
+  | { kind: 'compact_status'; result: string }
   | { kind: 'other'; data: unknown };
 
 export type ClaudeLine = ClaudeLineBody & { parent?: string };
@@ -208,6 +218,27 @@ const hookResponse = (line: Record<string, unknown>): ClaudeLine | null => {
   };
 };
 
+// The compaction lines: a `compact_boundary` with the before/after token counts, and a `status`
+// line whose `status` is null but which carries a `compact_result`. The latter would otherwise be
+// dropped (its status is not a string); it is surfaced so the mapper can put the result on the event.
+const compact = (line: Record<string, unknown>): ClaudeLine | null => {
+  if (line['subtype'] === 'status' && isString(line['compact_result'])) {
+    return { kind: 'compact_status', result: line['compact_result'] };
+  }
+  if (line['subtype'] !== 'compact_boundary') return null;
+  const meta = line['compact_metadata'];
+  if (!isRecord(meta)) return null;
+  const { pre_tokens: pre, post_tokens: post, duration_ms: dur } = meta;
+  if (!isInteger(pre) || !isInteger(post) || !isInteger(dur)) return null;
+  return {
+    kind: 'compact_boundary',
+    trigger: isString(meta['trigger']) ? meta['trigger'] : '',
+    preTokens: pre,
+    postTokens: post,
+    durationMs: dur,
+  };
+};
+
 const system = (line: Record<string, unknown>): ClaudeLine => {
   if (line['subtype'] === 'init' && isString(line['session_id'])) {
     return {
@@ -219,7 +250,7 @@ const system = (line: Record<string, unknown>): ClaudeLine => {
   if (line['subtype'] === 'status' && isString(line['status'])) {
     return { kind: 'status', status: line['status'] };
   }
-  return systemSignal(line) ?? hookResponse(line) ?? { kind: 'other', data: line };
+  return compact(line) ?? systemSignal(line) ?? hookResponse(line) ?? { kind: 'other', data: line };
 };
 
 // The context in use is the whole prompt of this request: the three input token counts on the
