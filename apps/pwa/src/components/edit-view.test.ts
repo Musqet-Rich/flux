@@ -13,7 +13,7 @@ type Wrapper = ReturnType<typeof mount<typeof EditView>>;
 
 const open = (box: PairedStore, path = 'src/a.ts'): Wrapper =>
   mount(EditView, {
-    props: { store: box.store, session: 's1', path },
+    props: { store: box.store, session: 's1', path, dir: null },
     attachTo: document.body,
   });
 
@@ -224,6 +224,20 @@ test('leaving keeps a draft that comes back for the same file version, and warns
   expect(third.find('.banner').text()).toContain('Older unsaved edits were dropped');
   expect(box.store.state.drafts).toEqual({});
   third.unmount();
+  box.store.stop();
+});
+
+test('a file opened from the browser labels its back button Files', async () => {
+  const box = await pairedStore([], { 'fs.read': () => file('a\n') });
+  const wrapper = mount(EditView, {
+    props: { store: box.store, session: 's1', path: 'src/a.ts', dir: 'src' },
+    attachTo: document.body,
+  });
+  await loaded(wrapper);
+  expect(wrapper.find('.toolbar button').text()).toBe('‹ Files');
+  await wrapper.find('.toolbar button').trigger('click');
+  expect(wrapper.emitted('back')).toEqual([[]]);
+  wrapper.unmount();
   box.store.stop();
 });
 

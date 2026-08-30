@@ -19,7 +19,7 @@ const props = defineProps<{
   branch: string;
   busy: boolean;
 }>();
-defineEmits<{ changes: []; interrupt: []; closed: [] }>();
+defineEmits<{ changes: []; files: []; interrupt: []; closed: [] }>();
 
 const pr = computed(() => sessionPr(props.events));
 const prLabel = computed(() =>
@@ -42,6 +42,7 @@ const changedCount = computed(() => {
       prLabel
     }}</a>
     <button v-if="busy" type="button" class="secondary" @click="$emit('interrupt')">Stop</button>
+    <button type="button" class="secondary" @click="$emit('files')">Files</button>
     <button type="button" class="secondary" @click="$emit('changes')">
       Changes ({{ changedCount }})
     </button>

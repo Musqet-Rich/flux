@@ -13,7 +13,9 @@ import type { Store } from '../store/create-store.ts';
 // ending seen at load is put back on save and the file's bytes only change where it was edited.
 // A file with mixed endings becomes uniform on save (CRLF if any line had it, else LF).
 
-const props = defineProps<{ store: Store; session: string; path: string }>();
+// `dir` is the browser directory this file was opened from (null when reached from the changes
+// list); it only labels the back button, which the parent routes to that directory or to changes.
+const props = defineProps<{ store: Store; session: string; path: string; dir: string | null }>();
 const emit = defineEmits<{ back: [] }>();
 
 const host = ref<HTMLElement | null>(null);
@@ -139,7 +141,9 @@ onUnmounted(() => {
 <template>
   <section class="edit">
     <div class="toolbar">
-      <button type="button" class="secondary" @click="emit('back')">‹ Changes</button>
+      <button type="button" class="secondary" @click="emit('back')">
+        ‹ {{ dir === null ? 'Changes' : 'Files' }}
+      </button>
       <code class="path">{{ path }}</code>
       <span v-if="dirty" class="dirty" title="Unsaved changes">●</span>
       <button v-if="dirty" type="button" class="secondary discard" @click="discard">Discard</button>

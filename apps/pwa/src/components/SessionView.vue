@@ -18,7 +18,7 @@ import SessionToolbar from './SessionToolbar.vue';
 // and dispatches.
 
 const props = defineProps<{ store: Store; session: string }>();
-defineEmits<{ changes: []; closed: [] }>();
+defineEmits<{ changes: []; files: []; closed: [] }>();
 
 // The timeline follows new content only while the operator is at the tail; scrolled up, a pill
 // counts what arrived and the view stays put (useTailScroll).
@@ -139,6 +139,7 @@ watch(
       :busy="busy"
       @interrupt="interrupt"
       @changes="$emit('changes')"
+      @files="$emit('files')"
       @closed="$emit('closed')"
     />
     <AgentStrip

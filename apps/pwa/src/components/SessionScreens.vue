@@ -4,6 +4,7 @@ import type { Store } from '../store/create-store.ts';
 import ChangesView from './ChangesView.vue';
 import DiffView from './DiffView.vue';
 import EditView from './EditView.vue';
+import FilesView from './FilesView.vue';
 import SessionView from './SessionView.vue';
 
 // The screens of one session: chat, changes, a diff, an editor. Split from Shell so each file
@@ -30,6 +31,23 @@ const openDiff = (path: string, from: string | null): void => {
 const openEdit = (path: string): void => {
   go({ name: 'edit', session: props.route.session, path });
 };
+const openFiles = (): void => {
+  go({ name: 'files', session: props.route.session, path: '' });
+};
+const enterDir = (path: string): void => {
+  go({ name: 'files', session: props.route.session, path });
+};
+// A file opened from the browser carries its containing dir, so the editor's back returns there.
+const editFromFiles = (path: string): void => {
+  const { session } = props.route;
+  go({ name: 'edit', session, path, dir: props.route.name === 'files' ? props.route.path : '' });
+};
+const backFromEdit = (): void => {
+  const r = props.route;
+  if (r.name === 'edit' && r.dir !== undefined)
+    go({ name: 'files', session: r.session, path: r.dir });
+  else openChanges();
+};
 </script>
 
 <template>
@@ -38,6 +56,7 @@ const openEdit = (path: string): void => {
     :store="store"
     :session="route.session"
     @changes="openChanges"
+    @files="openFiles"
     @closed="go({ name: 'sessions' })"
   />
   <ChangesView
@@ -48,12 +67,22 @@ const openEdit = (path: string): void => {
     @edit="openEdit"
     @back="openSession"
   />
+  <FilesView
+    v-else-if="route.name === 'files'"
+    :store="store"
+    :session="route.session"
+    :path="route.path"
+    @enter="enterDir"
+    @open="editFromFiles"
+    @back="openSession"
+  />
   <EditView
     v-else-if="route.name === 'edit'"
     :store="store"
     :session="route.session"
     :path="route.path"
-    @back="openChanges"
+    :dir="route.dir ?? null"
+    @back="backFromEdit"
   />
   <DiffView
     v-else
