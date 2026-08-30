@@ -101,7 +101,7 @@ The operator will forget between releases. Follow these steps in order.
 
 ### Verify
 
-The published release has **four** assets: the three daemon files (`index.mjs`, `flux-mcp.mjs`,
+The published release has **five** assets: the three daemon files (`index.mjs`, `flux-mcp.mjs`,
 `flux-pi-extension.mjs`), `manifest.json`, and `manifest.json.sig`. The daemon's update path (a later
 PR) fetches these, checks each file's hash against the manifest and the signature against the trusted
 key set (`apps/daemon/src/update/verify-manifest.ts`), and runs the bundle only when all of that
