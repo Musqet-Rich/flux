@@ -106,8 +106,11 @@ export interface RpcMethods {
       base?: string;
       harness: HarnessKind;
       title?: string;
+      // The name of a saved Agent (ADR 0023 § 2) whose model/effort/role seed this session;
+      // `bad_params` when no saved Agent has that name. Omitted for the bare harness.
+      agent?: string;
       // Configured model and effort (ADR 0023 § 3), loose free-text strings the box compiles to
-      // harness flags; omitted to spawn on the box defaults.
+      // harness flags; omitted to spawn on the box defaults. Inline values override the Agent's.
       model?: string;
       effort?: string;
     };
@@ -274,6 +277,7 @@ export const rpcMethods: ParamGuards = {
     isOptional(v['base'], isString) &&
     isOneOf(v['harness'], ['claude', 'pi']) &&
     isOptional(v['title'], isString) &&
+    isOptional(v['agent'], isFilledString) &&
     isOptional(v['model'], isFilledString) &&
     isOptional(v['effort'], isFilledString),
   'sessions.archive': (v): v is RpcMethods['sessions.archive']['params'] =>

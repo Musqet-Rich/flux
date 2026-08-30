@@ -34,6 +34,7 @@ const settings = {
   },
   env: { relayUrl: 'r', dataDir: 'd', daemonName: 'n', pushSubject: 'p', claudeCommand: 'c' },
   harnessConfig: { claudeMd: '', settingsJson: '{}' },
+  agents: [{ name: 'reviewer', harness: 'claude', model: 'opus', role: 'be terse' }],
 };
 
 // One accepted and one rejected value per method; the table is the spec of protocol.md § 7.

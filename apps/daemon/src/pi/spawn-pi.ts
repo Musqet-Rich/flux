@@ -25,6 +25,8 @@ export interface SpawnPiOptions {
   model?: string;
   // Configured effort (ADR 0023 § 3), passed as pi's `--thinking` when set.
   thinking?: string;
+  // The resolved Agent role (ADR 0023 § 2), appended after `fluxPrompt` in `--append-system-prompt`.
+  role?: string;
   env?: NodeJS.ProcessEnv;
   close?: CloseChildOptions;
 }
@@ -35,6 +37,10 @@ const fluxPrompt =
   'You are running unattended under Flux. The operator is on a phone. For any material decision ' +
   '(design choices, destructive actions, ambiguous requirements) call flux_ask instead of guessing; ' +
   'call flux_notify with level "done" when the task is complete and "blocked" when you cannot proceed.';
+
+// The Agent's role (ADR 0023 § 2) is appended after the Flux prompt, never in its place.
+const systemPrompt = (role: string | undefined): string =>
+  role === undefined ? fluxPrompt : `${fluxPrompt}\n\n${role}`;
 
 const piArgs = (options: SpawnPiOptions): string[] => [
   '--mode',
@@ -56,7 +62,7 @@ const piArgs = (options: SpawnPiOptions): string[] => [
   ...(options.thinking === undefined ? [] : ['--thinking', options.thinking]),
   ...(options.extension === undefined
     ? []
-    : ['--extension', options.extension, '--append-system-prompt', fluxPrompt]),
+    : ['--extension', options.extension, '--append-system-prompt', systemPrompt(options.role)]),
 ];
 
 // pi's RPC framing is LF-only JSONL; `node:readline` also splits on U+2028/U+2029, which are

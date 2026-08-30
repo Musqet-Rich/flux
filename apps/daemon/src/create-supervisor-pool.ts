@@ -65,6 +65,7 @@ const claudeSpawn =
       ...(options.mcpConfig === undefined ? {} : { mcpConfig: options.mcpConfig(request.session) }),
       ...(record.model === undefined ? {} : { model: record.model }),
       ...(record.effort === undefined ? {} : { effort: record.effort }),
+      ...(record.role === undefined ? {} : { role: record.role }),
       close: closing(options, request.session),
     });
 
@@ -83,6 +84,7 @@ const piSpawn =
       ...(pi.provider === undefined ? {} : { provider: pi.provider }),
       ...(model === undefined ? {} : { model }),
       ...(record.effort === undefined ? {} : { thinking: record.effort }),
+      ...(record.role === undefined ? {} : { role: record.role }),
       ...(options.env === undefined ? {} : { env: options.env(request.session) }),
       close: closing(options, request.session),
     });

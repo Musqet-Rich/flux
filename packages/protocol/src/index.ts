@@ -62,6 +62,7 @@ export type {
 export { rpcMethods } from './rpc-methods.ts';
 export { rpcResults } from './rpc-results.ts';
 export type {
+  AgentSpec,
   EnvSettings,
   FluxSettings,
   HarnessConfig,

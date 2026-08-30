@@ -17,7 +17,12 @@ test('fetches devices and settings on open, shows every section, and goes back',
   await until(() => box.store.state.settings !== null);
   await until(() => box.store.state.devices.length === 1);
   await flushPromises();
-  expect(wrapper.findAll('h2').map((h) => h.text())).toEqual(['Devices', 'Flux', 'Harness config']);
+  expect(wrapper.findAll('h2').map((h) => h.text())).toEqual([
+    'Devices',
+    'Flux',
+    'Agents',
+    'Harness config',
+  ]);
   expect(wrapper.find('.device .label').text()).toBe('phone');
   expect(wrapper.find('#flux-repos').element).toBeInstanceOf(HTMLInputElement);
   expect(wrapper.find('#harness-md').element).toBeInstanceOf(HTMLTextAreaElement);

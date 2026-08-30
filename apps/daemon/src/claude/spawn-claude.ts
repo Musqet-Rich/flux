@@ -34,6 +34,9 @@ export interface SpawnClaudeOptions {
   // Configured model and effort (ADR 0023 § 3), passed as `--model`/`--effort` when set.
   model?: string;
   effort?: string;
+  // The resolved Agent role (ADR 0023 § 2), appended after `fluxPrompt` in the same
+  // `--append-system-prompt`; the Flux prompt and tools floor is never replaced.
+  role?: string;
   env?: NodeJS.ProcessEnv;
   close?: CloseChildOptions;
 }
@@ -56,6 +59,11 @@ const fluxPrompt =
   '(design choices, destructive actions, ambiguous requirements) call flux_ask instead of guessing; ' +
   'call flux_notify with level "done" when the task is complete and "blocked" when you cannot proceed.';
 
+// The Agent's role (ADR 0023 § 2) is appended after the Flux prompt, never in its place, so the
+// operator channel survives whatever the role says.
+const systemPrompt = (role: string | undefined): string =>
+  role === undefined ? fluxPrompt : `${fluxPrompt}\n\n${role}`;
+
 const claudeArgs = (options: SpawnClaudeOptions): string[] => [
   ...baseArgs,
   ...(options.resume === undefined ? [] : ['--resume', options.resume]),
@@ -63,7 +71,7 @@ const claudeArgs = (options: SpawnClaudeOptions): string[] => [
   ...(options.effort === undefined ? [] : ['--effort', options.effort]),
   ...(options.mcpConfig === undefined
     ? []
-    : ['--mcp-config', options.mcpConfig, '--append-system-prompt', fluxPrompt]),
+    : ['--mcp-config', options.mcpConfig, '--append-system-prompt', systemPrompt(options.role)]),
 ];
 
 // The message content as the API takes it: a string, or blocks when images ride along

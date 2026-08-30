@@ -36,6 +36,11 @@ const harness = computed({
     picked.value = value;
   },
 });
+// Saved Agents (ADR 0023 § 2): picking one seeds the model/effort inputs and sends its name on
+// create, so the box resolves model/effort/role from it; the operator can still override the
+// seeded values (inline values win). "None" is today's bare-harness behaviour.
+const agents = computed(() => props.store.state.settings?.agents ?? []);
+const agentName = ref('');
 const branch = ref(`flux/${new Date().toISOString().slice(0, 10)}`);
 const title = ref('');
 const model = ref('');
@@ -45,6 +50,18 @@ const busy = ref(false);
 const failure = ref<string | null>(null);
 
 const harnessLabel = (kind: HarnessKind): string => (kind === 'claude' ? 'Claude Code' : 'Pi');
+
+// Selecting a saved Agent seeds Model and Effort from it; None leaves the inputs alone.
+const agentPick = computed({
+  get: (): string => agentName.value,
+  set: (name: string) => {
+    agentName.value = name;
+    const chosen = agents.value.find((a) => a.name === name);
+    if (chosen === undefined) return;
+    model.value = chosen.model ?? '';
+    effort.value = chosen.effort ?? '';
+  },
+});
 
 const ready = computed(
   () =>
@@ -78,6 +95,7 @@ const create = async (): Promise<void> => {
       branch: branch.value.trim(),
       harness: chosen,
       ...(name === '' ? {} : { title: name }),
+      ...(agentName.value === '' ? {} : { agent: agentName.value }),
       ...(wantModel === '' ? {} : { model: wantModel }),
       ...(wantEffort === '' ? {} : { effort: wantEffort }),
     });
@@ -93,6 +111,8 @@ const create = async (): Promise<void> => {
 
 onMounted(() => {
   void loadRepos();
+  // Load saved Agents for the picker; the box may not have been asked for settings yet.
+  void props.store.refreshSettings();
 });
 </script>
 
@@ -109,6 +129,11 @@ onMounted(() => {
     <label v-if="harnesses.length > 1" for="new-harness">Harness</label>
     <select v-if="harnesses.length > 1" id="new-harness" v-model="harness" :disabled="busy">
       <option v-for="h in harnesses" :key="h" :value="h">{{ harnessLabel(h) }}</option>
+    </select>
+    <label v-if="agents.length > 0" for="new-agent">Agent (optional)</label>
+    <select v-if="agents.length > 0" id="new-agent" v-model="agentPick" :disabled="busy">
+      <option value="">None</option>
+      <option v-for="a in agents" :key="a.name" :value="a.name">{{ a.name }}</option>
     </select>
     <label for="new-model">Model (optional)</label>
     <input
