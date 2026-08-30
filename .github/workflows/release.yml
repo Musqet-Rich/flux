@@ -1,0 +1,78 @@
+name: release
+
+# A push of tag `vX.Y.Z` is the release (ADR 0021). This builds every package, drafts a GitHub
+# Release carrying the signed-daemon bundle's files and manifest (the operator adds the signature
+# and publishes with scripts/sign-and-publish.mjs, see docs/releases.md), and pushes the relay
+# image to GHCR. It triggers only on tags, so it never runs on a branch or PR and does not touch
+# the ci.yml gate. `contents: write` creates the release; `packages: write` pushes to GHCR.
+#
+# Actions are pinned to a full commit SHA (engineering.md § Security), the trailing comment is the
+# tag the SHA resolved from; these match ci.yml so Dependabot bumps both together.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    name: release (draft signed daemon bundle, push relay image)
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      IMAGE: ghcr.io/musqet-rich/flux-relay
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Enable corepack
+        run: corepack enable
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: corepack pnpm install --frozen-lockfile
+
+      # The build stamps package.json's version into the daemon (apps/daemon/tsdown.config.ts), so
+      # the tag and that version must agree or the release would ship a mislabelled bundle.
+      - name: Tag matches package.json version
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "tag $GITHUB_REF_NAME does not match package.json version $version (expected v$version)"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: corepack pnpm run build
+
+      # Stage the three daemon files and write manifest.json over their exact bytes with no key
+      # (--manifest-only): the operator's offline key signs those same bytes later.
+      - name: Stage daemon bundle and write manifest
+        run: |
+          stage="$RUNNER_TEMP/daemon-release"
+          mkdir -p "$stage"
+          cp apps/daemon/dist/index.mjs apps/daemon/dist/flux-mcp.mjs \
+             apps/daemon/dist/flux-pi-extension.mjs "$stage"/
+          node scripts/sign-release.mjs "$stage" "$version" --manifest-only
+          echo "stage=$stage" >> "$GITHUB_ENV"
+
+      # A DRAFT release: it has no signature yet, so it must not be public until the operator signs.
+      - name: Draft the GitHub Release
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --draft \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            "$stage/index.mjs" \
+            "$stage/flux-mcp.mjs" \
+            "$stage/flux-pi-extension.mjs" \
+            "$stage/manifest.json"
+
+      - name: Build and push the relay image to GHCR
+        run: |
+          docker build -f Dockerfile.relay -t "$IMAGE:$version" -t "$IMAGE:latest" .
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker push "$IMAGE:$version"
+          docker push "$IMAGE:latest"

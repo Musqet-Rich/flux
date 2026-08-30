@@ -1,0 +1,16 @@
+# Keep the build context small: the image builds from source inside the build stage, so the host's
+# installed modules, build outputs, VCS and tooling state must never be copied in.
+**/node_modules
+.git
+.github
+.githooks
+**/dist
+**/coverage
+.claude
+test-results
+playwright-report
+e2e
+*.log
+.DS_Store
+Dockerfile.relay
+.dockerignore

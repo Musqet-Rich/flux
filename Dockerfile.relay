@@ -1,0 +1,45 @@
+# syntax=docker/dockerfile:1
+#
+# The relay image for Coolify (ADR 0021 § 2, § 3): the relay process plus the built PWA it serves,
+# in one container the tag versions and Coolify redeploys. Multi-stage so the runtime image carries
+# no toolchain, no source and no dev dependencies — only the relay's dist, its three runtime deps
+# (hono, @hono/node-server, ws) and the PWA build.
+#
+# The relay's tsdown config keeps those three external (apps/relay/tsdown.config.ts), so they are NOT
+# bundled into dist; `pnpm deploy` vendors exactly them (and nothing dev) next to dist. @flux/protocol
+# IS bundled into dist, so the built relay has no workspace dependency at runtime.
+
+FROM node:24 AS build
+WORKDIR /src
+RUN corepack enable
+COPY . .
+# --ignore-scripts: the only lifecycle script is the root `prepare` (git hooks), which needs a .git
+# the build context omits; dependency install scripts are already blocked (onlyBuiltDependencies: []).
+RUN corepack pnpm install --frozen-lockfile --ignore-scripts
+RUN corepack pnpm run build
+# Self-contained relay tree at /app: dist + a node_modules holding only the prod dependencies.
+# --legacy: pnpm v10+ otherwise refuses to deploy a workspace without inject-workspace-packages;
+# the relay needs no injected workspace package at runtime (@flux/protocol is bundled into dist).
+RUN corepack pnpm --filter @flux/relay deploy --prod --legacy --ignore-scripts /app
+
+FROM node:24-slim AS runtime
+# curl is here only for the container HEALTHCHECK below.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends curl \
+  && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY --from=build /app /app
+COPY --from=build /src/apps/pwa/dist /srv/pwa
+# FLUX_RELAY_HOST=0.0.0.0: Coolify's proxy reaches the container over the container network, not
+# loopback. FLUX_TRUST_PROXY=1: it sits behind that proxy, so the per-IP limit counts X-Forwarded-For.
+# FLUX_PWA_DIR points at the built PWA copied above (the relay's default is relative to the source tree).
+ENV NODE_ENV=production \
+    FLUX_PWA_DIR=/srv/pwa \
+    FLUX_RELAY_HOST=0.0.0.0 \
+    FLUX_TRUST_PROXY=1
+EXPOSE 8787
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl -fsS http://127.0.0.1:8787/healthz || exit 1
+# Drop root: the node:slim images ship an unprivileged `node` user (uid 1000).
+USER node
+CMD ["node", "/app/dist/index.mjs"]
