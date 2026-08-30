@@ -19,7 +19,7 @@ test('tailors ExecStart, user and environment to the install and keeps the harde
   expect(unit).toContain('User=flux');
   expect(unit).toContain('WorkingDirectory=/home/flux');
   expect(unit).toContain(
-    'ExecStart=/usr/bin/node /home/flux/flux/apps/daemon/dist/index.mjs daemon',
+    'ExecStart="/usr/bin/node" "/home/flux/flux/apps/daemon/dist/index.mjs" daemon',
   );
   expect(unit).toContain('Environment="FLUX_RELAY_URL=https://flux.example.com"');
   expect(unit).toContain('Environment="PATH=/usr/bin"');
@@ -34,7 +34,23 @@ test('tailors ExecStart, user and environment to the install and keeps the harde
   expect(unit.endsWith('\n')).toBe(true);
 });
 
-test('escapes backslashes and quotes in environment values', () => {
-  const unit = renderSystemdUnit({ ...config, env: { FLUX_X: 'a"b\\c' } });
-  expect(unit).toContain('Environment="FLUX_X=a\\"b\\\\c"');
+test('escapes backslashes, quotes and percent specifiers in environment values', () => {
+  const unit = renderSystemdUnit({ ...config, env: { FLUX_X: 'a"b\\c%d' } });
+  expect(unit).toContain('Environment="FLUX_X=a\\"b\\\\c%%d"');
+});
+
+test('quotes the node and entry paths so a space cannot split ExecStart', () => {
+  const unit = renderSystemdUnit({
+    ...config,
+    node: '/opt/my node/bin/node',
+    entry: '/home/flux/app dir/dist/index.mjs',
+  });
+  expect(unit).toContain(
+    'ExecStart="/opt/my node/bin/node" "/home/flux/app dir/dist/index.mjs" daemon',
+  );
+});
+
+test('escapes percent and dollar in the ExecStart paths so they are passed verbatim', () => {
+  const unit = renderSystemdUnit({ ...config, entry: '/home/flux/a%b$c/index.mjs' });
+  expect(unit).toContain('"/home/flux/a%%b$$c/index.mjs" daemon');
 });

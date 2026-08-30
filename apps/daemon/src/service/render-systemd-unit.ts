@@ -29,13 +29,26 @@ CapabilityBoundingSet=
 AmbientCapabilities=
 SystemCallArchitectures=native`;
 
-// systemd reads `Environment="KEY=value"`; a literal backslash or double quote in the value is
-// escaped so the quoting cannot be broken out of.
+// systemd reads `Environment="KEY=value"`; the value is a quoted token (systemd.syntax(7)), so a
+// literal backslash or double quote is C-escaped to keep the quoting from being broken out of.
+// systemd also resolves `%`-specifiers in Environment= values, so a literal `%` is doubled; `$`
+// carries no meaning in Environment= and is left as-is.
 const systemdEnv = (env: Record<string, string>): string[] =>
   Object.entries(env).map(([key, value]) => {
-    const escaped = value.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
+    const escaped = value.replaceAll('\\', '\\\\').replaceAll('"', '\\"').replaceAll('%', '%%');
     return `Environment="${key}=${escaped}"`;
   });
+
+// ExecStart is split on whitespace (systemd.syntax(7)), so a node binary or entry path with a
+// space must be a single quoted token or it becomes several arguments. Quote it and C-escape the
+// backslash and double quote; double a literal `%` (a specifier) and `$` (a variable reference,
+// expanded in ExecStart unlike in Environment=) so the path is passed through verbatim.
+const systemdArg = (value: string): string =>
+  `"${value
+    .replaceAll('\\', '\\\\')
+    .replaceAll('"', '\\"')
+    .replaceAll('%', '%%')
+    .replaceAll('$', () => '$$')}"`;
 
 export const renderSystemdUnit = (config: ServiceConfig): string =>
   `${[
@@ -50,7 +63,7 @@ export const renderSystemdUnit = (config: ServiceConfig): string =>
     `User=${config.user}`,
     `WorkingDirectory=${config.home}`,
     ...systemdEnv(config.env),
-    `ExecStart=${config.node} ${config.entry} daemon`,
+    `ExecStart=${systemdArg(config.node)} ${systemdArg(config.entry)} daemon`,
     'Restart=always',
     'RestartSec=5',
     'RestartPreventExitStatus=2 3',
