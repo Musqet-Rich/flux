@@ -8,9 +8,19 @@
   // Each package has its own tsconfig.json and is checked separately with
   // `tsc --noEmit -p <pkg>` (vue-tsc for apps/pwa); there is no `tsc -b` solution and no
   // project references, by design (docs/scaffold-notes.md § typescript).
+  // `scripts/` holds Node CLIs (e.g. the release signer, ADR 0022) that run under Node and, like
+  // the config files above, belong to this root program so both `tsc` and oxlint's type-aware
+  // rules see them fully typed; `allowJs` lets the `.mjs` in.
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "types": ["node"]
+    "types": ["node"],
+    "allowJs": true
   },
-  "include": ["*.config.ts", "apps/*/*.config.ts", "packages/*/*.config.ts", "e2e/**/*.ts"]
+  "include": [
+    "*.config.ts",
+    "apps/*/*.config.ts",
+    "packages/*/*.config.ts",
+    "e2e/**/*.ts",
+    "scripts/**/*.mjs"
+  ]
 }
