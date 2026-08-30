@@ -1,5 +1,22 @@
+import { readFileSync } from 'node:fs';
 import type { UserConfig } from 'tsdown';
 import { defineConfig } from 'tsdown';
+
+// The single app version (ADR 0021), read from the root package.json at config load and stamped
+// into every build below as `FLUX_VERSION` (src/version.ts reads it). Reading it here rather
+// than importing across the package boundary keeps `rootDir`/JSON resolution out of it.
+const readVersion = (): string => {
+  const pkg: unknown = JSON.parse(
+    readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
+  );
+  return typeof pkg === 'object' &&
+    pkg !== null &&
+    'version' in pkg &&
+    typeof pkg.version === 'string'
+    ? pkg.version
+    : '0.0.0';
+};
+const version = readVersion();
 
 // Three entries: `flux` (dist/index.mjs), the MCP server the agent spawns per session
 // (dist/flux-mcp.mjs; create-mcp-config.ts resolves it as a sibling of index.mjs) and the pi
@@ -11,6 +28,7 @@ import { defineConfig } from 'tsdown';
 const single = (name: string, source: string): UserConfig => ({
   entry: { [name]: source },
   platform: 'node',
+  define: { FLUX_VERSION: JSON.stringify(version) },
   deps: { alwaysBundle: ['@flux/protocol'] },
   clean: [`dist/${name}.mjs`],
 });

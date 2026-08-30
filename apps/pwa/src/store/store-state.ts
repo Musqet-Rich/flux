@@ -90,6 +90,9 @@ export interface StoreState {
   phase: StorePhase;
   status: ConnectionStatus;
   daemon: string | null;
+  // The daemon's app version from `hello` (ADR 0021); null until connected, or when talking to a
+  // daemon built before it sent one. Shown read-only in Settings; no update action yet.
+  daemonVersion: string | null;
   error: StoreError | null;
   push: PushState;
   sessions: SessionSummary[];
@@ -150,6 +153,7 @@ export const storeState = (): StoreState =>
     phase: 'booting',
     status: 'stopped',
     daemon: null,
+    daemonVersion: null,
     error: null,
     push: 'unavailable',
     sessions: [],

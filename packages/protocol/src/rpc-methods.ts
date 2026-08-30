@@ -81,6 +81,9 @@ export interface RpcMethods {
       vapidPublicKey?: string;
       // Agents whose binary the box found at start; absent from older daemons (claude only).
       agents?: AgentKind[];
+      // The daemon's app version (semver, ADR 0021); absent from daemons built before this
+      // shipped, so the device feature-detects rather than assuming it is present.
+      version?: string;
     };
   };
   'events.sync': {

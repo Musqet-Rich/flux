@@ -219,11 +219,14 @@
       }
     },
     {
-      // Tool config files (vite, vitest, tsdown) export a default by convention.
+      // Tool config files (vite, vitest, tsdown) export a default by convention, and run under
+      // Node at build time, not in the browser: the no-nodejs-modules ban above is for browser
+      // source, so a config file may read `node:fs` (e.g. the root package.json version stamp).
       "files": ["**/*.config.ts", "**/*.config.mts", "**/*.config.js", "**/*.config.mjs"],
       "rules": {
         "import/no-default-export": "off",
-        "import/no-anonymous-default-export": "off"
+        "import/no-anonymous-default-export": "off",
+        "import/no-nodejs-modules": "off"
       }
     },
     {

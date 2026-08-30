@@ -9,6 +9,7 @@ import { inside } from './inside.ts';
 import { quotedMessage } from './quoted-message.ts';
 import type { Reply } from './render-reply.ts';
 import { sessionLifecycle } from './session-lifecycle.ts';
+import { version } from './version.ts';
 
 // Session, agent, comment and event methods of protocol.md § 7.
 
@@ -143,6 +144,7 @@ export const createSessionHandlers = (ctx: HandlerContext): SessionHandlers => (
       sessions: ctx.sessions.list(),
       vapidPublicKey: ctx.vapidPublicKey,
       agents: ctx.agents,
+      version,
     });
   },
   'events.sync': (p) => Promise.resolve(ctx.log.read(p.session, p.since)),
