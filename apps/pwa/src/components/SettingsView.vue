@@ -65,4 +65,30 @@ h1 {
   box-sizing: border-box;
   margin: 0 auto;
 }
+
+/* Wide screens: two forms share the top row, the config editor spans below. */
+@media (min-width: 56rem) {
+  .sections {
+    max-width: 76rem;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      'devices flux'
+      'agent agent';
+    align-items: start;
+    gap: 1.5rem;
+  }
+
+  .sections > :nth-child(1) {
+    grid-area: devices;
+  }
+
+  .sections > :nth-child(2) {
+    grid-area: flux;
+  }
+
+  .sections > :nth-child(3) {
+    grid-area: agent;
+  }
+}
 </style>
