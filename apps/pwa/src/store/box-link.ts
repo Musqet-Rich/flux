@@ -36,6 +36,7 @@ const unpair = async (i: StoreInternals, reason: string): Promise<void> => {
   i.state.settings = null;
   i.state.daemon = null;
   i.state.daemonVersion = null;
+  i.state.update = { target: null, phase: null, failed: null };
   i.state.phase = 'unpaired';
   reportError(i, reason, 'connection');
   // The keys, then the old box's cached logs: another box's session ids must not collide.
@@ -120,6 +121,11 @@ const afterConnect = async (i: StoreInternals): Promise<void> => {
   const hello = await call(i, 'hello', { protocol: protocolVersion });
   i.state.daemon = hello.daemon;
   i.state.daemonVersion = hello.version ?? null;
+  // A self-update succeeded when the box comes back on the version we asked it to install: the
+  // channel dropped on its exit, reconnect brought the new `hello.version`, so clear the banner.
+  if (i.state.update.target !== null && hello.version === i.state.update.target) {
+    i.state.update = { target: null, phase: null, failed: null };
+  }
   i.state.sessions = hello.sessions;
   i.state.agents = hello.agents ?? ['claude'];
   // Back in touch with the box: whatever the outage said is over.
@@ -192,6 +198,17 @@ const onNotice = (view: LogView, data: Ephemeral): void => {
 const onEphemeral = (i: StoreInternals, data: Ephemeral): void => {
   if (data.type === 'device.revoked') {
     if (data.deviceId === i.deviceId) void unpair(i, revokedReason);
+    return;
+  }
+  // The two self-update notices are session-less (protocol.md § 6): progress advances the phase,
+  // a failure records its reason for Settings to show; either may be dropped, which is fine.
+  if (data.type === 'update.progress') {
+    i.state.update.phase = data.phase;
+    i.state.update.failed = null;
+    return;
+  }
+  if (data.type === 'update.failed') {
+    i.state.update.failed = data.reason;
     return;
   }
   const log = i.logs.get(data.session);

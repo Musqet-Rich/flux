@@ -183,6 +183,14 @@ export interface RpcMethods {
   'devices.remove': { params: { deviceId: string }; result: Record<string, never> };
   'settings.get': { params: Record<string, never>; result: Settings };
   'settings.set': { params: SettingsPatch; result: Settings };
+  // Installs the named release and restarts (ADR 0022): the daemon fetches that GitHub release,
+  // verifies its signature, atomically swaps its files and exits for the supervisor to restart.
+  // Returns `{}` at once; progress and failure arrive as the `update.progress` / `update.failed`
+  // ephemerals, and success has no event (the channel drops and the device reads the new
+  // `hello.version` on reconnect). Refused with `unsupported` for a target that is not valid
+  // semver, not newer than the running build, below the 1.0.0 floor, or on a daemon run from
+  // source.
+  'daemon.update': { params: { version: string }; result: Record<string, never> };
   // File attachments, chunked over the channel (ADR 0020): begin, sequential chunks of at most
   // `attachment.limits.chunkBytes` raw bytes as base64, then end with the sha256 hex of the
   // whole file. `too_large` past the per-file cap; an out-of-order or duplicate chunk and a
@@ -220,6 +228,9 @@ export type RpcErrorCode =
   | 'conflict'
   | 'dirty'
   | 'too_large'
+  // A `daemon.update` target the daemon refuses outright (ADR 0022): not valid semver, not newer
+  // than the running build, below the 1.0.0 floor, or a daemon running from source.
+  | 'unsupported'
   | 'internal';
 
 type ParamGuards = { [M in RpcMethod]: (value: unknown) => value is RpcMethods[M]['params'] };
@@ -307,6 +318,8 @@ export const rpcMethods: ParamGuards = {
     isRecord(v) && isString(v['deviceId']),
   'settings.get': isEmpty,
   'settings.set': settings.isPatch,
+  'daemon.update': (v): v is RpcMethods['daemon.update']['params'] =>
+    isRecord(v) && isString(v['version']),
   'attach.begin': (v): v is RpcMethods['attach.begin']['params'] =>
     withSession(v) && isString(v['name']) && isString(v['mime']) && isInteger(v['size']),
   'attach.chunk': (v): v is RpcMethods['attach.chunk']['params'] =>

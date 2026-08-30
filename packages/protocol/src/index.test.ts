@@ -25,6 +25,7 @@ test('exports every runtime module', () => {
     'room',
     'rpcMethods',
     'rpcResults',
+    'semver',
     'settings',
     'wire',
   ]);

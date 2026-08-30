@@ -56,6 +56,30 @@ test('shows the settings, enables Save once edited, sends the form and shows env
   box.store.stop();
 });
 
+test('offers a daemon update when the box is behind, then shows progress and a failure', async () => {
+  const box = await pairedStore([], {
+    hello: () => ({ protocol: 2, daemon: 'box', sessions: [], version: '0.0.0-dev' }),
+    'settings.get': () => settingsFixture(),
+    'daemon.update': () => ({}),
+  });
+  await box.store.refreshSettings();
+  const wrapper = mount(FluxSettingsForm, { props: { store: box.store } });
+  await flushPromises();
+  const button = wrapper.find('.update-btn');
+  expect(button.exists()).toBe(true);
+  expect(button.text()).toContain('Update daemon to');
+  await button.trigger('click');
+  await until(() => box.store.state.update.target !== null);
+  await flushPromises();
+  expect(wrapper.find('.update-btn').exists()).toBe(false);
+  expect(wrapper.find('.update .hint').text()).toContain('Updating');
+  await box.relay.ephemeral({ type: 'update.failed', reason: 'download_failed' });
+  await until(() => box.store.state.update.failed === 'download_failed');
+  await flushPromises();
+  expect(wrapper.find('.update-error').text()).toContain('download_failed');
+  box.store.stop();
+});
+
 test('an unsaved edit survives the other section saving', async () => {
   const box = await pairedStore([], {
     'settings.get': () => settingsFixture(),

@@ -5,6 +5,7 @@ import { createRepoHandlers } from './create-repo-handlers.ts';
 import type { RpcHandlers } from './create-rpc-router.ts';
 import { createSessionHandlers } from './create-session-handlers.ts';
 import { createSettingsHandlers } from './create-settings-handlers.ts';
+import { createUpdateHandlers } from './create-update-handlers.ts';
 import { emittingLog } from './emitting-log.ts';
 import type { HandlerContext } from './handler-context.ts';
 
@@ -22,5 +23,6 @@ export const createRpcHandlers = (
     ...createRepoHandlers(shared),
     ...createSettingsHandlers(shared),
     ...createAttachmentHandlers(shared),
+    ...createUpdateHandlers(shared),
   };
 };

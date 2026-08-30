@@ -2,8 +2,10 @@
 
 Status: v2, 2026-08-30. Spec: ADR 0021 (releases and versioning), ADR 0022 (the signed bundle).
 A release is one git tag `vX.Y.Z`. CI builds and drafts; the operator signs offline and publishes;
-Coolify redeploys the relay image. This page is the runbook plus the manifest format. The daemon
-self-update RPC and its events are a later PR.
+Coolify redeploys the relay image. This page is the runbook plus the manifest format. Once a release
+is published, a daemon updates itself from the PWA: Settings shows **Update daemon to X.Y.Z** when the
+box is behind, and the box fetches that release, verifies it, swaps its files and restarts (ADR 0022,
+architecture.md § Self-update).
 
 ## The bundle
 

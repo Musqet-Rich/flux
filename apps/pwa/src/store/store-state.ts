@@ -5,6 +5,8 @@ import type {
   RateWindow,
   SessionSummary,
   Settings,
+  UpdateFailReason,
+  UpdatePhase,
 } from '@flux/protocol';
 import { reactive } from 'vue';
 
@@ -86,6 +88,16 @@ export interface StoreError {
   kind: ErrorKind;
 }
 
+// A daemon self-update in progress (ADR 0022). `target` is the version being installed, null when
+// idle; `phase` follows the `update.progress` ephemerals; `failed` carries an `update.failed`
+// reason. Success has no event: the channel drops, reconnect brings the new `hello.version`, and
+// the store clears this back to idle.
+export interface DaemonUpdate {
+  target: string | null;
+  phase: UpdatePhase | null;
+  failed: UpdateFailReason | null;
+}
+
 export interface StoreState {
   phase: StorePhase;
   status: ConnectionStatus;
@@ -93,6 +105,8 @@ export interface StoreState {
   // The daemon's app version from `hello` (ADR 0021); null until connected, or when talking to a
   // daemon built before it sent one. Shown read-only in Settings; no update action yet.
   daemonVersion: string | null;
+  // The daemon self-update in progress, or idle (all null).
+  update: DaemonUpdate;
   error: StoreError | null;
   push: PushState;
   sessions: SessionSummary[];
@@ -154,6 +168,7 @@ export const storeState = (): StoreState =>
     status: 'stopped',
     daemon: null,
     daemonVersion: null,
+    update: { target: null, phase: null, failed: null },
     error: null,
     push: 'unavailable',
     sessions: [],

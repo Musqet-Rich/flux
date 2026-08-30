@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import type { RpcErrorCode } from '@flux/protocol';
 import { ProtocolError, guards } from '@flux/protocol';
+import { existsSync } from 'node:fs';
 import { connect } from 'node:net';
 import { hostname } from 'node:os';
 import { join } from 'node:path';
@@ -10,6 +11,7 @@ import { createDaemon } from './create-daemon.ts';
 import { DaemonError } from './daemon-error.ts';
 import { qrMatrix } from './qr/qr-matrix.ts';
 import { renderQr } from './qr/render-qr.ts';
+import { detectDistDir } from './update/detect-dist-dir.ts';
 
 // `flux daemon`: the box side of Flux (architecture.md § Daemon). Configuration is environment:
 //   FLUX_RELAY_URL   the relay origin, e.g. https://flux.example.com (required)
@@ -139,6 +141,10 @@ const daemon = await createDaemon({
   ...(env['FLUX_PI'] === undefined ? {} : { piCommand: env['FLUX_PI'] }),
   ...(env['FLUX_PI_PROVIDER'] === undefined ? {} : { piProvider: env['FLUX_PI_PROVIDER'] }),
   ...(env['FLUX_PI_MODEL'] === undefined ? {} : { piModel: env['FLUX_PI_MODEL'] }),
+  // Self-update (ADR 0022): the installed bundle is the siblings of the running index.mjs; a
+  // source checkout has no such bundle and self-update is refused.
+  distDir: detectDistDir(process.argv[1] ?? '', { exists: existsSync }),
+  ...(env['FLUX_RELEASE_REPO'] === undefined ? {} : { releaseRepo: env['FLUX_RELEASE_REPO'] }),
 });
 
 // SIGTERM stops the daemon within its budget (ADR 0017); a second signal, or the budget

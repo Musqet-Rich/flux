@@ -129,6 +129,7 @@ export const rpcResults: ResultGuards = {
   'devices.remove': isEmpty,
   'settings.get': settings.is,
   'settings.set': settings.is,
+  'daemon.update': isEmpty,
   'attach.begin': (v): v is { attachmentId: string } => isRecord(v) && isString(v['attachmentId']),
   'attach.chunk': isEmpty,
   'attach.end': (v): v is { path: string; size: number } =>
