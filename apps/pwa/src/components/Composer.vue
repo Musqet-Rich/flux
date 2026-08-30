@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { FluxEvent } from '@flux/protocol';
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 
 import type { ReplyTarget } from '../composables/useMessageReply.ts';
 import { useFileDrop } from '../composables/useFileDrop.ts';
@@ -79,6 +79,59 @@ const send = async (): Promise<void> => {
 const remove = (commentId: string): void => {
   void props.store.removeComment(props.session, commentId);
 };
+
+// Slash-command autocomplete: while the message is a single `/token` (no space yet), suggest the
+// box's skill names that start with what is typed. A daemon without skills leaves the list empty,
+// so nothing shows and the composer behaves as before. The list is fetched once on mount.
+onMounted(() => {
+  void props.store.refreshSkills();
+});
+
+const dismissed = ref(false);
+const active = ref(0);
+
+const query = computed((): string | null => {
+  const text = draft.value.text;
+  if (!text.startsWith('/')) return null;
+  const rest = text.slice(1);
+  return /\s/u.test(rest) ? null : rest;
+});
+
+const suggestions = computed((): string[] => {
+  if (query.value === null) return [];
+  const lower = query.value.toLowerCase();
+  return (props.store.state.skills ?? [])
+    .map((skill) => skill.name)
+    .filter((name) => name.toLowerCase().startsWith(lower));
+});
+
+const suggestOpen = computed(() => suggestions.value.length > 0 && !dismissed.value);
+
+watch(query, () => {
+  dismissed.value = false;
+  active.value = 0;
+});
+
+const choose = (name: string): void => {
+  draft.value.text = `/${name} `;
+  dismissed.value = true;
+  box.value?.focus();
+};
+
+// Arrow keys move the highlight, Enter takes it, Escape dismisses — only while the list is open,
+// so an ordinary newline and the ⌘/Ctrl-Enter send are untouched when it is not.
+const nav = (event: KeyboardEvent): void => {
+  if (!suggestOpen.value) return;
+  const count = suggestions.value.length;
+  if (event.key === 'ArrowDown') active.value = (active.value + 1) % count;
+  else if (event.key === 'ArrowUp') active.value = (active.value - 1 + count) % count;
+  else if (event.key === 'Escape') dismissed.value = true;
+  else if (event.key === 'Enter' && !event.metaKey && !event.ctrlKey) {
+    const name = suggestions.value[active.value];
+    if (name !== undefined) choose(name);
+  } else return;
+  event.preventDefault();
+};
 </script>
 
 <template>
@@ -96,6 +149,19 @@ const remove = (commentId: string): void => {
       @remove="store.removeAttachment(session, $event)"
       @retry="store.retryAttachment(session, $event)"
     />
+    <ul v-if="suggestOpen" class="slash-suggest" role="listbox">
+      <li
+        v-for="(name, index) in suggestions"
+        :key="name"
+        class="slash-option"
+        :class="{ active: index === active }"
+        role="option"
+        :aria-selected="index === active"
+        @mousedown.prevent="choose(name)"
+      >
+        /{{ name }}
+      </li>
+    </ul>
     <form class="row" @submit.prevent="send">
       <input ref="picker" type="file" multiple class="picker" aria-hidden="true" @change="pick" />
       <button
@@ -112,6 +178,7 @@ const remove = (commentId: string): void => {
         v-model="draft.text"
         rows="2"
         placeholder="Message the agent"
+        @keydown="nav"
         @keydown.enter.meta.prevent="send"
         @keydown.enter.ctrl.prevent="send"
         @paste="paste"
@@ -176,5 +243,32 @@ const remove = (commentId: string): void => {
 .reply button {
   padding: 0.1rem 0.5rem;
   line-height: 1;
+}
+
+.slash-suggest {
+  list-style: none;
+  margin: 0;
+  padding: 0.25rem;
+  max-height: 12rem;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.slash-option {
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--radius);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.slash-option.active,
+.slash-option:hover {
+  background: var(--accent-soft, var(--panel));
 }
 </style>

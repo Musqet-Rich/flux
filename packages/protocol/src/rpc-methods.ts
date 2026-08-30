@@ -5,6 +5,7 @@ import { guards } from './guards.ts';
 import { isCodeRef } from './is-code-ref.ts';
 import type { Settings, SettingsPatch } from './settings.ts';
 import { settings } from './settings.ts';
+import { skillName } from './skill-name.ts';
 
 // RPC methods (protocol.md § 7): params are validated on the box with the guards below; results
 // are validated on the device with `rpc-results.ts`.
@@ -64,6 +65,15 @@ export interface FileContent {
   binary: boolean;
   hash?: string;
   truncated?: boolean;
+}
+
+// A box-side skill (ADR 0015, § skills): `name` is the skill's directory under the flux user's
+// `~/.claude/skills`, `body` the contents of that directory's `SKILL.md`. The daemon reads and
+// writes only these files; it is not an execution surface. `name` is a safe single path segment
+// (skill-name.ts), enforced on `skills.write`/`skills.delete`.
+export interface Skill {
+  name: string;
+  body: string;
 }
 
 // A paired device as the box lists it; `current` marks the caller's own device.
@@ -200,6 +210,14 @@ export interface RpcMethods {
   'devices.remove': { params: { deviceId: string }; result: Record<string, never> };
   'settings.get': { params: Record<string, never>; result: Settings };
   'settings.set': { params: SettingsPatch; result: Settings };
+  // Box-side skills under the flux user's `~/.claude/skills` (§ skills). `list` reads every
+  // `<name>/SKILL.md`; `write` creates or overwrites one, making the `<name>/` dir as needed;
+  // `delete` removes the skill. `name` is a safe single path segment (skill-name.ts) — anything
+  // that could escape the skills dir is `bad_params`. A daemon built before these shipped answers
+  // `not_found`, which the device treats as "no skills" and degrades (no editor, no autocomplete).
+  'skills.list': { params: Record<string, never>; result: { skills: Skill[] } };
+  'skills.write': { params: { name: string; body: string }; result: Record<string, never> };
+  'skills.delete': { params: { name: string }; result: Record<string, never> };
   // Installs the named release and restarts (ADR 0022): the daemon fetches that GitHub release,
   // verifies its signature, atomically swaps its files and exits for the supervisor to restart.
   // Returns `{}` at once; progress and failure arrive as the `update.progress` / `update.failed`
@@ -361,6 +379,11 @@ export const rpcMethods: ParamGuards = {
     isRecord(v) && isString(v['deviceId']),
   'settings.get': isEmpty,
   'settings.set': settings.isPatch,
+  'skills.list': isEmpty,
+  'skills.write': (v): v is RpcMethods['skills.write']['params'] =>
+    isRecord(v) && skillName.is(v['name']) && isString(v['body']),
+  'skills.delete': (v): v is RpcMethods['skills.delete']['params'] =>
+    isRecord(v) && skillName.is(v['name']),
   'daemon.update': (v): v is RpcMethods['daemon.update']['params'] =>
     isRecord(v) && isString(v['version']),
   'daemon.checkUpdate': isEmpty,

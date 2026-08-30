@@ -21,6 +21,7 @@ test('fetches devices and settings on open, shows every section, and goes back',
     'Devices',
     'Flux',
     'Agents',
+    'Skills',
     'Harness config',
   ]);
   expect(wrapper.find('.device .label').text()).toBe('phone');

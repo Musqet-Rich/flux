@@ -18,6 +18,13 @@ export interface SettingsActions {
   checkUpdate: () => Promise<void>;
   // Asks the daemon to install `target` (ADR 0022); progress and failure arrive as ephemerals.
   updateDaemon: (target: string) => Promise<boolean>;
+  // Box-side skills (protocol.md § 7 `skills.*`), used by the Settings editor and the composer's
+  // slash autocomplete. `refreshSkills` never surfaces an error — an older daemon answers
+  // `not_found`, which degrades to an empty list (no editor, no autocomplete). `saveSkill` and
+  // `deleteSkill` report failures and re-list on success so the editor and composer stay in step.
+  refreshSkills: () => Promise<void>;
+  saveSkill: (name: string, body: string) => Promise<boolean>;
+  deleteSkill: (name: string) => Promise<boolean>;
 }
 
 const refreshDevices = async (i: StoreInternals): Promise<void> => {
@@ -65,6 +72,20 @@ const updateDaemon = async (i: StoreInternals, target: string): Promise<void> =>
   }
 };
 
+const relistSkills = async (i: StoreInternals): Promise<void> => {
+  const { skills } = await boxLink.call(i, 'skills.list', {});
+  i.state.skills = skills;
+};
+
+const refreshSkills = async (i: StoreInternals): Promise<void> => {
+  try {
+    await relistSkills(i);
+  } catch {
+    // Older daemon or offline: keep any list already fetched, else show none.
+    i.state.skills = i.state.skills ?? [];
+  }
+};
+
 export const settingsActions = (i: StoreInternals): SettingsActions => ({
   refreshDevices: () => boxLink.attempt(i, () => refreshDevices(i)),
   removeDevice: (deviceId) => boxLink.attempt(i, () => removeDevice(i, deviceId)),
@@ -75,4 +96,15 @@ export const settingsActions = (i: StoreInternals): SettingsActions => ({
   saveSettings: (patch) => boxLink.attempt(i, () => saveSettings(i, patch)),
   checkUpdate: () => checkUpdate(i),
   updateDaemon: (target) => boxLink.attempt(i, () => updateDaemon(i, target)),
+  refreshSkills: () => refreshSkills(i),
+  saveSkill: (name, body) =>
+    boxLink.attempt(i, async () => {
+      await boxLink.call(i, 'skills.write', { name, body });
+      await relistSkills(i);
+    }),
+  deleteSkill: (name) =>
+    boxLink.attempt(i, async () => {
+      await boxLink.call(i, 'skills.delete', { name });
+      await relistSkills(i);
+    }),
 });

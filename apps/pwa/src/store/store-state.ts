@@ -6,6 +6,7 @@ import type {
   RpcMethods,
   SessionSummary,
   Settings,
+  Skill,
   UpdateFailReason,
   UpdatePhase,
 } from '@flux/protocol';
@@ -131,6 +132,10 @@ export interface StoreState {
   // The settings screen's data, fetched when it opens; null until then.
   devices: Device[];
   settings: Settings | null;
+  // Box-side skills (protocol.md § 7 `skills.*`): the Settings editor and the composer's slash
+  // autocomplete read this. Null until first fetched; `[]` when the daemon lacks the method or is
+  // offline, so the UI degrades to no skills rather than hanging on "loading".
+  skills: Skill[] | null;
 }
 
 export interface StoreOptions {
@@ -191,4 +196,5 @@ export const storeState = (): StoreState =>
     thumbs: {},
     devices: [],
     settings: null,
+    skills: null,
   });

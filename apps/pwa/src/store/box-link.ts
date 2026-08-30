@@ -34,6 +34,7 @@ const unpair = async (i: StoreInternals, reason: string): Promise<void> => {
   i.state.sessions = [];
   i.state.devices = [];
   i.state.settings = null;
+  i.state.skills = null;
   i.state.daemon = null;
   i.state.daemonVersion = null;
   i.state.update = { target: null, phase: null, failed: null };

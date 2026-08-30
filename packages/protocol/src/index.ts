@@ -58,9 +58,11 @@ export type {
   RpcMethod,
   RpcMethods,
   SessionSummary,
+  Skill,
 } from './rpc-methods.ts';
 export { rpcMethods } from './rpc-methods.ts';
 export { rpcResults } from './rpc-results.ts';
+export { skillName } from './skill-name.ts';
 export type {
   AgentSpec,
   AgentTools,

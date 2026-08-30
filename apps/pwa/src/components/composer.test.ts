@@ -1,5 +1,6 @@
+import type { Skill } from '@flux/protocol';
 import type { VueWrapper } from '@vue/test-utils';
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import { expect, test } from 'vitest';
 
 import { pairedStore } from '../../test/paired-store.ts';
@@ -94,6 +95,79 @@ test('send is disabled while a file uploads; × removes a chip and deletes it on
   expect(store.composer('s1').text).toBe('wait');
   wrapper.unmount();
   store.stop();
+});
+
+// Slash-command autocomplete: the composer offers the box's skill names while the message is a
+// single `/token`, and picking one inserts `/<name> `.
+const withSkills = async (skills: Skill[]) => {
+  const box = await pairedStore([], {
+    'skills.list': () => ({ skills }),
+    'agent.send': () => ({ seq: 2 }),
+  });
+  const wrapper = mount(Composer, {
+    props: { store: box.store, session: 's1', events: [], reply: null },
+    attachTo: document.body,
+  });
+  await until(() => box.store.state.skills !== null);
+  await flushPromises();
+  return { ...box, wrapper };
+};
+
+const options = (wrapper: VueWrapper): string[] =>
+  wrapper.findAll('.slash-option').map((o) => o.text());
+
+test('a leading slash suggests skill names, filtered by what is typed, and a click inserts one', async () => {
+  const { store, wrapper } = await withSkills([
+    { name: 'review', body: '' },
+    { name: 'deploy', body: '' },
+  ]);
+  await wrapper.find('textarea').setValue('/');
+  expect(options(wrapper)).toEqual(['/review', '/deploy']);
+  await wrapper.find('textarea').setValue('/re');
+  expect(options(wrapper)).toEqual(['/review']);
+  await wrapper.findAll('.slash-option')[0]?.trigger('mousedown');
+  expect(wrapper.find('textarea').element.value).toBe('/review ');
+  expect(wrapper.find('.slash-suggest').exists()).toBe(false);
+  wrapper.unmount();
+  store.stop();
+});
+
+test('arrow keys move the highlight, Enter takes it, Escape dismisses the list', async () => {
+  const { store, wrapper } = await withSkills([
+    { name: 'review', body: '' },
+    { name: 'deploy', body: '' },
+  ]);
+  const press = (name: string): Promise<void> =>
+    wrapper.find('textarea').trigger('keydown', { key: name });
+  await wrapper.find('textarea').setValue('/');
+  await press('ArrowDown');
+  await press('Enter');
+  expect(wrapper.find('textarea').element.value).toBe('/deploy ');
+  await wrapper.find('textarea').setValue('/re');
+  expect(wrapper.find('.slash-suggest').exists()).toBe(true);
+  await press('Escape');
+  expect(wrapper.find('.slash-suggest').exists()).toBe(false);
+  wrapper.unmount();
+  store.stop();
+});
+
+test('no suggestions once a space is typed, or when the box has no skills', async () => {
+  const { store, wrapper } = await withSkills([{ name: 'review', body: '' }]);
+  await wrapper.find('textarea').setValue('/review go');
+  expect(wrapper.find('.slash-suggest').exists()).toBe(false);
+  wrapper.unmount();
+  store.stop();
+  const bare = await pairedStore([], { 'agent.send': () => ({ seq: 2 }) });
+  const w2 = mount(Composer, {
+    props: { store: bare.store, session: 's1', events: [], reply: null },
+    attachTo: document.body,
+  });
+  await until(() => bare.store.state.skills !== null);
+  await flushPromises();
+  await w2.find('textarea').setValue('/rev');
+  expect(w2.find('.slash-suggest').exists()).toBe(false);
+  w2.unmount();
+  bare.store.stop();
 });
 
 test('the draft text and files survive a remount of the composer', async () => {
