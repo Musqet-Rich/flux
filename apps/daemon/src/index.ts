@@ -3,14 +3,14 @@ import type { RpcErrorCode } from '@flux/protocol';
 import { ProtocolError, guards } from '@flux/protocol';
 import { existsSync } from 'node:fs';
 import { connect } from 'node:net';
-import { hostname } from 'node:os';
+import { hostname, userInfo } from 'node:os';
 import { join } from 'node:path';
 
 import type { Daemon } from './create-daemon.ts';
 import { createDaemon } from './create-daemon.ts';
 import { DaemonError } from './daemon-error.ts';
-import { qrMatrix } from './qr/qr-matrix.ts';
-import { renderQr } from './qr/render-qr.ts';
+import { pairingQr } from './qr/pairing-qr.ts';
+import { runServiceCli } from './service/run-service-cli.ts';
 import { detectDistDir } from './update/detect-dist-dir.ts';
 
 // `flux daemon`: the box side of Flux (architecture.md § Daemon). Configuration is environment:
@@ -87,7 +87,7 @@ const controlRequest = (request: Record<string, unknown>): Promise<Record<string
 
 // The QR is for a person at a terminal; a pipe or journald gets the URL only.
 const printPairing = (url: string): void => {
-  if (process.stdout.isTTY) console.log(renderQr(qrMatrix(url), env['FLUX_QR_INVERT'] === '1'));
+  if (process.stdout.isTTY) console.log(pairingQr(url, env['FLUX_QR_INVERT'] === '1'));
   console.log(`pair a device within 10 minutes: ${url}`);
 };
 
@@ -115,6 +115,33 @@ const removeDevice = async (daemon: Daemon, deviceId: string): Promise<void> => 
 if (command === 'pair') {
   try {
     printPairing(await pairViaSocket());
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
+  process.exit(0);
+}
+
+// `flux service install|uninstall|status` writes the host's supervisor manifest (ADR 0022 § 6).
+// It is a host concern only — no relay URL, no Daemon instance, nothing on the wire — so it runs
+// here, like `flux pair`, with the effects (fs, systemctl/launchctl) injected via `realServiceIo`.
+if (command === 'service') {
+  try {
+    const lines = await runServiceCli(process.argv[3], {
+      platform: process.platform,
+      hasSystemd: existsSync('/run/systemd/system'),
+      isRoot: process.getuid?.() === 0,
+      // Only an installed bundle can be supervised: its `ExecStart` runs the sibling `index.mjs`
+      // under plain node. A source checkout has none, so `service install` refuses it (ADR 0022).
+      installed: detectDistDir(process.argv[1] ?? '', { exists: existsSync }) !== null,
+      user: userInfo().username,
+      home,
+      node: process.execPath,
+      entry: process.argv[1] ?? '',
+      dataDir,
+      env,
+    });
+    for (const line of lines) console.log(line);
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
     process.exit(1);
@@ -225,7 +252,7 @@ if (command === 'daemon') {
   await daemon.stop();
 } else {
   console.error(
-    `unknown command ${command}; use: flux daemon | flux pair | flux devices ls | flux devices rm <id>`,
+    `unknown command ${command}; use: flux daemon | flux pair | flux devices ls | flux devices rm <id> | flux service install|uninstall|status`,
   );
   await daemon.stop();
   process.exit(2);

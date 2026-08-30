@@ -75,15 +75,16 @@ test('an added file uploads at once and goes with the next message; the draft th
   expect(draft.attachments[0]?.preview).toMatch(/^blob:/u);
   expect(draft.attachments[1]?.preview).toBeNull();
   await until(() => draft.attachments.every((a) => a.status === 'ready'));
-  expect(draft.attachments.map((a) => [a.id, a.progress])).toEqual([
-    ['att-1', 1],
-    ['att-2', 1],
-  ]);
-  expect(new TextDecoder().decode(stored.get('att-2')?.[0])).toBe('hello');
+  // The two files upload concurrently, so the box mints att-1/att-2 in whichever order the two
+  // `attach.begin` calls happen to land. What is fixed is the slot order (png then txt) and that
+  // both reach progress 1 — not which numeric id each slot draws, so assert on that, not on order.
+  const ids = draft.attachments.map((a) => a.id).filter((id): id is string => id !== null);
+  expect(ids.toSorted((a, b) => a.localeCompare(b))).toEqual(['att-1', 'att-2']);
+  expect(draft.attachments.map((a) => a.progress)).toEqual([1, 1]);
+  const decoded = [...stored.values()].map((chunks) => new TextDecoder().decode(chunks[0]));
+  expect(decoded).toContain('hello');
   expect(await store.send('s1', 'look')).toBe(true);
-  expect(calls('agent.send')).toEqual([
-    { session: 's1', text: 'look', attachments: ['att-1', 'att-2'] },
-  ]);
+  expect(calls('agent.send')).toEqual([{ session: 's1', text: 'look', attachments: ids }]);
   expect(store.composer('s1')).toEqual({ text: '', attachments: [] });
   store.stop();
 });

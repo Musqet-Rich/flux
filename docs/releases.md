@@ -109,6 +109,32 @@ PR) fetches these, checks each file's hash against the manifest and the signatur
 key set (`apps/daemon/src/update/verify-manifest.ts`), and runs the bundle only when all of that
 passes.
 
+## Supervision
+
+Self-update ends in a clean `process.exit(0)`; something on the box must restart the daemon into
+the new code, and keep it always-on and start-on-boot besides (ADR 0022 § 6). Run `flux service
+install` once per box; it detects the host and writes the right supervisor manifest, baking in the
+running node binary, the installed `index.mjs`, the invoking user and the daemon's `FLUX_*`/`PATH`
+environment. `flux service status` reports whether the manifest is installed and loaded, and `flux
+service uninstall` reverses it. Run it from the installed daemon, not a source checkout: `flux
+service install` refuses a daemon started with `node src/index.ts` (which has no runnable
+`index.mjs` to supervise and cannot self-update anyway, ADR 0022 § 3).
+
+- **Linux (systemd).** As root it writes a hardened `/etc/systemd/system/flux-daemon.service`
+  (modelled on `deploy/flux-daemon.service`) and runs `systemctl enable --now flux-daemon`. Not
+  root, it stages the unit under `$FLUX_DATA_DIR` and prints the exact `sudo cp` / `daemon-reload` /
+  `enable --now` commands — nothing is escalated for you.
+- **macOS (launchd).** It writes a per-user LaunchAgent at
+  `~/Library/LaunchAgents/com.flux.daemon.plist` (`RunAtLoad` + `KeepAlive`) and `launchctl load`s
+  it — no sudo. It runs while you are logged in, so the agents inherit your keychain, PATH and
+  `claude`/`gh` logins. A **headless Mac** that must run before any login needs a root
+  **LaunchDaemon** under `/Library/LaunchDaemons` instead; that runs at boot but loses your GUI
+  login session and its keychain, so use it only when nobody logs in on the box.
+- **No init system (a typical devcontainer).** It writes a restart-loop wrapper
+  (`$FLUX_DATA_DIR/flux-daemon-run.sh`) and prints how to run it — under `nohup` or the
+  container/compose restart policy. Without it, a bare daemon can still update but stays down after
+  the update's exit until something starts it again.
+
 ## Signing outside the release flow
 
 To sign a locally built `dist` directory directly — the same manifest and signature the flow
