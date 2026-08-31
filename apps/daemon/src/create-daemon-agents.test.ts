@@ -54,7 +54,12 @@ test('saved agents round-trip through settings and a duplicate name is bad_param
   await setup();
   const d = await device();
   await pair(d);
-  expect(((await call(d, 'settings.get', {})) as { agents: unknown[] }).agents).toEqual([]);
+  // A fresh box is seeded with the default read-only "Help" Agent on first daemon start.
+  const seeded = ((await call(d, 'settings.get', {})) as { agents: unknown[] }).agents;
+  expect(seeded).toHaveLength(1);
+  expect(seeded).toMatchObject([
+    { name: 'Help', harness: 'claude', tools: { mode: 'deny', list: ['Bash', 'Edit', 'Write'] } },
+  ]);
   const saved = await call(d, 'settings.set', {
     agents: [{ name: 'reviewer', harness: 'claude', model: 'opus', role: 'be terse' }],
   });

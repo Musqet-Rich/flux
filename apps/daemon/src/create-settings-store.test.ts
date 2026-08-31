@@ -81,3 +81,37 @@ test('saved agents round-trip whole and survive a reopen; a bad row reads as non
   );
   expect(store.getAgents()).toEqual([]);
 });
+
+test('seedDefaults adds the Help Agent once, never duplicates, and survives a reopen', () => {
+  const db = openDatabase(':memory:');
+  const store = createSettingsStore({ db, reposDir: defaults.reposDir });
+  store.seedDefaults();
+  expect(store.getAgents()).toEqual([
+    {
+      name: 'Help',
+      harness: 'claude',
+      role: expect.stringContaining('flux help agent'),
+      tools: { mode: 'deny', list: ['Bash', 'Edit', 'Write'] },
+    },
+  ]);
+  // A second init does not duplicate, and the seeded Agent survives a reopen.
+  store.seedDefaults();
+  expect(store.getAgents()).toHaveLength(1);
+  expect(createSettingsStore({ db, reposDir: '/elsewhere' }).getAgents()).toHaveLength(1);
+});
+
+test('seedDefaults never clobbers an operator Help, and never resurrects a deleted one', () => {
+  const db = openDatabase(':memory:');
+  const store = createSettingsStore({ db, reposDir: defaults.reposDir });
+  // An operator's own Help (or edited Help) present before first init is kept as-is.
+  store.setAgents([{ name: 'Help', role: 'mine' }]);
+  store.seedDefaults();
+  expect(store.getAgents()).toEqual([{ name: 'Help', role: 'mine' }]);
+
+  // Once seeding has run, deleting Help keeps it gone: the marker stops it being re-added.
+  const fresh = createSettingsStore({ db: openDatabase(':memory:'), reposDir: defaults.reposDir });
+  fresh.seedDefaults();
+  fresh.setAgents([]);
+  fresh.seedDefaults();
+  expect(fresh.getAgents()).toEqual([]);
+});

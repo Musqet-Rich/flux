@@ -70,6 +70,7 @@ Ordered by priority. P1 is the minimum useful product.
 - Basic git actions from the PWA: commit, push, open PR (via `gh` on the box).
 - pi.dev adapter.
 - Save named Agents (a model + effort + role preset) in Settings and pick one when starting a session (ADR 0023).
+- Ask flux about itself: a built-in manual reachable three ways — `flux help [term]` on the box, a `flux_help` tool every agent has, and a seeded read-only "Help" Agent — so an operator or agent can look up how flux works without leaving the app (ADR 0008).
 
 ### P3
 

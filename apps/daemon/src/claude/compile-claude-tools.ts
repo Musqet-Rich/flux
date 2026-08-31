@@ -6,7 +6,7 @@ import type { AgentTools } from '@flux/protocol';
 //   - `--allowedTools` does NOT restrict there (a permission list, moot when skipped) — unusable;
 //   - `--tools` is the built-in allow-list, and `--tools ""` disables every built-in tool;
 //   - tools loaded via `--mcp-config` survive all of the above.
-// The Flux tools (`flux_ask`/`flux_notify`/`flux_compact`) ride on `--mcp-config`, so they stay usable in every
+// The Flux tools (`flux_ask`/`flux_notify`/`flux_compact`/`flux_help`) ride on `--mcp-config`, so they stay usable in every
 // mode — even `none`. The floor's only job here is to never name a Flux tool in the denylist.
 //   all   → no flag (the full toolset, today's behaviour)
 //   allow → `--tools "<built-in names>"`   (MCP Flux tools survive and so are not named)
@@ -17,6 +17,7 @@ const isFluxTool = (name: string): boolean =>
   name === 'flux_ask' ||
   name === 'flux_notify' ||
   name === 'flux_compact' ||
+  name === 'flux_help' ||
   name.startsWith('mcp__flux');
 
 export const compileClaudeTools = (tools?: AgentTools): string[] => {

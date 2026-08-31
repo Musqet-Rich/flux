@@ -7,7 +7,7 @@ import { hostname, userInfo } from 'node:os';
 import { join } from 'node:path';
 
 import type { Daemon } from './create-daemon.ts';
-import { createDaemon, detectDistDir } from './create-daemon.ts';
+import { createDaemon, detectDistDir, runHelp } from './create-daemon.ts';
 import { DaemonError } from './daemon-error.ts';
 import { pairingQr } from './qr/pairing-qr.ts';
 import { runServiceCli } from './service/run-service-cli.ts';
@@ -24,7 +24,9 @@ import { runUpdateCheck } from './update/run-update-check.ts';
 //   FLUX_PI_MODEL    pi's --model; unset, pi's own settings decide
 //   FLUX_PUSH_SUBJECT VAPID contact (mailto: or https: URL) shown to push services
 //   FLUX_QR_INVERT   set to 1 on a light terminal; the pairing QR is drawn for a dark one
-// `flux pair` asks a running daemon for a fresh pairing URL over its control socket. `flux
+// `flux help [term]` prints the bundled operator manual (help/manual.ts) — the topic overview with
+// no term, or the section matching the term — needing no relay URL, daemon or socket. `flux pair`
+// asks a running daemon for a fresh pairing URL over its control socket. `flux
 // devices ls` opens the database directly; `flux devices rm <id>` goes through the socket too,
 // so the live daemon cuts the device's channel off, and only falls back to the database when
 // no daemon is running. The PWA's settings screen does the same over the wire; repos dir and
@@ -175,6 +177,14 @@ if (command === 'update') {
   process.exit(0);
 }
 
+// `flux help [term]` prints the bundled manual (help/manual.ts) — a topic overview, or the section
+// matching the term. It is pure text: no relay URL, no Daemon instance, no control socket, so it
+// dispatches here before `createDaemon`, like `flux pair`. The term is the arguments joined.
+if (command === 'help') {
+  console.log(runHelp(process.argv.slice(3).join(' ')));
+  process.exit(0);
+}
+
 // Only `daemon` talks to the relay; `devices` opens the database and needs no URL, so it works
 // from a login shell without the unit's environment file.
 const relayUrl = env['FLUX_RELAY_URL'];
@@ -278,7 +288,7 @@ if (command === 'daemon') {
   await daemon.stop();
 } else {
   console.error(
-    `unknown command ${command}; use: flux daemon | flux pair | flux update --check | flux devices ls | flux devices rm <id> | flux service install|uninstall|status`,
+    `unknown command ${command}; use: flux daemon | flux pair | flux help [term] | flux update --check | flux devices ls | flux devices rm <id> | flux service install|uninstall|status`,
   );
   await daemon.stop();
   process.exit(2);
