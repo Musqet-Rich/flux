@@ -22,6 +22,12 @@ test('presents the hero, the four things you get, and the four setup steps', () 
   const steps = wrapper.findAll('.steps li');
   expect(steps.length).toBe(4);
   expect(wrapper.text()).toContain('flux pair');
+  // The install command and relay env line are load-bearing on the public page: a typo in either
+  // would silently break setup, so assert them verbatim.
+  expect(wrapper.text()).toContain(
+    'curl -fsSL https://raw.githubusercontent.com/Musqet-Rich/flux/main/scripts/install.sh | sh',
+  );
+  expect(wrapper.text()).toContain('FLUX_RELAY_URL=https://fluxagent.me');
 });
 
 test('keeps a sound heading order: the single h1, then h2s above the feature h3s', () => {
