@@ -115,6 +115,7 @@ export const rpcResults: ResultGuards = {
   'sessions.cost': (v): v is RpcMethods['sessions.cost']['result'] =>
     isRecord(v) && isNumber(v['costUsd']) && isTokenUsage(v['usage']) && isInteger(v['turns'], 0),
   'sessions.create': isSessionSummary,
+  'sessions.createHelp': isSessionSummary,
   'sessions.archive': isEmpty,
   'sessions.unarchive': isEmpty,
   'sessions.clear': isEmpty,

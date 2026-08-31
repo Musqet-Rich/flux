@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 
 import type { Route, Router } from '../router/create-router.ts';
 import type { Store } from '../store/create-store.ts';
 import ArchivedSessions from './ArchivedSessions.vue';
+import HelpModal from './HelpModal.vue';
 import NewSessionView from './NewSessionView.vue';
 import SessionScreens from './SessionScreens.vue';
 import SessionTabs from './SessionTabs.vue';
@@ -25,11 +26,17 @@ const context = computed(() =>
   active.value === null ? null : (state.logs[active.value]?.context ?? null),
 );
 
+const helpOpen = ref(false);
+
 const go = (to: Route): void => {
   props.router.go(to);
 };
 const openSession = (session: string): void => {
   go({ name: 'session', session });
+};
+const onHelpCreated = (session: { session: string }): void => {
+  helpOpen.value = false;
+  openSession(session.session);
 };
 const enablePush = (): void => {
   void props.store.enablePush();
@@ -46,6 +53,15 @@ const enablePush = (): void => {
     />
     <button
       type="button"
+      class="gear help"
+      aria-label="Ask about Flux"
+      title="Ask about Flux"
+      @click="helpOpen = true"
+    >
+      ⓘ
+    </button>
+    <button
+      type="button"
       class="gear"
       :class="{ active: route.name === 'settings' }"
       aria-label="Settings"
@@ -55,6 +71,7 @@ const enablePush = (): void => {
       ⚙
     </button>
   </header>
+  <HelpModal v-if="helpOpen" :store="store" @created="onHelpCreated" @close="helpOpen = false" />
   <main class="body">
     <template v-if="route.name === 'sessions'">
       <section class="empty">

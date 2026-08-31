@@ -1,12 +1,12 @@
 import type { CodeRef, RpcMethods, TokenUsage } from '@flux/protocol';
 import { attachment, fluxEvent, protocolVersion } from '@flux/protocol';
 
-import { createSession } from './create-session.ts';
 import type { Peer } from './create-device-channels.ts';
 import { DaemonError } from './daemon-error.ts';
 import type { HandlerContext } from './handler-context.ts';
 import { quotedMessage } from './quoted-message.ts';
 import type { Reply } from './render-reply.ts';
+import { sessionCreateOps } from './session-create-ops.ts';
 import { sessionLifecycle } from './session-lifecycle.ts';
 import { version } from './version.ts';
 
@@ -24,6 +24,7 @@ export type SessionHandlers = Pick<
   | 'sessions.list'
   | 'sessions.cost'
   | 'sessions.create'
+  | 'sessions.createHelp'
   | 'sessions.archive'
   | 'sessions.unarchive'
   | 'sessions.clear'
@@ -117,7 +118,8 @@ export const createSessionHandlers = (ctx: HandlerContext): SessionHandlers => (
   'events.sync': (p) => Promise.resolve(ctx.log.read(p.session, p.since)),
   'sessions.list': () => Promise.resolve(ctx.sessions.list()),
   'sessions.cost': (p) => Promise.resolve(cost(ctx, ctx.sessions.get(p.session).session)),
-  'sessions.create': (p) => createSession(ctx, p),
+  'sessions.create': (p) => sessionCreateOps.fromParams(ctx, p),
+  'sessions.createHelp': (p) => sessionCreateOps.help(ctx, p),
   'sessions.archive': (p) => sessionLifecycle.archive(ctx, p),
   'sessions.unarchive': (p) => sessionLifecycle.unarchive(ctx, p.session),
   'sessions.clear': (p) => sessionLifecycle.clear(ctx, p.session),

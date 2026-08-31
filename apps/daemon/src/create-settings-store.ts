@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 
 import { DaemonError } from './daemon-error.ts';
+import { helpAgentSpec } from './help-agent-spec.ts';
 
 // The box's runtime settings (protocol.md § 7, `settings.get`/`settings.set`), one JSON row in
 // the `settings` table. Anything not stored falls back to the defaults below, so a fresh box
@@ -34,17 +35,6 @@ export interface SettingsStoreOptions {
 const key = 'flux';
 const agentsKey = 'agents';
 const seededKey = 'defaults_seeded';
-
-// The default "Help" Agent seeded on first run: a read-only assistant that answers the operator's
-// questions about flux from the bundled manual (via flux_help) and cannot touch the box. Its `deny`
-// tools strip Bash/Edit/Write; the Flux-tools floor (incl. flux_help) survives every mode (ADR 0023
-// § 5), so it can still reach the operator and look things up.
-const helpAgent: AgentSpec = {
-  name: 'Help',
-  harness: 'claude',
-  role: "You are the flux help agent. Answer the operator's natural-language questions about flux plainly and briefly. Use the flux_help tool to look things up in the manual rather than guessing. You cannot change their machine.",
-  tools: { mode: 'deny', list: ['Bash', 'Edit', 'Write'] },
-};
 
 const defaults = (reposDir: string): FluxSettings => ({
   reposDir,
@@ -132,8 +122,8 @@ export const createSettingsStore = (options: SettingsStoreOptions): SettingsStor
       if (select.get(seededKey) !== undefined) return;
       upsert.run(seededKey, '1');
       const agents = getAgents();
-      if (!agents.some((agent) => agent.name === helpAgent.name)) {
-        upsert.run(agentsKey, JSON.stringify([helpAgent, ...agents]));
+      if (!agents.some((agent) => agent.name === helpAgentSpec.name)) {
+        upsert.run(agentsKey, JSON.stringify([helpAgentSpec, ...agents]));
       }
     },
   };

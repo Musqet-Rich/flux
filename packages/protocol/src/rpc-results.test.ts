@@ -60,6 +60,7 @@ const cases: { [M in RpcMethod]: [ok: unknown, bad: unknown] } = {
     { costUsd: 0.1, usage: {}, turns: 2 },
   ],
   'sessions.create': [summary, { ...summary, lastSeq: -1 }],
+  'sessions.createHelp': [summary, { ...summary, harness: 'gpt' }],
   'sessions.archive': [{}, null],
   'sessions.unarchive': [{}, null],
   'sessions.clear': [{}, 'done'],

@@ -51,6 +51,9 @@ export interface Store extends SettingsActions, SessionActions {
   // Asks the browser for a push subscription under a user gesture and stores it on the box.
   enablePush: () => Promise<boolean>;
   createSession: (params: RpcMethods['sessions.create']['params']) => Promise<SessionSummary>;
+  // Opens a daemon-managed Help session seeded with `question` (ADR 0008); the question is
+  // trimmed before it goes on the wire. The new session is added to the list, like createSession.
+  createHelpSession: (question: string) => Promise<SessionSummary>;
   refreshSessions: () => Promise<void>;
   // Git actions resolve to their result, or null with the failure in `state.error`.
   commit: (session: string, message: string, paths?: string[]) => Promise<string | null>;
@@ -122,16 +125,20 @@ const saveFile = async (
   }
 };
 
-const createSession = async (
-  i: StoreInternals,
-  params: RpcMethods['sessions.create']['params'],
-): Promise<SessionSummary> => {
-  const summary = await boxLink.call(i, 'sessions.create', params);
+const addSession = (i: StoreInternals, summary: SessionSummary): SessionSummary => {
   if (!i.state.sessions.some((s) => s.session === summary.session)) {
     i.state.sessions.push(summary);
   }
   return summary;
 };
+
+const createSession = async (
+  i: StoreInternals,
+  params: RpcMethods['sessions.create']['params'],
+): Promise<SessionSummary> => addSession(i, await boxLink.call(i, 'sessions.create', params));
+
+const createHelpSession = async (i: StoreInternals, question: string): Promise<SessionSummary> =>
+  addSession(i, await boxLink.call(i, 'sessions.createHelp', { question: question.trim() }));
 
 // Like boxLink.attempt, for actions whose result the view needs (a sha, a URL).
 const outcome = async <T>(i: StoreInternals, action: () => Promise<T>): Promise<T | null> => {
@@ -217,6 +224,7 @@ export const createStore = (options: StoreOptions): Store => {
     saveFile: (session, path, content, ifMatch) => saveFile(i, session, path, content, ifMatch),
     enablePush: () => enablePush(i),
     createSession: (params) => createSession(i, params),
+    createHelpSession: (question) => createHelpSession(i, question),
     refreshSessions: () => boxLink.refreshSessions(i),
     ...gitActions(i),
     call: (method, params) => boxLink.call(i, method, params),

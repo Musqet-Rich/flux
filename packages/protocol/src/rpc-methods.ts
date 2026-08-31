@@ -126,6 +126,14 @@ export interface RpcMethods {
     };
     result: SessionSummary;
   };
+  // Opens a daemon-managed Help session (ADR 0008): the daemon creates a read-only session on its
+  // own throwaway help repo under the data dir (never a repo under `reposDir`) and delivers
+  // `question` as the first user turn. `question` is a non-empty string, trimmed and blank-checked
+  // on the box (`bad_params`). The result is a `SessionSummary`, exactly like `sessions.create`.
+  'sessions.createHelp': {
+    params: { question: string };
+    result: SessionSummary;
+  };
   // Closes the agent and hides the session. `removeWorktree` also removes the worktree, refused
   // as `dirty` while it holds uncommitted files or unpushed commits unless `discard`;
   // `deleteBranch` (with `removeWorktree` only) then deletes the branch.
@@ -317,6 +325,8 @@ export const rpcMethods: ParamGuards = {
     isOptional(v['agent'], isFilledString) &&
     isOptional(v['model'], isFilledString) &&
     isOptional(v['effort'], isFilledString),
+  'sessions.createHelp': (v): v is RpcMethods['sessions.createHelp']['params'] =>
+    isRecord(v) && isFilledString(v['question']),
   'sessions.archive': (v): v is RpcMethods['sessions.archive']['params'] =>
     withSession(v) &&
     isOptional(v['removeWorktree'], isBoolean) &&

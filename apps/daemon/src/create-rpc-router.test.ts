@@ -39,6 +39,7 @@ const handlers: RpcHandlers = {
   'sessions.list': () => Promise.resolve([summary]),
   'sessions.cost': () => Promise.reject(new DaemonError('not_found', 'no session')),
   'sessions.create': unimplemented,
+  'sessions.createHelp': unimplemented,
   'sessions.archive': unimplemented,
   'sessions.unarchive': unimplemented,
   'sessions.clear': unimplemented,
