@@ -103,7 +103,16 @@ const childEnv = (env: Record<string, string | undefined>): Record<string, strin
 };
 
 const nodeSpawn: ShellSpawn = (command, cwd, env) => {
-  const child = cpSpawn('sh', ['-c', command], { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  // `detached` makes the child a process-group leader, so a signal to its negative pid reaches
+  // everything the command spawned (a pipeline, a backgrounded job), not just the `sh` leader —
+  // the daemon-wide kill pattern (close-child.ts, run-command.ts). Without it, interrupt, the
+  // cap/timeout kill and the disconnect/shutdown teardown would leave orphans (ADR 0026 § 6).
+  const child = cpSpawn('sh', ['-c', command], {
+    cwd,
+    env,
+    detached: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
   let onExit: ((code: number | null, signal: string | null) => void) | null = null;
   let onErr: ((chunk: string) => void) | null = null;
   // A spawn failure (a missing cwd, say) is reported as stderr then a null exit, so the run ends.
@@ -132,7 +141,10 @@ const nodeSpawn: ShellSpawn = (command, cwd, env) => {
     },
     kill: (signal) => {
       try {
-        child.kill(signal);
+        // The whole group by negative pid, so descendants die too; the bare pid only if the
+        // spawn never got one. A group already gone raises ESRCH, the outcome wanted.
+        if (child.pid === undefined) child.kill(signal);
+        else process.kill(-child.pid, signal);
       } catch {
         // Already gone (ESRCH), the outcome wanted.
       }
