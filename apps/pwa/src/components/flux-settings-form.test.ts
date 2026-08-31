@@ -69,7 +69,7 @@ test('offers a verified update from the box check, then shows progress and a fai
   const wrapper = mount(FluxSettingsForm, { props: { store: box.store } });
   await until(() => box.store.state.updateCheck !== null);
   await flushPromises();
-  expect(wrapper.find('.update-status').text()).toContain('Update available: 1.2.0 — verified ✓');
+  expect(wrapper.find('.update-status').text()).toContain('Update available: 1.2.0 · verified ✓');
   const button = wrapper.find('.update-btn');
   expect(button.exists()).toBe(true);
   expect(button.attributes('disabled')).toBeUndefined();

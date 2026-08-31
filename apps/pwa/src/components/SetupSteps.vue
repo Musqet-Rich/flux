@@ -1,27 +1,63 @@
 <script setup lang="ts">
-// The homepage's "setup" section: a numbered three-step list on the editorial-brutalist
-// landing. The --flux-* custom properties are inherited from the .home wrapper in Home.vue.
+// The homepage's "setup" section: a numbered step list on the editorial-brutalist landing. A
+// step is a sequence of inline segments so one line can mix prose, a shell command and a link.
+// The --flux-* custom properties are inherited from the .home wrapper in Home.vue.
 
-const steps = [
+type Segment =
+  | { kind: 'text'; text: string }
+  | { kind: 'code'; text: string }
+  | { kind: 'link'; text: string; href: string };
+
+interface Step {
+  num: string;
+  segments: Segment[];
+}
+
+const steps: Step[] = [
   {
     num: '1',
-    pre: 'Run the Flux daemon on your box. See ',
-    code: 'SELF_HOSTING.md',
-    post: ' for the relay and daemon.',
+    segments: [
+      { kind: 'text', text: 'Install the Flux daemon on your box: ' },
+      {
+        kind: 'code',
+        text: 'curl -fsSL https://raw.githubusercontent.com/Musqet-Rich/flux/main/scripts/install.sh | sh',
+      },
+    ],
   },
   {
     num: '2',
-    pre: 'On the box, run ',
-    code: 'flux pair',
-    post: '. It prints a QR code and a link, valid for ten minutes.',
+    segments: [
+      { kind: 'text', text: 'Point it at the hosted relay: set ' },
+      { kind: 'code', text: 'FLUX_RELAY_URL=https://fluxagent.me' },
+      { kind: 'text', text: " in the daemon's environment. Prefer to run your own relay? See " },
+      {
+        kind: 'link',
+        text: 'SELF_HOSTING.md',
+        href: 'https://github.com/Musqet-Rich/flux/blob/main/SELF_HOSTING.md',
+      },
+      { kind: 'text', text: ' for the self-host path.' },
+    ],
   },
   {
     num: '3',
-    pre: "Scan the QR below, or paste its link. Accept the notification prompt, and you're connected.",
-    code: '',
-    post: '',
+    segments: [
+      { kind: 'text', text: 'On the box, run ' },
+      { kind: 'code', text: 'flux pair' },
+      { kind: 'text', text: '. It prints a QR code and a link, valid for ten minutes.' },
+    ],
+  },
+  {
+    num: '4',
+    segments: [
+      {
+        kind: 'text',
+        text: "Scan the QR below, or paste its link. Accept the notification prompt, and you're connected.",
+      },
+    ],
   },
 ];
+
+const linkHref = (seg: Segment): string | undefined => (seg.kind === 'link' ? seg.href : undefined);
 </script>
 
 <template>
@@ -33,8 +69,17 @@ const steps = [
         <li v-for="s in steps" :key="s.num">
           <span class="step-num">[{{ s.num }}]</span>
           <p>
-            {{ s.pre }}<code v-if="s.code !== ''">{{ s.code }}</code
-            >{{ s.post }}
+            <template v-for="(seg, i) in s.segments" :key="i">
+              <code v-if="seg.kind === 'code'">{{ seg.text }}</code>
+              <a
+                v-else-if="seg.kind === 'link'"
+                :href="linkHref(seg)"
+                target="_blank"
+                rel="noopener"
+                >{{ seg.text }}</a
+              >
+              <template v-else>{{ seg.text }}</template>
+            </template>
           </p>
         </li>
       </ol>
@@ -105,6 +150,13 @@ const steps = [
   border: 1px solid oklch(0.32 0.04 150);
   padding: 2px 8px;
   color: var(--flux-accent);
+  overflow-wrap: anywhere;
+}
+
+.steps a {
+  color: var(--flux-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 @media (max-width: 720px) {

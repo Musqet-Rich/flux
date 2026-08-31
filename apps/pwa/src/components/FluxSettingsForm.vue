@@ -54,8 +54,8 @@ interface CheckView {
 
 const availableLabel = (version: string, verified: boolean, reason: string | undefined): string =>
   verified
-    ? `Update available: ${version} — verified ✓`
-    : `Update available: ${version} — cannot verify (${reason ?? 'unknown'})`;
+    ? `Update available: ${version} · verified ✓`
+    : `Update available: ${version} · cannot verify (${reason ?? 'unknown'})`;
 
 const checkView = computed((): CheckView | null => {
   const c = props.store.state.updateCheck;
