@@ -86,6 +86,15 @@ const stepFinishStop = JSON.stringify({
     cost: 0.1,
   },
 });
+// An intermediate step (a tool turn's first `step_finish`, ADR 0027): NOT the terminal stop step.
+const stepFinishToolCalls = JSON.stringify({
+  type: 'step_finish',
+  part: {
+    reason: 'tool-calls',
+    tokens: { input: 1, output: 1, cache: { write: 0, read: 0 } },
+    cost: 0.1,
+  },
+});
 
 test('the first send builds the create argv and passes OPENCODE_CONFIG in the env', () => {
   const { calls, spawn } = rig();
@@ -170,6 +179,66 @@ test('a crash (non-zero exit with no step_finish) fires onExit with the code', a
   children[0]?.exit(1);
   expect(await code).toBe(1);
   expect(agent.stderr()).toContain('auth failed');
+});
+
+// The regression the classifier must catch: a crash AFTER a mid-turn `tool-calls` step but BEFORE
+// the terminal `stop` step. Classifying off "any step_finish seen" would swallow this and wedge
+// the session in `running`; classifying off the terminal stop step surfaces it. Synchronous so a
+// swallowed exit fails as `fired === false` rather than hanging.
+test('a mid-turn crash after a tool step (no stop) fires onExit with the code and stderr', () => {
+  const { children, spawn } = rig();
+  const agent = spawnOpencode({ cwd: '/w', spawn });
+  let fired = false;
+  let gotCode: number | null | undefined;
+  agent.onExit((c) => {
+    fired = true;
+    gotCode = c;
+  });
+  agent.send('go');
+  children[0]?.emitLine(stepStart('ses_1'));
+  children[0]?.emitLine(stepFinishToolCalls);
+  children[0]?.stderr.emit(Buffer.from('provider 503'));
+  children[0]?.exit(1);
+  expect(fired).toBe(true);
+  expect(gotCode).toBe(1);
+  expect(agent.stderr()).toContain('provider 503');
+});
+
+test('a send during an active run is queued, then started only after a clean turn end', () => {
+  const { calls, children, spawn } = rig();
+  const agent = spawnOpencode({ cwd: '/w', spawn });
+  agent.send('first');
+  agent.send('second');
+  // The second send is queued, not spawned concurrently against the same session.
+  expect(children).toHaveLength(1);
+  children[0]?.emitLine(stepStart('ses_q'));
+  children[0]?.emitLine(stepFinishStop);
+  children[0]?.exit(0);
+  // The clean turn end drains the queue: the second turn now runs, continuing the session.
+  expect(children).toHaveLength(2);
+  expect(calls[1]?.args).toEqual([
+    'run',
+    '--session',
+    'ses_q',
+    '--continue',
+    '--format',
+    'json',
+    '--auto',
+    '--dir',
+    '/w',
+    'second',
+  ]);
+});
+
+test('interrupt drops queued turns and does not start them', async () => {
+  const { children, spawn } = rig();
+  const agent = spawnOpencode({ cwd: '/w', spawn, close: { graceMs: 5 } });
+  agent.send('first');
+  agent.send('second');
+  agent.interrupt();
+  await exitOf(children[0] as FakeChild);
+  // The queued 'second' was dropped: the interrupted run's exit starts nothing.
+  expect(children).toHaveLength(1);
 });
 
 test('close ends the current run and fires onExit', async () => {

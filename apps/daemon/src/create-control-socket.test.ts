@@ -130,13 +130,14 @@ test('accepts the manager verbs with valid shapes (ADR 0025)', async () => {
       agent: 'a',
       title: '',
     },
+    { type: 'session.open', session: 'm', repo: '/r', branch: 'b', harness: 'opencode' },
     { type: 'session.send', session: 'm', target: 's2', text: 'hi' },
     { type: 'session.close', session: 'm', target: 's2' },
     { type: 'session.read', session: 'm', target: 's2', limit: 5 },
   ];
   const replies = await roundTrip(requests.map((r) => JSON.stringify(r)));
   expect(replies.map((r) => parse(r))).toEqual(requests.map(() => ({ ok: true, result: {} })));
-  expect(seen).toHaveLength(6);
+  expect(seen).toHaveLength(7);
 });
 
 test('rejects manager verbs with a blank/missing session or target or wrong harness', async () => {

@@ -60,7 +60,7 @@ const isOpen = (v: Record<string, unknown>): boolean =>
   filled(v['session']) &&
   filled(v['repo']) &&
   filled(v['branch']) &&
-  isOneOf(v['harness'], ['claude', 'pi']) &&
+  isOneOf(v['harness'], ['claude', 'pi', 'opencode']) &&
   isOptional(v['agent'], filled) &&
   isOptional(v['model'], filled) &&
   isOptional(v['effort'], filled) &&

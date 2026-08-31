@@ -27,13 +27,13 @@ const tools = [
   {
     name: 'flux_session_open',
     description:
-      'Open a NEW session for a sub-task, on its own worktree. `repo` and `branch` are required; `harness` is "claude" or "pi". Optionally name a saved agent, a model, an effort, a base branch, or a title. You CANNOT open a manager session — that is refused. Returns the new session id.',
+      'Open a NEW session for a sub-task, on its own worktree. `repo` and `branch` are required; `harness` is "claude", "pi" or "opencode". Optionally name a saved agent, a model, an effort, a base branch, or a title. You CANNOT open a manager session — that is refused. Returns the new session id.',
     inputSchema: {
       type: 'object',
       properties: {
         repo: { type: 'string', description: 'Repository path or name under the box repos dir.' },
         branch: { type: 'string', description: 'Branch to create or check out for the session.' },
-        harness: { type: 'string', enum: ['claude', 'pi'] },
+        harness: { type: 'string', enum: ['claude', 'pi', 'opencode'] },
         agent: { type: 'string', description: 'Name of a saved Agent to seed model/effort/role.' },
         model: { type: 'string' },
         effort: { type: 'string' },
@@ -164,7 +164,9 @@ const openFields = (input: Record<string, unknown>): Record<string, unknown> => 
 
 const openSession = async (input: Record<string, unknown>): Promise<string> => {
   if (!isString(input['repo']) || !isString(input['branch'])) return 'repo and branch are required';
-  const harness = isOneOf(input['harness'], ['claude', 'pi']) ? input['harness'] : 'claude';
+  const harness = isOneOf(input['harness'], ['claude', 'pi', 'opencode'])
+    ? input['harness']
+    : 'claude';
   const result = await control({
     type: 'session.open',
     session,

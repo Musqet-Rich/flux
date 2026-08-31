@@ -11,10 +11,15 @@ import { parseOpencodeLine } from './parse-opencode-line.ts';
 // Write side of the opencode adapter (ADR 0027 § 3): PROCESS-PER-TURN. opencode `run` is invoked
 // once per turn, not a long-lived child reading stdin (claude/pi). This `AgentProcess` is a
 // wrapper that stays LOGICALLY ALIVE across turns: `send` spawns a fresh `run` for the stored
-// opencode session id, forwards that run's NDJSON via `onLine`, and — critically — does NOT fire
-// `onExit` when a run completes at a turn boundary (a finished run means "turn done", which the
-// supervisor already learns from the mapped `turn.ended`). `onExit` fires only on `close`/`kill`,
-// or on an abnormal run failure (a non-zero exit with no `step_finish`, i.e. a crash).
+// opencode session id and forwards that run's NDJSON via `onLine`. A run that reaches its terminal
+// `step_finish{reason:"stop"}` and then exits is a completed turn (the supervisor already learns
+// turn-end from the mapped `turn.ended`), so its exit is SWALLOWED. A run that exits WITHOUT
+// reaching that stop step — a provider 5xx, an OOM, a segfault mid-turn — is a crash and fires
+// `onExit` with the code so the supervisor can end the session; otherwise it would wedge in
+// `running` forever. `onExit` also fires on `close`/`kill`. Only one run is ever live at a time:
+// a `send` while a run is active is QUEUED behind it (never spawned concurrently against the same
+// `--session`), and the per-run interrupt/stop flags live on the run, not the wrapper, so an
+// interrupt can never be mis-attributed to a different child's exit.
 
 type OpencodeSpawn = (command: string, args: string[], options: SpawnOptions) => ChildProcess;
 
@@ -81,6 +86,17 @@ const stderrTail = (): { push: (chunk: Buffer) => void; text: () => string } => 
   };
 };
 
+// One `opencode run` child. `sawStop` records that the run reached its terminal
+// `step_finish{reason:"stop"}` (the whole turn completed); `interrupting` marks that this run was
+// deliberately killed by `interrupt`/`close`/`kill`. Both are per-run so a later run cannot read a
+// former run's flag.
+interface Run {
+  child: ChildProcess;
+  exited: Promise<number | null>;
+  sawStop: boolean;
+  interrupting: boolean;
+}
+
 interface Ctx {
   options: SpawnOpencodeOptions;
   doSpawn: OpencodeSpawn;
@@ -89,9 +105,10 @@ interface Ctx {
   exitListeners: ((code: number | null) => void)[];
   stderr: ReturnType<typeof stderrTail>;
   sessionId: string | null;
-  run: { child: ChildProcess; exited: Promise<number | null> } | null;
+  run: Run | null;
+  // Turns received while a run is active; started in order as each run completes cleanly.
+  pending: string[];
   closed: boolean;
-  interrupting: boolean;
   exitFired: boolean;
 }
 
@@ -101,26 +118,22 @@ const fireExit = (ctx: Ctx, code: number | null): void => {
   for (const listener of ctx.exitListeners) listener(code);
 };
 
-// A run exit at a turn boundary is swallowed; only a crash or a close/kill reaches `onExit`.
-const onRunExit = (ctx: Ctx, code: number | null, sawStepFinish: boolean): void => {
-  if (ctx.interrupting) {
-    ctx.interrupting = false;
-    return;
-  }
+// Classify a run's exit, returning whether the wrapper should now start the next queued turn. An
+// interrupted or closed run is expected (no queue drain); a run that never reached its terminal
+// stop step crashed and is surfaced via `onExit`; a clean turn end is swallowed and the queue
+// drains. `code`/`sawStop`/`interrupting` are all read off the run that just exited.
+const onRunExit = (ctx: Ctx, run: Run, code: number | null): boolean => {
+  if (run.interrupting) return false;
   if (ctx.closed) {
     fireExit(ctx, code);
-    return;
+    return false;
   }
-  if (code !== 0 && !sawStepFinish) fireExit(ctx, code);
+  if (!run.sawStop) {
+    fireExit(ctx, code);
+    return false;
+  }
+  return true;
 };
-
-const onData = (ctx: Ctx, sawStepFinish: { value: boolean }) =>
-  splitLines((line) => {
-    const parsed = parseOpencodeLine(line);
-    if (parsed?.kind === 'step_start' && ctx.sessionId === null) ctx.sessionId = parsed.sessionId;
-    if (parsed?.kind === 'step_finish') sawStepFinish.value = true;
-    for (const listener of ctx.lineListeners) listener(line);
-  });
 
 const startRun = (ctx: Ctx, text: string): void => {
   const child = ctx.doSpawn(ctx.command, runArgs(ctx.options, ctx.sessionId, text), {
@@ -130,22 +143,32 @@ const startRun = (ctx: Ctx, text: string): void => {
     // Its own process group, so interrupting or closing a run reaches the MCP server it spawned.
     detached: true,
   });
-  const sawStepFinish = { value: false };
-  child.stdout?.on('data', onData(ctx, sawStepFinish));
+  const run: Run = { child, exited: Promise.resolve(null), sawStop: false, interrupting: false };
+  child.stdout?.on(
+    'data',
+    splitLines((line) => {
+      const parsed = parseOpencodeLine(line);
+      if (parsed?.kind === 'step_start' && ctx.sessionId === null) ctx.sessionId = parsed.sessionId;
+      if (parsed?.kind === 'step_finish' && parsed.reason === 'stop') run.sawStop = true;
+      for (const listener of ctx.lineListeners) listener(line);
+    }),
+  );
   child.stderr?.on('data', ctx.stderr.push);
   child.on('error', () => {});
-  const exited = new Promise<number | null>((resolve) => {
+  run.exited = new Promise<number | null>((resolve) => {
     child.once('exit', (code) => {
-      if (ctx.run?.child === child) ctx.run = null;
+      if (ctx.run === run) ctx.run = null;
       resolve(code);
-      onRunExit(ctx, code, sawStepFinish.value);
+      const next = onRunExit(ctx, run, code) ? ctx.pending.shift() : undefined;
+      if (next !== undefined) startRun(ctx, next);
     });
   });
-  ctx.run = { child, exited };
+  ctx.run = run;
 };
 
 const closeRun = async (ctx: Ctx): Promise<number | null> => {
   ctx.closed = true;
+  ctx.pending = [];
   if (ctx.run === null) {
     fireExit(ctx, null);
     return null;
@@ -165,21 +188,25 @@ export const spawnOpencode = (options: SpawnOpencodeOptions): AgentProcess => {
     stderr: stderrTail(),
     sessionId: options.resume ?? null,
     run: null,
+    pending: [],
     closed: false,
-    interrupting: false,
     exitFired: false,
   };
   return {
-    // opencode `run` takes the message as an argv positional; a fresh run per turn (ADR 0027).
+    // opencode `run` takes the message as an argv positional; a fresh run per turn (ADR 0027). A
+    // send while a run is active queues behind it rather than spawning a second `--session` child.
     // Attachments/images ride opencode's `-f` file paths, out of scope here (ADR 0027 Consequences).
     send: (text) => {
-      if (!ctx.closed) startRun(ctx, text);
+      if (ctx.closed) return;
+      if (ctx.run === null) startRun(ctx, text);
+      else ctx.pending.push(text);
     },
-    // Ends the CURRENT run (SIGTERM→SIGKILL of its group, close-child.ts) without ending the
-    // wrapper: the swallowed exit keeps it alive for the next turn.
+    // Ends the CURRENT run (SIGTERM→SIGKILL of its group, close-child.ts) and drops any queued
+    // turns, without ending the wrapper: the swallowed exit keeps it alive for the next `send`.
     interrupt: () => {
+      ctx.pending = [];
       if (ctx.run === null) return;
-      ctx.interrupting = true;
+      ctx.run.interrupting = true;
       void closeChild(ctx.run.child, ctx.run.exited, options.close);
     },
     onLine: (listener) => {
@@ -191,6 +218,7 @@ export const spawnOpencode = (options: SpawnOpencodeOptions): AgentProcess => {
     close: () => closeRun(ctx),
     kill: () => {
       ctx.closed = true;
+      ctx.pending = [];
       if (ctx.run === null) fireExit(ctx, null);
       else killChildGroup(ctx.run.child);
     },
