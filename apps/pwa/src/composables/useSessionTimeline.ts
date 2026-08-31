@@ -26,7 +26,8 @@ const pageSize = 200;
 // `task.progress` only feeds the agents strip.
 const hiddenTypes = new Set(['raw', 'rate_limit', 'files.changed', 'task.progress']);
 
-// A /compact turn is in flight when the latest top-level `msg.user` is exactly `/compact` and no
+// A /compact turn is in flight when the latest top-level `msg.user` is `/compact` — bare, or with
+// a focus argument (a self-compaction via the flux_compact tool queues `/compact <focus>`) — and no
 // `compact.boundary` has been logged since. The compaction is a black box with no incremental
 // progress, so the indicator it drives is indeterminate; the caller adds that the session is
 // `running` (architecture.md § Adapter, protocol.md § 5).
@@ -34,8 +35,10 @@ const awaitingCompact = (events: readonly FluxEvent[]): boolean => {
   let awaiting = false;
   for (const event of events) {
     if (event.parent !== undefined || !fluxEvent.isKnown(event)) continue;
-    if (event.type === 'msg.user') awaiting = event.payload.text.trim() === '/compact';
-    else if (event.type === 'compact.boundary') awaiting = false;
+    if (event.type === 'msg.user') {
+      const text = event.payload.text.trim();
+      awaiting = text === '/compact' || text.startsWith('/compact ');
+    } else if (event.type === 'compact.boundary') awaiting = false;
   }
   return awaiting;
 };
