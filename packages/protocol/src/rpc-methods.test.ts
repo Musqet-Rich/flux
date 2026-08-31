@@ -163,6 +163,16 @@ const cases: [RpcMethod, unknown, boolean][] = [
   ['daemon.update', {}, false],
   ['daemon.checkUpdate', {}, true],
   ['daemon.checkUpdate', { extra: 1 }, false],
+  ['shell.run', { command: 'ls' }, true],
+  ['shell.run', { command: 'ls', cwd: 'repo' }, true],
+  ['shell.run', { command: '' }, false],
+  ['shell.run', { command: 1 }, false],
+  ['shell.run', { command: 'ls', cwd: '' }, false],
+  ['shell.run', { command: 'ls', cwd: 5 }, false],
+  ['shell.run', {}, false],
+  ['shell.interrupt', { runId: 'r1' }, true],
+  ['shell.interrupt', { runId: '' }, false],
+  ['shell.interrupt', {}, false],
 ];
 
 test.each(cases)('%s params %j accepted=%s', (method, value, expected) => {
@@ -170,5 +180,5 @@ test.each(cases)('%s params %j accepted=%s', (method, value, expected) => {
 });
 
 test('covers every method in protocol.md § 7', () => {
-  expect(Object.keys(rpcMethods)).toHaveLength(43);
+  expect(Object.keys(rpcMethods)).toHaveLength(45);
 });

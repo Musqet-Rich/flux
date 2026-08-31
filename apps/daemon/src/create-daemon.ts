@@ -1,10 +1,10 @@
-import type { FluxEvent, HarnessKind } from '@flux/protocol';
+import type { Ephemeral, FluxEvent, HarnessKind } from '@flux/protocol';
 
 import { createAgentCommands } from './create-agent-commands.ts';
 import type { AttachedControl } from './attach-control.ts';
 import { attachControl } from './attach-control.ts';
-import type { HostTransport, TransportStatus } from './connect-relay.ts';
-import { connectRelay } from './connect-relay.ts';
+import type { HostTransport, ShellRunner, TransportStatus } from './connect-relay.ts';
+import { connectRelay, createShellRunner } from './connect-relay.ts';
 import { createUpdateService } from './create-update-service.ts';
 import type { NotifierOptions } from './create-notifier.ts';
 import { createNotifier } from './create-notifier.ts';
@@ -75,63 +75,77 @@ interface Parts {
   control: AttachedControl;
   gate: PairingGate;
   agents: HarnessKind[];
+  shell: ShellRunner;
 }
 
 // Store first so a device that is already gone from trust cannot re-handshake while its channel
-// is being told; then push, then the channel.
+// is being told; then push, kill any command it was running (ADR 0026, no orphans), then the
+// channel.
 const revoker =
-  (services: Services, transport: () => HostTransport) =>
+  (services: Services, transport: () => HostTransport, shell: ShellRunner) =>
   async (deviceId: string): Promise<void> => {
     services.devices.remove(deviceId);
     services.push.removeDevice(deviceId);
+    shell.disconnect(deviceId);
     await transport().revoke(deviceId);
   };
 
-const assemble = ({ services, supervisors, transport, control, gate, agents }: Parts): Daemon => {
-  let lock: ReturnType<Services['lock']> | null = null;
-  let stopped = false;
+interface DaemonState {
+  lock: ReturnType<Services['lock']> | null;
+  stopped: boolean;
+}
+
+const startDaemon = async (parts: Parts, state: DaemonState) => {
+  state.lock = parts.services.lock();
+  try {
+    // First-run seed of the default Agents (Help); idempotent, daemon-only (ADR 0008).
+    parts.services.settings.seedDefaults();
+    const settled = parts.services.settle();
+    await parts.control.listen();
+    parts.transport.start();
+    return settled;
+  } catch (error) {
+    state.lock.release();
+    state.lock = null;
+    throw error;
+  }
+};
+
+// Bounded shutdown (ADR 0017). Idempotent: a signal and a caller can both ask for it. `shell` is
+// stopped first so no operator command outlives the daemon (ADR 0026). The `setImmediate` lets the
+// aborted asks reach the control handlers and log `ask.answered` before the connections are torn
+// down, so an agent blocked in flux_ask gets its tool result and can leave on stdin EOF.
+const stopDaemon = async (parts: Parts, state: DaemonState): Promise<void> => {
+  if (state.stopped) return;
+  state.stopped = true;
+  parts.shell.stopAll();
+  parts.transport.stop();
+  parts.services.asks.close();
+  await new Promise<void>((resolve) => {
+    setImmediate(resolve);
+  });
+  await parts.control.close();
+  await parts.supervisors.closeAll();
+  parts.services.close();
+  state.lock?.release();
+  state.lock = null;
+};
+
+const assemble = (parts: Parts): Daemon => {
+  const { services, supervisors, transport, control, gate, agents, shell } = parts;
+  const state: DaemonState = { lock: null, stopped: false };
   return {
-    start: async () => {
-      lock = services.lock();
-      try {
-        // First-run seed of the default Agents (Help); idempotent, daemon-only (ADR 0008).
-        services.settings.seedDefaults();
-        const settled = services.settle();
-        await control.listen();
-        transport.start();
-        return settled;
-      } catch (error) {
-        lock.release();
-        lock = null;
-        throw error;
-      }
-    },
-    // Idempotent: a signal and a caller can both ask for it, and the second is a no-op.
-    stop: async () => {
-      if (stopped) return;
-      stopped = true;
-      transport.stop();
-      services.asks.close();
-      // The aborted answers reach the control handlers on later microtasks; let them log
-      // `ask.answered` and reply, so an agent blocked in flux_ask gets its tool result and can
-      // leave on stdin EOF, before the connections are destroyed.
-      await new Promise<void>((resolve) => {
-        setImmediate(resolve);
-      });
-      await control.close();
-      await supervisors.closeAll();
-      services.close();
-      lock?.release();
-      lock = null;
-    },
+    start: () => startDaemon(parts, state),
+    stop: () => stopDaemon(parts, state),
     abandon: () => {
+      shell.stopAll();
       supervisors.killAll();
-      lock?.release();
-      lock = null;
+      state.lock?.release();
+      state.lock = null;
     },
     pairingUrl: gate.url,
     devices: services.devices.devices,
-    removeDevice: revoker(services, () => transport),
+    removeDevice: revoker(services, () => transport, shell),
     status: transport.status,
     controlSocket: control.path,
     agents,
@@ -169,6 +183,36 @@ const emitter =
     void notifier.notify(event);
   };
 
+// The three fan-out sinks the composition root wires once: logged events to devices + notifier, the
+// session-less ephemeral broadcast, and the command runner (ADR 0026) that broadcasts through it.
+const signals = (
+  notifier: { notify: (event: FluxEvent) => Promise<void> },
+  transport: () => HostTransport,
+  reposDir: string,
+) => {
+  const emitEphemeral = (data: Ephemeral): void =>
+    void transport().broadcast({ kind: 'ephemeral', data });
+  const shell = createShellRunner({ reposDir, emitEphemeral });
+  return { emit: emitter(notifier, transport), emitEphemeral, shell };
+};
+
+// The session supervisor pool, with an optional close-grace override folded in (the object spread
+// keeps `exactOptionalPropertyTypes` happy when the config leaves it unset).
+const buildSupervisors = (
+  services: Services,
+  pool: ReturnType<typeof createAgentCommands>['pool'],
+  emit: (event: FluxEvent) => void,
+  emitEphemeral: (data: Ephemeral) => void,
+  closeGraceMs: number | undefined,
+): SupervisorPool =>
+  createSupervisorPool({
+    ...services,
+    ...pool,
+    emit,
+    emitEphemeral,
+    ...(closeGraceMs === undefined ? {} : { closeGraceMs }),
+  });
+
 interface ContextExtra {
   notifier: { vapidPublicKey: string };
   agents: HarnessKind[];
@@ -176,6 +220,7 @@ interface ContextExtra {
   forget: (session: string) => void;
   revokeDevice: (deviceId: string) => Promise<void>;
   update: ReturnType<typeof createUpdateService>;
+  shell: ShellRunner;
 }
 
 // The handler context (handler-context.ts): the stores plus the daemon-level services an RPC
@@ -191,6 +236,7 @@ const daemonContext = (services: Services, config: DaemonConfig, extra: ContextE
   forgetAgentSession: extra.forget,
   revokeDevice: extra.revokeDevice,
   update: extra.update,
+  shell: extra.shell,
 });
 
 export const createDaemon = async (config: DaemonConfig): Promise<Daemon> => {
@@ -200,25 +246,19 @@ export const createDaemon = async (config: DaemonConfig): Promise<Daemon> => {
   const gate = createPairingGate({ relayUrl, boxPub: identity.publicKey, ...services });
   const { push } = services;
   const notifier = await createNotifier({ push, subject, enabled: notifyEnabled(services) });
-  const emit = emitter(notifier, () => transport);
+  const { emit, emitEphemeral, shell } = signals(notifier, () => transport, config.reposDir);
   const control = attachControl({
     ...services,
     dataDir,
     supervisor: (record) => supervisors.get(record),
     emit,
     pairingUrl: gate.url,
-    revokeDevice: revoker(services, () => transport),
+    revokeDevice: revoker(services, () => transport, shell),
     // A getter for `ctx` (declared below), so the manager ops (ADR 0025) resolve it lazily.
     ctx: () => ctx,
   });
   const { agents, pool, forget } = createAgentCommands({ ...config, controlSocket: control.path });
-  const supervisors = createSupervisorPool({
-    ...services,
-    ...pool,
-    emit,
-    emitEphemeral: (data) => void transport.broadcast({ kind: 'ephemeral', data }),
-    ...(config.closeGraceMs === undefined ? {} : { closeGraceMs: config.closeGraceMs }),
-  });
+  const supervisors = buildSupervisors(services, pool, emit, emitEphemeral, config.closeGraceMs);
   const update = createUpdateService(
     config,
     () => transport,
@@ -229,8 +269,9 @@ export const createDaemon = async (config: DaemonConfig): Promise<Daemon> => {
     agents,
     supervisors,
     forget,
-    revokeDevice: revoker(services, () => transport),
+    revokeDevice: revoker(services, () => transport, shell),
     update,
+    shell,
   });
   const handlers = createRpcHandlers(ctx, emit);
   const transport = await connectRelay({
@@ -239,7 +280,8 @@ export const createDaemon = async (config: DaemonConfig): Promise<Daemon> => {
     deviceByKey: services.devices.deviceByKey,
     pairingOpen: gate.open,
     handlers,
+    onDeviceGone: shell.disconnect,
   });
-  const daemon = assemble({ services, supervisors, transport, control, gate, agents });
+  const daemon = assemble({ services, supervisors, transport, control, gate, agents, shell });
   return daemon;
 };

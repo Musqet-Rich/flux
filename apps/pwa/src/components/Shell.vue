@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, defineAsyncComponent, ref } from 'vue';
 
 import type { Route, Router } from '../router/create-router.ts';
 import type { Store } from '../store/create-store.ts';
@@ -12,6 +12,10 @@ import SettingsView from './SettingsView.vue';
 import StatusBar from './StatusBar.vue';
 
 // The paired app: tabs on top, the routed screen in the middle, status at the bottom.
+
+// Loaded on demand: the runner is a rarely-opened screen, and this also keeps Shell within its
+// dependency budget (a static import would make it one over).
+const CommandRunner = defineAsyncComponent(() => import('./CommandRunner.vue'));
 
 const props = defineProps<{ store: Store; router: Router }>();
 
@@ -53,6 +57,16 @@ const enablePush = (): void => {
     />
     <button
       type="button"
+      class="gear term"
+      :class="{ active: route.name === 'runner' }"
+      aria-label="Command runner"
+      title="Run a command"
+      @click="go({ name: 'runner' })"
+    >
+      &gt;_
+    </button>
+    <button
+      type="button"
       class="gear help"
       aria-label="Ask about Flux"
       title="Ask about Flux"
@@ -84,6 +98,11 @@ const enablePush = (): void => {
     <NewSessionView v-else-if="route.name === 'new'" :store="store" @created="openSession" />
     <SettingsView
       v-else-if="route.name === 'settings'"
+      :store="store"
+      @back="go({ name: 'sessions' })"
+    />
+    <CommandRunner
+      v-else-if="route.name === 'runner'"
       :store="store"
       @back="go({ name: 'sessions' })"
     />
@@ -128,6 +147,12 @@ const enablePush = (): void => {
 
 .gear.active {
   color: var(--fg);
+}
+
+.term {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.95rem;
+  font-weight: 600;
 }
 
 .body {

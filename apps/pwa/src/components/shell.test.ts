@@ -32,6 +32,7 @@ const stubs = {
   NewSessionView: true,
   ArchivedSessions: true,
   StatusBar: true,
+  CommandRunner: true,
 };
 
 const helpSummary = {
@@ -56,6 +57,19 @@ test('renders the ⓘ button before the gear and opens the help modal on click',
   expect(wrapper.findComponent(HelpModal).exists()).toBe(false);
   await info.trigger('click');
   expect(wrapper.findComponent(HelpModal).exists()).toBe(true);
+  box.store.stop();
+});
+
+test('the command-runner button opens the runner view (ADR 0026)', async () => {
+  const box = await pairedStore([]);
+  const router = createRouter(memoryHistory());
+  const wrapper = mount(Shell, { props: { store: box.store, router }, global: { stubs } });
+  const button = wrapper.get('button[aria-label="Command runner"]');
+  expect(button.attributes('title')).toBe('Run a command');
+  expect(wrapper.find('command-runner-stub').exists()).toBe(false);
+  await button.trigger('click');
+  expect(router.current.route).toMatchObject({ name: 'runner' });
+  expect(wrapper.find('command-runner-stub').exists()).toBe(true);
   box.store.stop();
 });
 

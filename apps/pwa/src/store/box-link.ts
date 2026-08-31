@@ -197,9 +197,43 @@ const onNotice = (view: LogView, data: Ephemeral): void => {
   }
 };
 
+// The runner's client scrollback is bounded (ADR 0026): a run keeps at most this much text, so a
+// noisy command cannot flood the DOM; the oldest is dropped once it overruns.
+const runnerOutputCap = 256 * 1024;
+
+const onShellOutput = (i: StoreInternals, runId: string, chunk: string): void => {
+  const run = i.state.runner.runs.find((r) => r.runId === runId);
+  if (run === undefined) return;
+  const combined = run.output + chunk;
+  run.output =
+    combined.length > runnerOutputCap
+      ? combined.slice(combined.length - runnerOutputCap)
+      : combined;
+};
+
+const onShellExit = (
+  i: StoreInternals,
+  data: { runId: string; code: number | null; signal: string | null; truncated: boolean },
+): void => {
+  const run = i.state.runner.runs.find((r) => r.runId === data.runId);
+  if (run !== undefined)
+    run.exit = { code: data.code, signal: data.signal, truncated: data.truncated };
+  if (i.state.runner.activeRunId === data.runId) i.state.runner.activeRunId = null;
+};
+
 const onEphemeral = (i: StoreInternals, data: Ephemeral): void => {
   if (data.type === 'device.revoked') {
     if (data.deviceId === i.deviceId) void unpair(i, revokedReason);
+    return;
+  }
+  // The command-runner notices are session-less (ADR 0026): output accumulates on its run, exit
+  // records the code/signal and re-enables the input. Both may be dropped, which is acceptable.
+  if (data.type === 'shell.output') {
+    onShellOutput(i, data.runId, data.chunk);
+    return;
+  }
+  if (data.type === 'shell.exited') {
+    onShellExit(i, data);
     return;
   }
   // The two self-update notices are session-less (protocol.md § 6): progress advances the phase,

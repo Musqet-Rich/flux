@@ -162,4 +162,6 @@ export const rpcResults: ResultGuards = {
     isString(v['mime']) &&
     isString(v['name']),
   'attach.delete': isEmpty,
+  'shell.run': (v): v is { runId: string } => isRecord(v) && isString(v['runId']),
+  'shell.interrupt': isEmpty,
 };

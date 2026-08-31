@@ -131,6 +131,23 @@ test('flux_help answers locally from the bundled manual and makes no control req
   server.close();
 });
 
+// The operator command runner (ADR 0026 § 1) is deliberately never an agent tool: an agent must
+// have no path to run one-off shell commands through Flux. The advertised set is exactly the four
+// operator-channel tools, and asking for a shell tool is just an unknown tool.
+test('exposes no command-runner tool to the agent (ADR 0026 § 1)', async () => {
+  const server = start();
+  const list = await server.call('tools/list');
+  const names = (list['result'] as { tools: { name: string }[] }).tools.map((t) => t.name);
+  expect(names).toEqual(['flux_ask', 'flux_notify', 'flux_compact', 'flux_help']);
+  expect(names.some((name) => /shell|command|exec|\brun\b|terminal/iu.test(name))).toBe(false);
+  const asked = await server.call('tools/call', {
+    name: 'shell.run',
+    arguments: { command: 'ls' },
+  });
+  expect(asked['result']).toMatchObject({ isError: true });
+  server.close();
+});
+
 test('unknown tools and methods are reported, not fatal', async () => {
   const server = start();
   const bad = await server.call('tools/call', { name: 'nope', arguments: {} });
