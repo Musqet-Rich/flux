@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdir, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, expect, test } from 'vitest';
@@ -52,4 +52,24 @@ test('reuses an existing repo even when init/emptyCommit would throw', async () 
     emptyCommit: () => Promise.reject(new Error('must not commit again')),
   };
   await expect(ensureHelpRepo(dataDir, guard)).resolves.toBe(join(dataDir, 'help'));
+});
+
+test('concurrent calls on a fresh box build the repo once, never a double-init', async () => {
+  let inits = 0;
+  let commits = 0;
+  const spy = {
+    init: async (repo: string): Promise<void> => {
+      inits += 1;
+      await mkdir(join(repo, '.git'), { recursive: true });
+    },
+    emptyCommit: (): Promise<void> => {
+      commits += 1;
+      return Promise.resolve();
+    },
+  };
+  const [a, b] = await Promise.all([ensureHelpRepo(dataDir, spy), ensureHelpRepo(dataDir, spy)]);
+  expect(a).toBe(join(dataDir, 'help'));
+  expect(b).toBe(a);
+  expect(inits).toBe(1);
+  expect(commits).toBe(1);
 });
