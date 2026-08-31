@@ -46,6 +46,7 @@ const pairedSession = async () => {
     pushSubject: 'mailto:ops@example.com',
     claudeCommand: fake,
     piCommand: 'no-such-binary-anywhere',
+    opencodeCommand: 'no-such-binary-anywhere',
     claudeDir: join(root, 'claude'),
   });
   await daemon.start();

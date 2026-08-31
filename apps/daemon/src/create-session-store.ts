@@ -69,7 +69,8 @@ export interface SessionStoreOptions {
 
 // The `agent` column predates ADR 0023 and stores the harness value (`claude`/`pi`); the value
 // does not migrate, so the column keeps its name while the field is `harness`.
-const harnessOf = (value: unknown): HarnessKind => (value === 'pi' ? 'pi' : 'claude');
+const harnessOf = (value: unknown): HarnessKind =>
+  value === 'pi' ? 'pi' : value === 'opencode' ? 'opencode' : 'claude';
 
 const stringOrUndefined = (value: unknown): string | undefined =>
   typeof value === 'string' && value.length > 0 ? value : undefined;

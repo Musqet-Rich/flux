@@ -75,7 +75,7 @@ export interface SettingsPatch {
 
 const { isString, isBoolean, isRecord, isArrayOf, isOneOf, isOptional } = guards;
 
-const isHarnessKind = (v: unknown): v is HarnessKind => isOneOf(v, ['claude', 'pi']);
+const isHarnessKind = (v: unknown): v is HarnessKind => isOneOf(v, ['claude', 'pi', 'opencode']);
 
 // `model`/`effort`/`role` are loose free-text (ADR 0023 § 3): non-empty, not enum membership.
 const isFilledString = (v: unknown): v is string => isString(v) && v.length > 0;

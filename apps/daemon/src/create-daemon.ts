@@ -38,6 +38,9 @@ export interface DaemonConfig {
   // pi's `--provider` / `--model`; unset, pi uses its own settings.json defaults.
   piProvider?: string;
   piModel?: string;
+  // The opencode binary (`FLUX_OPENCODE`), default `opencode` on PATH (ADR 0027); absent is fine,
+  // opencode simply does not appear in `hello.agents` and cannot be picked.
+  opencodeCommand?: string;
   // The flux user's `~/.claude`; the PWA edits CLAUDE.md and settings.json there.
   claudeDir: string;
   // How patiently each agent is closed on stop, per stage (close-child.ts).

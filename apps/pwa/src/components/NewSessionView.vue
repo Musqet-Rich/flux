@@ -49,7 +49,8 @@ const prompt = ref('');
 const busy = ref(false);
 const failure = ref<string | null>(null);
 
-const harnessLabel = (kind: HarnessKind): string => (kind === 'claude' ? 'Claude Code' : 'Pi');
+const harnessLabel = (kind: HarnessKind): string =>
+  kind === 'claude' ? 'Claude Code' : kind === 'pi' ? 'Pi' : 'opencode';
 
 // Selecting a saved Agent seeds Model and Effort from it; None leaves the inputs alone.
 const agentPick = computed({

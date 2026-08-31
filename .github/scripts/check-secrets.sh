@@ -21,7 +21,11 @@
 # that is a deliberate non-secret (a fixture, a documented example) can carry the marker
 # `secrets-allow` anywhere on the line to be skipped, which is visible in review.
 # This script's own sources and its test are excluded by path: they contain the
-# shapes by necessity. No dependencies beyond git and POSIX sh (awk, grep).
+# shapes by necessity. `test/fixtures/` is excluded too (as it is from the
+# added-lines gate): fixtures are captured real agent output, never hand-edited
+# (engineering.md § Testing), so they may carry high-entropy ids or content
+# hashes and cannot take an inline marker without ceasing to be valid captures.
+# No dependencies beyond git and POSIX sh (awk, grep).
 set -eu
 
 case "${1:-}" in
@@ -74,6 +78,7 @@ regex=$(printf '%s\n' "$patterns" | paste -sd '|' -)
 # shellcheck disable=SC2086
 added=$(git diff --no-color --no-ext-diff --no-textconv --diff-filter=AM -U0 $diff_args -- . \
   ':(exclude).github/scripts/check-secrets.sh' ':(exclude).github/scripts/test-secrets.sh' \
+  ':(exclude,glob)**/test/fixtures/**' \
   | awk '
     /^\+\+\+ b\// { file = substr($0, 7); next }
     /^@@/ { n = $3; sub(/^\+/, "", n); sub(/,.*/, "", n); line = n + 0; next }

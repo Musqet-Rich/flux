@@ -174,6 +174,10 @@ run ok  'the scanner itself is excluded by path'
 printf 'aws = %s%s\n' AKIA "$(rep A 16)" >>.github/scripts/test-secrets.sh
 run ok  'the test file is excluded by path'
 
+mkdir -p apps/daemon/test/fixtures
+printf '{"snapshot":"%s"}\n' "$(rep 0a 20)" >>apps/daemon/test/fixtures/capture.jsonl
+run ok  'captured fixtures are excluded by path'
+
 printf 'aws = %s%s\n' AKIA "$(rep A 16)" >>src/a.ts
 git add -A && git commit -qm 'chore(repo): leak' --no-verify
 printf 'clean\n' >>src/a.ts

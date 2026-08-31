@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { createMcpConfig } from './create-mcp-config.ts';
 import type { SupervisorPoolOptions } from './create-supervisor-pool.ts';
 import { detectAgents } from './detect-agents.ts';
+import { createOpencodeConfig } from './opencode/create-opencode-config.ts';
 import { piExtensionPath } from './pi/pi-extension-path.ts';
 
 // Everything about the harness binaries (not their config files, that is create-harness-config.ts) the daemon resolves once at start: which ones exist, and
@@ -17,11 +18,12 @@ export interface AgentCommandsInput {
   piCommand?: string;
   piProvider?: string;
   piModel?: string;
+  opencodeCommand?: string;
 }
 
 export interface AgentCommands {
   agents: HarnessKind[];
-  pool: Pick<SupervisorPoolOptions, 'claudeCommand' | 'pi' | 'mcpConfig' | 'env'>;
+  pool: Pick<SupervisorPoolOptions, 'claudeCommand' | 'pi' | 'opencode' | 'mcpConfig' | 'env'>;
   // Drops what the agent kept for a session once it is archived: pi's session file (Claude's
   // transcript stays; ADR 0007 reads it as a source).
   forget: (session: string) => void;
@@ -45,7 +47,11 @@ const forgetPiSession = (sessionDir: string, session: string): void => {
 };
 
 export const createAgentCommands = (input: AgentCommandsInput): AgentCommands => ({
-  agents: detectAgents({ claude: input.claudeCommand ?? 'claude', pi: input.piCommand ?? 'pi' }),
+  agents: detectAgents({
+    claude: input.claudeCommand ?? 'claude',
+    pi: input.piCommand ?? 'pi',
+    opencode: input.opencodeCommand ?? 'opencode',
+  }),
   forget: (session) => {
     forgetPiSession(join(input.dataDir, 'pi-sessions'), session);
   },
@@ -58,6 +64,10 @@ export const createAgentCommands = (input: AgentCommandsInput): AgentCommands =>
       ...(input.piCommand === undefined ? {} : { command: input.piCommand }),
       ...(input.piProvider === undefined ? {} : { provider: input.piProvider }),
       ...(input.piModel === undefined ? {} : { model: input.piModel }),
+    },
+    opencode: {
+      config: createOpencodeConfig({ dataDir: input.dataDir, controlSocket: input.controlSocket }),
+      ...(input.opencodeCommand === undefined ? {} : { command: input.opencodeCommand }),
     },
     // The pi extension reads these; Claude's MCP server gets the same pair from .mcp.json.
     env: (session) => ({

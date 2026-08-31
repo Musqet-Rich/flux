@@ -136,7 +136,8 @@ const dirty = computed(() => Object.keys(changed.value).length > 0);
 
 // Only harnesses the box found (`hello.agents`); the box refuses the others.
 const harnesses = computed((): HarnessKind[] => props.store.state.agents);
-const harnessLabel = (kind: HarnessKind): string => (kind === 'claude' ? 'Claude Code' : 'Pi');
+const harnessLabel = (kind: HarnessKind): string =>
+  kind === 'claude' ? 'Claude Code' : kind === 'pi' ? 'Pi' : 'opencode';
 const triggers = [
   { field: 'notifyOnAsk', text: 'the agent asks a question' },
   { field: 'notifyOnIdle', text: 'the agent goes idle' },

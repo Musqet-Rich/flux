@@ -24,7 +24,7 @@ const { isString, isBoolean, isNumber, isInteger, isRecord, isArrayOf, isOneOf, 
   guards;
 
 const sessionStates: readonly SessionState[] = ['idle', 'running', 'waiting_user', 'ended'];
-const harnessKinds: readonly HarnessKind[] = ['claude', 'pi'];
+const harnessKinds: readonly HarnessKind[] = ['claude', 'pi', 'opencode'];
 
 const isHarnessKind = (v: unknown): v is HarnessKind => isOneOf(v, harnessKinds);
 

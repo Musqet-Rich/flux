@@ -1,19 +1,15 @@
 import type { Ephemeral, FluxEvent } from '@flux/protocol';
 
-import { claudeAdapter } from './claude/claude-adapter.ts';
-import type { CloseChildOptions } from './close-child.ts';
-import type { AgentProcess } from './claude/spawn-claude.ts';
-import { spawnClaude } from './claude/spawn-claude.ts';
 import type { EventLog } from './create-event-log.ts';
 import type { GitService } from './create-git-service.ts';
 import type { SessionRecord, SessionStore } from './create-session-store.ts';
-import type { AgentAdapter, SessionSupervisor, SpawnRequest } from './create-session-supervisor.ts';
+import type { SessionSupervisor } from './create-session-supervisor.ts';
 import { createSessionSupervisor } from './create-session-supervisor.ts';
-import { piAdapter } from './pi/pi-adapter.ts';
-import { spawnPi } from './pi/spawn-pi.ts';
+import { forAgent } from './for-agent.ts';
 
 // One supervisor per live session, created on first use and closed on archive, restart or stop.
-// The session's harness picks the adapter pair (ADR 0007 for claude, ADR 0016 for pi).
+// The session's harness picks the adapter pair (for-agent.ts): ADR 0007 claude, ADR 0016 pi,
+// ADR 0027 opencode.
 
 export interface SupervisorPool {
   get: (record: SessionRecord) => SessionSupervisor;
@@ -32,12 +28,20 @@ export interface PiOptions {
   model?: string;
 }
 
+export interface OpencodeOptions {
+  command?: string;
+  // Writes the per-session opencode config (tools floor + role, ADR 0027 § 4/§ 5) under the flux
+  // data dir and returns its path for `OPENCODE_CONFIG`; nothing is written into the worktree.
+  config: (session: string, role?: string) => string;
+}
+
 export interface SupervisorPoolOptions {
   log: EventLog;
   sessions: SessionStore;
   git: GitService;
   claudeCommand?: string;
   pi?: PiOptions;
+  opencode?: OpencodeOptions;
   // Path of the per-session MCP config injecting the Flux tools (ADR 0008); a manager session
   // (ADR 0025) also gets the `flux-manager` server, so the second argument carries that flag.
   mcpConfig?: (session: string, manager: boolean) => string;
@@ -48,61 +52,6 @@ export interface SupervisorPoolOptions {
   // How patiently an agent is closed (close-child.ts); the daemon's shutdown budget rests on it.
   closeGraceMs?: number;
 }
-
-const closing = (options: SupervisorPoolOptions, session: string): CloseChildOptions => ({
-  ...(options.closeGraceMs === undefined ? {} : { graceMs: options.closeGraceMs }),
-  log: (stage) => {
-    console.error(`flux daemon: session ${session}: closing agent, ${stage}`);
-  },
-});
-
-const claudeSpawn =
-  (options: SupervisorPoolOptions, record: SessionRecord) =>
-  (request: SpawnRequest): AgentProcess =>
-    spawnClaude({
-      cwd: request.cwd,
-      ...(request.resume === undefined ? {} : { resume: request.resume }),
-      ...(options.claudeCommand === undefined ? {} : { command: options.claudeCommand }),
-      ...(options.mcpConfig === undefined
-        ? {}
-        : { mcpConfig: options.mcpConfig(request.session, record.manager === true) }),
-      ...(record.model === undefined ? {} : { model: record.model }),
-      ...(record.effort === undefined ? {} : { effort: record.effort }),
-      ...(record.role === undefined ? {} : { role: record.role }),
-      ...(record.tools === undefined ? {} : { tools: record.tools }),
-      close: closing(options, request.session),
-    });
-
-// The per-session model overrides pi's env default (`pi.model`); effort maps to `--thinking`.
-// With neither set, pi keeps today's behaviour (its `FLUX_PI_MODEL` default and own settings).
-const piSpawn =
-  (options: SupervisorPoolOptions, pi: PiOptions, record: SessionRecord) =>
-  (request: SpawnRequest): AgentProcess => {
-    const model = record.model ?? pi.model;
-    return spawnPi({
-      cwd: request.cwd,
-      session: request.session,
-      sessionDir: pi.sessionDir,
-      ...(pi.command === undefined ? {} : { command: pi.command }),
-      ...(pi.extension === undefined ? {} : { extension: pi.extension }),
-      ...(pi.provider === undefined ? {} : { provider: pi.provider }),
-      ...(model === undefined ? {} : { model }),
-      ...(record.effort === undefined ? {} : { thinking: record.effort }),
-      ...(record.role === undefined ? {} : { role: record.role }),
-      ...(options.env === undefined ? {} : { env: options.env(request.session) }),
-      close: closing(options, request.session),
-    });
-  };
-
-const forAgent = (
-  options: SupervisorPoolOptions,
-  record: SessionRecord,
-): { spawn: (request: SpawnRequest) => AgentProcess; adapter: AgentAdapter } => {
-  if (record.harness === 'pi' && options.pi !== undefined) {
-    return { spawn: piSpawn(options, options.pi, record), adapter: piAdapter(record.worktree) };
-  }
-  return { spawn: claudeSpawn(options, record), adapter: claudeAdapter(record.worktree) };
-};
 
 export const createSupervisorPool = (options: SupervisorPoolOptions): SupervisorPool => {
   const pool = new Map<string, SessionSupervisor>();

@@ -333,7 +333,7 @@ export const rpcMethods: ParamGuards = {
     isString(v['repo']) &&
     isString(v['branch']) &&
     isOptional(v['base'], isString) &&
-    isOneOf(v['harness'], ['claude', 'pi']) &&
+    isOneOf(v['harness'], ['claude', 'pi', 'opencode']) &&
     isOptional(v['title'], isString) &&
     isOptional(v['agent'], isFilledString) &&
     isOptional(v['model'], isFilledString) &&

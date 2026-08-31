@@ -109,6 +109,12 @@ test('advertises the five manager tools and forwards list and open', async () =>
     arguments: { repo: '/r', branch: 'feat', harness: 'claude', title: 'Sub' },
   });
   expect(text(opened)).toBe('Opened session new1 (Sub)');
+  // opencode is a first-class harness (ADR 0027): the choice is forwarded, not downgraded.
+  const openedOc = await server.call('tools/call', {
+    name: 'flux_session_open',
+    arguments: { repo: '/r', branch: 'oc', harness: 'opencode' },
+  });
+  expect(text(openedOc)).toBe('Opened session new1 (Sub)');
   expect(requests).toEqual([
     { type: 'sessions.list', session: 'm1' },
     {
@@ -119,6 +125,7 @@ test('advertises the five manager tools and forwards list and open', async () =>
       harness: 'claude',
       title: 'Sub',
     },
+    { type: 'session.open', session: 'm1', repo: '/r', branch: 'oc', harness: 'opencode' },
   ]);
   server.close();
 });
