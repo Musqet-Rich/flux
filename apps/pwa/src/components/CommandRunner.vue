@@ -73,7 +73,7 @@ watch(
     </div>
     <div ref="scrollback" class="scrollback">
       <p v-if="runner.runs.length === 0" class="empty">
-        Run a one-off command on the box. Each runs on its own — there is no shell state between
+        Run a one-off command on the box. Each runs on its own. There is no shell state between
         them.
       </p>
       <article v-for="run in runner.runs" :key="run.runId" class="run">

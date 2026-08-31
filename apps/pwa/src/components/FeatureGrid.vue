@@ -22,7 +22,7 @@ const features = [
   {
     num: '04',
     title: 'End-to-end encrypted',
-    body: 'A dumb relay you host passes encrypted bytes it cannot read. No accounts, no third parties.',
+    body: "A blind relay passes encrypted bytes even the host can't read. Hosted for you, or self-host it. No accounts, no third parties.",
   },
 ];
 </script>

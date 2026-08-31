@@ -2,11 +2,12 @@
 
 Give coding agents their own computer. Steer and review them from your phone.
 
-Flux runs Claude Code and pi.dev on a box you control with permissions bypassed, and gives you a small, fast remote GUI: agent chat, diffs with line comments, a file browser, one tab per worktree, and notifications when an agent needs you. The connection is end-to-end encrypted through a dumb relay you host — no accounts, no third parties.
+Flux runs Claude Code, pi.dev and opencode on a box you control with permissions bypassed, and gives you a small, fast remote GUI: agent chat, diffs with line comments, a file browser, one tab per worktree, and notifications when an agent needs you. The connection is end-to-end encrypted through a blind relay that passes bytes it cannot read, hosted for you at `https://fluxagent.me` or self-hosted. No accounts, no third parties.
 
 Three parts: the **relay** on a VPS behind Caddy (forwards encrypted frames, serves the web app), the **daemon** on the box (runs the agents), and the **PWA** on your phone or laptop.
 
-- **Run your own:** [`SELF_HOSTING.md`](SELF_HOSTING.md) — deploy the relay and the daemon.
+- **Get started:** install the daemon with `scripts/install.sh` and point it at the hosted relay at `https://fluxagent.me`.
+- **Run your own relay:** [`SELF_HOSTING.md`](SELF_HOSTING.md) deploys the relay and the daemon yourself.
 - **Hack on it:** [`DEVELOPMENT.md`](DEVELOPMENT.md) — build, test, and the dev loop.
 - **How it works:** [`docs/prd.md`](docs/prd.md), [`docs/architecture.md`](docs/architecture.md), [`docs/protocol.md`](docs/protocol.md), [`docs/engineering.md`](docs/engineering.md), [`docs/adr/`](docs/adr/).
 
@@ -14,7 +15,7 @@ Licence: MIT or Apache-2.0, at your option. See `LICENSE-MIT` and `LICENSE-APACH
 
 ## Using Flux
 
-Flux is self-hosted: once you have a relay on a VPS and a daemon on your box ([`SELF_HOSTING.md`](SELF_HOSTING.md)), everything below happens from the app in your browser.
+Flux runs a daemon on your box that reaches the app through a relay, hosted for you at `https://fluxagent.me` or self-hosted ([`SELF_HOSTING.md`](SELF_HOSTING.md)). Once the daemon is running, everything below happens from the app in your browser.
 
 ### Pair a device
 
@@ -38,7 +39,7 @@ The **Changes** screen lists the worktree's changed files. Open a diff to read i
 
 ### Settings
 
-The Settings screen edits what the box lets you change while it runs: the repositories directory, the default agent, and which events send a push. Values that only the environment sets (relay URL, data dir, push subject, the `claude` binary) are shown read-only. Below that are the agent's global `CLAUDE.md` and `settings.json` from the flux user's `~/.claude`, edited as text; `settings.json` is refused unless it is a JSON object.
+The Settings screen edits what the box lets you change while it runs: the repositories directory, the default **harness**, and which events send a push. Values that only the environment sets (relay URL, data dir, push subject, the `claude` binary) are shown read-only. Below that are the agent's global `CLAUDE.md` and `settings.json` from the flux user's `~/.claude`, edited as text; `settings.json` is refused unless it is a JSON object.
 
 ### Notifications
 

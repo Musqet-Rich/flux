@@ -79,7 +79,7 @@ const message = computed(() => {
         Scan QR code
       </button>
       <button v-if="active" type="button" class="stop" @click="stop">Stop camera</button>
-      <p class="divider">— Or paste the link —</p>
+      <p class="divider">· Or paste the link ·</p>
       <form class="paste" @submit.prevent="submit(link)">
         <label for="pair-link" class="visually-hidden">Or paste the link</label>
         <input

@@ -34,6 +34,7 @@ const onPair = (relayUrl: string, fragment: string): void => {
         <div class="nav-links">
           <a href="#get">./features</a>
           <a href="#setup">./setup</a>
+          <a href="https://github.com/Musqet-Rich/flux" target="_blank" rel="noopener">github ★</a>
           <a href="#pair" class="pair-now">pair --now</a>
         </div>
       </nav>
@@ -47,8 +48,8 @@ const onPair = (relayUrl: string, fragment: string): void => {
           <h1>Give coding agents their own <span class="accent">computer.</span></h1>
           <div class="hero-body">
             <p class="lede">
-              Run Claude Code and pi.dev on a box you control with permissions bypassed, on long
-              tasks — then steer and review them from your phone or laptop.
+              Run Claude Code, pi.dev and opencode on a box you control with permissions bypassed,
+              on long tasks, then steer and review them from your phone or laptop.
             </p>
             <div class="terminal">
               <div class="term-bar">
@@ -74,8 +75,13 @@ const onPair = (relayUrl: string, fragment: string): void => {
       </section>
 
       <footer class="footer">
-        <span>FLUX — A DUMB RELAY YOU HOST PASSES ENCRYPTED BYTES IT CANNOT READ.</span>
-        <span>MIT LICENSE</span>
+        <span
+          >FLUX · A BLIND RELAY PASSES ENCRYPTED BYTES EVEN THE HOST CAN'T READ · MIT /
+          APACHE-2.0</span
+        >
+        <a class="gh" href="https://github.com/Musqet-Rich/flux" target="_blank" rel="noopener"
+          >Star on GitHub ★</a
+        >
       </footer>
     </div>
   </main>
@@ -318,6 +324,15 @@ const onPair = (relayUrl: string, fragment: string): void => {
   font-size: 11px;
   letter-spacing: 0.1em;
   color: oklch(0.5 0.03 150);
+}
+
+.footer .gh {
+  color: oklch(0.7 0.04 150);
+  text-decoration: none;
+}
+
+.footer .gh:hover {
+  color: var(--flux-accent);
 }
 
 @keyframes flux-blink {
