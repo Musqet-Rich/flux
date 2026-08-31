@@ -18,8 +18,10 @@ import { openServices } from './open-services.ts';
 
 // Re-exported so the CLI (index.ts) reaches the install-dir detector through the daemon module it
 // already imports, keeping index.ts within its dependency budget; `distDir` is a DaemonConfig
-// field, so the detector belongs to this module's surface.
+// field, so the detector belongs to this module's surface. `runHelp` (the `flux help` seam) rides
+// the same channel: pure bundled text, no daemon, but routed here so index.ts stays within budget.
 export { detectDistDir } from './update/detect-dist-dir.ts';
+export { runHelp } from './help/run-help.ts';
 
 // Composition root: wires the stores, the git service, the session supervisors, the device
 // channels and the relay transport together (architecture.md § Daemon).
@@ -92,6 +94,8 @@ const assemble = ({ services, supervisors, transport, control, gate, agents }: P
     start: async () => {
       lock = services.lock();
       try {
+        // First-run seed of the default Agents (Help); idempotent, daemon-only (ADR 0008).
+        services.settings.seedDefaults();
         const settled = services.settle();
         await control.listen();
         transport.start();

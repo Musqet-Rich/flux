@@ -4,10 +4,13 @@ import { connect } from 'node:net';
 import { createInterface } from 'node:readline';
 
 import { DaemonError } from './daemon-error.ts';
+import { helpLookup } from './help/help-lookup.ts';
+import { manual } from './help/manual.ts';
 
-// The Flux MCP server (ADR 0008): a stdio JSON-RPC 2.0 server exposing flux_ask, flux_notify and
-// flux_compact to the agent, forwarding each call to the daemon over the control socket.
-// Spawned by the agent per session with FLUX_CONTROL_SOCKET and FLUX_SESSION in its env.
+// The Flux MCP server (ADR 0008): a stdio JSON-RPC 2.0 server exposing flux_ask, flux_notify,
+// flux_compact and flux_help to the agent. flux_ask/flux_notify/flux_compact forward to the daemon
+// over the control socket; flux_help answers LOCALLY from the bundled manual (help/manual.ts) with
+// no round-trip. Spawned by the agent per session with FLUX_CONTROL_SOCKET and FLUX_SESSION in env.
 
 const { isString, isRecord, isArrayOf, isOneOf } = guards;
 
@@ -58,6 +61,20 @@ const tools = [
         focus: {
           type: 'string',
           description: 'Optional instruction passed to /compact, e.g. what to preserve.',
+        },
+      },
+    },
+  },
+  {
+    name: 'flux_help',
+    description:
+      'Look something up in the flux operator manual and get back just the relevant slice, so you need not hold the whole manual in context. Answers locally and instantly. Omit the query for an overview and the list of topics.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: "What to look up, e.g. 'how do I pair a device'.",
         },
       },
     },
@@ -128,6 +145,10 @@ const callTool = async (name: unknown, args: unknown): Promise<string> => {
       isString(input['focus']) && input['focus'] !== '' ? { focus: input['focus'] } : {};
     await control({ type: 'compact', session, ...focus });
     return 'Compaction queued; it runs after this turn ends. This must be the last action in your turn.';
+  }
+  // Answered locally from the bundled manual: no control-socket round-trip, no daemon needed.
+  if (name === 'flux_help') {
+    return helpLookup(manual, isString(input['query']) ? input['query'] : undefined);
   }
   throw new DaemonError('bad_params', `unknown tool ${String(name)}`);
 };

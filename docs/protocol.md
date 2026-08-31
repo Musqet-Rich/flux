@@ -446,7 +446,7 @@ interface AgentSpec {
 // and `deny` carry a non-empty `list` of loose tool names (built-ins such as `Bash`, `Edit`;
 // suggested, not an enum); `list` is omitted for `all`/`none`, and present-but-for-`all`/`none`, or
 // an empty/blank-membered list for `allow`/`deny`, fails `settings.set` with `bad_params`. `none`
-// removes every non-Flux tool. The Flux tools (`flux_ask`/`flux_notify`/`flux_compact`) stay available in every
+// removes every non-Flux tool. The Flux tools (`flux_ask`/`flux_notify`/`flux_compact`/`flux_help`) stay available in every
 // mode — the box keeps them out of any denylist and they survive `none` (they ride on
 // `--mcp-config`). The resolved policy is persisted on the box's session row (not on the wire
 // summary) so a restart re-spawns identically.

@@ -166,6 +166,17 @@ test('flux devices ls needs no relay URL, opens a fresh data dir and exits clean
   expect(unknown.stderr).toContain('unknown command bogus');
 });
 
+test('flux help prints the bundled manual with no relay URL or daemon', async () => {
+  // Proof the manual is compiled into the binary (docs/ does not ship): the built index.mjs alone,
+  // with no data dir and no relay, answers from it and exits 0.
+  const overview = await runFlux(['help'], { HOME: dataDir });
+  expect(overview.code).toBe(0);
+  expect(overview.stdout).toContain('Topics');
+  const section = await runFlux(['help', 'pair'], { HOME: dataDir });
+  expect(section.code).toBe(0);
+  expect(section.stdout).toContain('# Pairing a device');
+});
+
 test('flux devices rm goes through a running daemon and falls back to the database', async () => {
   const env = { HOME: dataDir, FLUX_DATA_DIR: dataDir };
   const socketPath = join(dataDir, 'control.sock');

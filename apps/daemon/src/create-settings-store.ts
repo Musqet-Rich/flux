@@ -19,6 +19,10 @@ export interface SettingsStore {
   // list. A malformed or foreign-build row reads as no Agents rather than throwing.
   getAgents: () => AgentSpec[];
   setAgents: (agents: AgentSpec[]) => AgentSpec[];
+  // First-run seeding of the default Agents (the "Help" Agent). Runs once ever, guarded by a
+  // marker row: it adds "Help" only when no Agent of that name exists, and never re-adds it after
+  // the operator deletes it — so it neither clobbers an operator's edits nor resurrects a deletion.
+  seedDefaults: () => void;
 }
 
 export interface SettingsStoreOptions {
@@ -29,6 +33,18 @@ export interface SettingsStoreOptions {
 
 const key = 'flux';
 const agentsKey = 'agents';
+const seededKey = 'defaults_seeded';
+
+// The default "Help" Agent seeded on first run: a read-only assistant that answers the operator's
+// questions about flux from the bundled manual (via flux_help) and cannot touch the box. Its `deny`
+// tools strip Bash/Edit/Write; the Flux-tools floor (incl. flux_help) survives every mode (ADR 0023
+// § 5), so it can still reach the operator and look things up.
+const helpAgent: AgentSpec = {
+  name: 'Help',
+  harness: 'claude',
+  role: "You are the flux help agent. Answer the operator's natural-language questions about flux plainly and briefly. Use the flux_help tool to look things up in the manual rather than guessing. You cannot change their machine.",
+  tools: { mode: 'deny', list: ['Bash', 'Edit', 'Write'] },
+};
 
 const defaults = (reposDir: string): FluxSettings => ({
   reposDir,
@@ -111,6 +127,14 @@ export const createSettingsStore = (options: SettingsStoreOptions): SettingsStor
     setAgents: (agents) => {
       upsert.run(agentsKey, JSON.stringify(agents));
       return agents;
+    },
+    seedDefaults: () => {
+      if (select.get(seededKey) !== undefined) return;
+      upsert.run(seededKey, '1');
+      const agents = getAgents();
+      if (!agents.some((agent) => agent.name === helpAgent.name)) {
+        upsert.run(agentsKey, JSON.stringify([helpAgent, ...agents]));
+      }
     },
   };
 };

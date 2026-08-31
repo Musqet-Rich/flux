@@ -68,7 +68,7 @@ const start = (): Server => {
   };
 };
 
-test('initializes, lists both tools and forwards calls to the control socket', async () => {
+test('initializes, lists the flux tools, and forwards ask/notify/compact to the control socket', async () => {
   const server = start();
   const init = await server.call('initialize', { protocolVersion: '2024-11-05' });
   expect(init['result']).toMatchObject({
@@ -78,7 +78,7 @@ test('initializes, lists both tools and forwards calls to the control socket', a
   server.notify('notifications/initialized');
   const list = await server.call('tools/list');
   const tools = (list['result'] as { tools: { name: string }[] }).tools.map((t) => t.name);
-  expect(tools).toEqual(['flux_ask', 'flux_notify', 'flux_compact']);
+  expect(tools).toEqual(['flux_ask', 'flux_notify', 'flux_compact', 'flux_help']);
   const asked = await server.call('tools/call', {
     name: 'flux_ask',
     arguments: { question: 'deploy?', options: ['yes', 'no'] },
@@ -110,6 +110,24 @@ test('initializes, lists both tools and forwards calls to the control socket', a
     { type: 'compact', session: 's1' },
   ]);
   expect(await server.call('ping')).toMatchObject({ result: {} });
+  server.close();
+});
+
+test('flux_help answers locally from the bundled manual and makes no control request', async () => {
+  const server = start();
+  const helped = await server.call('tools/call', {
+    name: 'flux_help',
+    arguments: { query: 'how do I pair a device' },
+  });
+  expect(helped['result']).toMatchObject({
+    content: [{ type: 'text', text: expect.stringContaining('Pairing a device') }],
+  });
+  const overview = await server.call('tools/call', { name: 'flux_help', arguments: {} });
+  expect(overview['result']).toMatchObject({
+    content: [{ type: 'text', text: expect.stringContaining('Topics') }],
+  });
+  // The whole point: it is answered in-process, so nothing reached the control socket.
+  expect(requests).toEqual([]);
   server.close();
 });
 
