@@ -44,6 +44,10 @@ export interface DeviceChannelsOptions {
   pairingOpen: () => boolean;
   onMessage: (peer: Peer, message: Wire) => Promise<Wire | null>;
   now?: () => Date;
+  // A paired device just lost its last channel (its socket dropped, or its handshake went stale):
+  // the command runner (ADR 0026) kills any run it had, so no process is left with nobody to see
+  // it. Fired once per device, never on a revoke (that path tells the runner directly).
+  onDeviceGone?: (deviceId: string) => void;
 }
 
 // The relay admits this many guests per room (protocol.md § 2), so a device cannot hold more
@@ -124,8 +128,11 @@ const channelsOf = (state: State, fingerprint: string): Connected[] =>
 
 const forget = (state: State, entry: Connected): void => {
   const remaining = channelsOf(state, entry.peer.fingerprint).filter((c) => c !== entry);
-  if (remaining.length === 0) state.connected.delete(entry.peer.fingerprint);
-  else state.connected.set(entry.peer.fingerprint, remaining);
+  if (remaining.length === 0) {
+    state.connected.delete(entry.peer.fingerprint);
+    // The device is gone from the box (revoke nulls `device` first, so it does not fire here).
+    if (entry.peer.device !== null) state.options.onDeviceGone?.(entry.peer.device.deviceId);
+  } else state.connected.set(entry.peer.fingerprint, remaining);
 };
 
 const quietest = (entries: Connected[]): Connected | null =>
@@ -134,9 +141,13 @@ const quietest = (entries: Connected[]): Connected | null =>
 // The device's channels still in their handshake window; a stale one is forgotten on the way.
 const withoutStale = (state: State, fingerprint: string): Connected[] => {
   const deadline = state.now().getTime() - confirmWithinMs;
-  const live = channelsOf(state, fingerprint).filter((c) => c.confirmed || c.since > deadline);
-  if (live.length === 0) state.connected.delete(fingerprint);
-  else state.connected.set(fingerprint, live);
+  const all = channelsOf(state, fingerprint);
+  const live = all.filter((c) => c.confirmed || c.since > deadline);
+  if (live.length === 0) {
+    state.connected.delete(fingerprint);
+    const device = all.find((c) => c.peer.device !== null)?.peer.device ?? null;
+    if (all.length > 0 && device !== null) state.options.onDeviceGone?.(device.deviceId);
+  } else state.connected.set(fingerprint, live);
   return live;
 };
 
@@ -383,6 +394,11 @@ export const createDeviceChannels = (options: DeviceChannelsOptions): DeviceChan
         entries.slice(0, 1).map((entry) => entry.peer),
       ),
     reset: () => {
+      // The relay socket dropped: every device is gone from the box at once (ADR 0026).
+      for (const entries of state.connected.values()) {
+        const device = entries.find((e) => e.peer.device !== null)?.peer.device ?? null;
+        if (device !== null) state.options.onDeviceGone?.(device.deviceId);
+      }
       state.connected.clear();
     },
   };

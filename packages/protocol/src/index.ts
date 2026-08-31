@@ -8,7 +8,7 @@ export { bytes } from './bytes.ts';
 export { compress } from './compress.ts';
 export type { Channel, ChannelOptions } from './create-channel.ts';
 export { createChannel } from './create-channel.ts';
-export type { Ephemeral, UpdateFailReason, UpdatePhase } from './ephemeral.ts';
+export type { Ephemeral, ShellStream, UpdateFailReason, UpdatePhase } from './ephemeral.ts';
 export { ephemeral } from './ephemeral.ts';
 export type {
   ChangedFile,

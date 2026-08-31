@@ -2,7 +2,12 @@ import type { EnvSettings, HarnessKind, RpcMethods } from '@flux/protocol';
 
 import type { SessionRecord } from './create-session-store.ts';
 import type { SessionSupervisor } from './create-session-supervisor.ts';
+import type { ShellRunner } from './create-shell-runner.ts';
 import type { Services } from './open-services.ts';
+
+// Re-exported so the handler composition root (create-rpc-handlers.ts) reaches the handler-map
+// type through the context module it already imports, keeping it within its dependency budget.
+export type { RpcHandlers } from './create-rpc-router.ts';
 
 // What the `daemon.update` / `daemon.checkUpdate` handlers need (ADR 0021/0022): the running
 // version and the shared semver decide whether a target is installable; `distDir` is null on a
@@ -47,6 +52,8 @@ export interface HandlerContext {
   revokeDevice: (deviceId: string) => Promise<void>;
   // Self-update (ADR 0022): validates a `daemon.update` target and kicks off the install.
   update: UpdateService;
+  // Operator command runner (ADR 0026): one-off, ephemeral shell execution, keyed per device.
+  shell: ShellRunner;
 }
 
 // A types-only module still needs a runtime export named as the file for the module shape rule

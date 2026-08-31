@@ -7,6 +7,7 @@ const cases: [string, string, Route][] = [
   ['/', '', { name: 'sessions' }],
   ['/new', '', { name: 'new' }],
   ['/settings', '', { name: 'settings' }],
+  ['/runner', '', { name: 'runner' }],
   ['/s/abc', '', { name: 'session', session: 'abc' }],
   ['/s/abc/changes', '', { name: 'changes', session: 'abc' }],
   ['/s/a%2Fb/diff', '?path=src%2Fx.ts', { name: 'diff', session: 'a/b', path: 'src/x.ts' }],

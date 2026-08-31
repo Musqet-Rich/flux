@@ -276,6 +276,19 @@ export interface RpcMethods {
   };
   // Removes an attachment the operator took off the message before sending it.
   'attach.delete': { params: { attachmentId: string }; result: Record<string, never> };
+  // Operator command runner (ADR 0026): one-off, non-interactive command execution, reachable
+  // only by a paired device and never exposed as an agent/`flux_*` tool. `shell.run` spawns
+  // `sh -c <command>` with `cwd` defaulting to the repos dir (an optional `cwd` must resolve
+  // inside it, else `bad_params`) and returns a `runId` at once; its output arrives as the
+  // session-less `shell.output` / `shell.exited` ephemerals and is never logged. `conflict` when
+  // this device already has an active run (one at a time). `shell.interrupt` escalates
+  // SIGINT→SIGTERM→SIGKILL on that run; `not_found` for an unknown run or one owned by another
+  // device, so a device can never kill another's run.
+  'shell.run': {
+    params: { command: string; cwd?: string };
+    result: { runId: string };
+  };
+  'shell.interrupt': { params: { runId: string }; result: Record<string, never> };
 }
 
 export type RpcMethod = keyof RpcMethods;
@@ -411,4 +424,8 @@ export const rpcMethods: ParamGuards = {
     v['length'] <= attachment.limits.readBytes,
   'attach.delete': (v): v is RpcMethods['attach.delete']['params'] =>
     isRecord(v) && isString(v['attachmentId']),
+  'shell.run': (v): v is RpcMethods['shell.run']['params'] =>
+    isRecord(v) && isFilledString(v['command']) && isOptional(v['cwd'], isFilledString),
+  'shell.interrupt': (v): v is RpcMethods['shell.interrupt']['params'] =>
+    isRecord(v) && isFilledString(v['runId']),
 };

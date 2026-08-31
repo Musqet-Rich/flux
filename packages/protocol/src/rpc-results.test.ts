@@ -113,6 +113,8 @@ const cases: { [M in RpcMethod]: [ok: unknown, bad: unknown] } = {
     { current: '1.0.0', latest: null, available: false, verified: null },
     { current: 1, latest: null, available: false, verified: null },
   ],
+  'shell.run': [{ runId: 'r1' }, {}],
+  'shell.interrupt': [{}, 0],
 };
 
 test.each(Object.entries(cases))('%s result guard accepts and rejects', (method, [ok, bad]) => {

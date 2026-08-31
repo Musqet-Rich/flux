@@ -59,6 +59,11 @@ export interface Store extends SettingsActions, SessionActions {
   commit: (session: string, message: string, paths?: string[]) => Promise<string | null>;
   push: (session: string) => Promise<{ remote: string; branch: string } | null>;
   openPr: (session: string, pr: PrParams) => Promise<string | null>;
+  // The operator command runner (ADR 0026): starts a one-off command and returns its runId, or
+  // null with the failure in `state.error` (e.g. a `conflict` while one already runs). Its output
+  // streams into `state.runner` over the shell ephemerals; `shellInterrupt` stops a run.
+  shellRun: (command: string, cwd?: string) => Promise<string | null>;
+  shellInterrupt: (runId: string) => Promise<boolean>;
   call: Connection['call'];
   // The status bar's × on the shown error.
   dismissError: () => void;
@@ -163,6 +168,18 @@ const gitActions = (i: StoreInternals): Pick<Store, 'commit' | 'push' | 'openPr'
     outcome(i, async () => (await boxLink.call(i, 'git.pr', { session, ...pr })).url),
 });
 
+// A new run block is created only once the box has accepted the command and named the run, so
+// its streamed output (keyed by runId) always has a block to land on; `activeRunId` disables the
+// input until the run exits (one at a time).
+const shellRun = (i: StoreInternals, command: string, cwd?: string): Promise<string | null> =>
+  outcome(i, async () => {
+    const params = cwd === undefined ? { command } : { command, cwd };
+    const { runId } = await boxLink.call(i, 'shell.run', params);
+    i.state.runner.runs.push({ runId, command, output: '', exit: null });
+    i.state.runner.activeRunId = runId;
+    return runId;
+  });
+
 // The status bar's "Enable notifications": a refusal is an action error with the reason the
 // browser gave; one that says push can never work here takes the offer away for good.
 const enablePush = async (i: StoreInternals): Promise<boolean> => {
@@ -227,6 +244,9 @@ export const createStore = (options: StoreOptions): Store => {
     createHelpSession: (question) => createHelpSession(i, question),
     refreshSessions: () => boxLink.refreshSessions(i),
     ...gitActions(i),
+    shellRun: (command, cwd) => shellRun(i, command, cwd),
+    shellInterrupt: (runId) =>
+      boxLink.attempt(i, () => boxLink.call(i, 'shell.interrupt', { runId })),
     call: (method, params) => boxLink.call(i, method, params),
     ...controls(i),
   };

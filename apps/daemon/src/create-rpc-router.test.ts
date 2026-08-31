@@ -77,6 +77,8 @@ const handlers: RpcHandlers = {
   'attach.end': unimplemented,
   'attach.read': unimplemented,
   'attach.delete': unimplemented,
+  'shell.run': unimplemented,
+  'shell.interrupt': unimplemented,
 };
 
 const router = createRpcRouter(handlers);

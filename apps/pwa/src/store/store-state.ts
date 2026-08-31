@@ -107,6 +107,24 @@ export interface DaemonUpdate {
 // until Settings runs the first check.
 export type UpdateCheck = RpcMethods['daemon.checkUpdate']['result'];
 
+// One command in the operator command runner (ADR 0026). `output` is the interleaved stdout and
+// stderr as it streamed (ANSI colour intact, rendered by the runner view), bounded so a runaway
+// command cannot flood the DOM. `exit` is set once the process ends; `null` while it runs.
+export interface RunnerRun {
+  runId: string;
+  command: string;
+  output: string;
+  exit: { code: number | null; signal: string | null; truncated: boolean } | null;
+}
+
+// The command runner's client-only scrollback (ADR 0026 § 3): kept in memory while the app is
+// open, never persisted. `activeRunId` is the run in flight, or null when none is (the input is
+// enabled only then — one run at a time).
+export interface RunnerState {
+  runs: RunnerRun[];
+  activeRunId: string | null;
+}
+
 export interface StoreState {
   phase: StorePhase;
   status: ConnectionStatus;
@@ -136,6 +154,8 @@ export interface StoreState {
   // autocomplete read this. Null until first fetched; `[]` when the daemon lacks the method or is
   // offline, so the UI degrades to no skills rather than hanging on "loading".
   skills: Skill[] | null;
+  // The operator command runner's ephemeral scrollback (ADR 0026).
+  runner: RunnerState;
 }
 
 export interface StoreOptions {
@@ -197,4 +217,5 @@ export const storeState = (): StoreState =>
     devices: [],
     settings: null,
     skills: null,
+    runner: { runs: [], activeRunId: null },
   });

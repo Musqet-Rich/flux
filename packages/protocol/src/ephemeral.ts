@@ -15,9 +15,21 @@ export type Ephemeral =
   // reports each phase as it fetches, verifies, installs and restarts, or the reason it aborted.
   // Success has no event; the daemon exits and the device reads the new `hello.version`.
   | { type: 'update.progress'; phase: UpdatePhase }
-  | { type: 'update.failed'; reason: UpdateFailReason };
+  | { type: 'update.failed'; reason: UpdateFailReason }
+  // Command runner (ADR 0026), session-less like the update events: the daemon streams a one-off
+  // command's output as it arrives and reports its exit. `runId` names the run; nothing is logged.
+  | { type: 'shell.output'; runId: string; stream: ShellStream; chunk: string }
+  | {
+      type: 'shell.exited';
+      runId: string;
+      code: number | null;
+      signal: string | null;
+      truncated: boolean;
+    };
 
 export type UpdatePhase = 'fetching' | 'verifying' | 'installing' | 'restarting';
+
+export type ShellStream = 'stdout' | 'stderr';
 
 export type UpdateFailReason =
   | 'bad_signature'
@@ -35,6 +47,8 @@ const updateFailReasons: readonly UpdateFailReason[] = [
   'disk_error',
 ];
 
+const shellStreams: readonly ShellStream[] = ['stdout', 'stderr'];
+
 const { isString, isInteger, isBoolean, isRecord, isOneOf, isOptional } = guards;
 
 const is = (v: unknown): v is Ephemeral => {
@@ -42,6 +56,17 @@ const is = (v: unknown): v is Ephemeral => {
   if (v['type'] === 'device.revoked') return isString(v['deviceId']);
   if (v['type'] === 'update.progress') return isOneOf(v['phase'], updatePhases);
   if (v['type'] === 'update.failed') return isOneOf(v['reason'], updateFailReasons);
+  if (v['type'] === 'shell.output') {
+    return isString(v['runId']) && isOneOf(v['stream'], shellStreams) && isString(v['chunk']);
+  }
+  if (v['type'] === 'shell.exited') {
+    return (
+      isString(v['runId']) &&
+      (v['code'] === null || isInteger(v['code'])) &&
+      (v['signal'] === null || isString(v['signal'])) &&
+      isBoolean(v['truncated'])
+    );
+  }
   if (!isString(v['session'])) return false;
   switch (v['type']) {
     case 'delta':
