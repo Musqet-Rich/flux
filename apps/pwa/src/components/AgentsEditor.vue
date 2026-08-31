@@ -103,8 +103,9 @@ const notice = computed((): string | null => {
   return null;
 });
 
-const harnessLabel = (kind: HarnessKind): string => (kind === 'claude' ? 'Claude Code' : 'Pi');
-const harnesses: HarnessKind[] = ['claude', 'pi'];
+const harnessLabel = (kind: HarnessKind): string =>
+  kind === 'claude' ? 'Claude Code' : kind === 'pi' ? 'Pi' : 'opencode';
+const harnesses: HarnessKind[] = ['claude', 'pi', 'opencode'];
 
 const add = (): void => {
   rows.value.push(toRow({ name: '' }));

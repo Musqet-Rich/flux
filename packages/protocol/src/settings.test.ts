@@ -26,6 +26,7 @@ test.each([
   [{ flux, env, harnessConfig, agents: [] }, true],
   [{ flux, env, harnessConfig, agents: [{ name: 'bare' }] }, true],
   [{ flux: { ...flux, defaultHarness: 'pi' }, env, harnessConfig, agents }, true],
+  [{ flux: { ...flux, defaultHarness: 'opencode' }, env, harnessConfig, agents }, true],
   [{ flux: { ...flux, defaultHarness: 'gpt' }, env, harnessConfig, agents }, false],
   [{ flux: { ...flux, notifyOnDone: 'no' }, env, harnessConfig, agents }, false],
   [{ flux: { ...flux, reposDir: 1 }, env, harnessConfig, agents }, false],

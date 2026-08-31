@@ -22,6 +22,7 @@ const cases: [RpcMethod, unknown, boolean][] = [
   ['sessions.create', { repo: '/r', branch: 'b', harness: 'pi', base: 'main', title: 't' }, true],
   ['sessions.create', { repo: '/r', branch: 'b', harness: 'claude', model: 'opus' }, true],
   ['sessions.create', { repo: '/r', branch: 'b', harness: 'pi', effort: 'high' }, true],
+  ['sessions.create', { repo: '/r', branch: 'b', harness: 'opencode' }, true],
   ['sessions.create', { repo: '/r', branch: 'b', harness: 'claude', agent: 'reviewer' }, true],
   ['sessions.create', { repo: '/r', branch: 'b', harness: 'claude', agent: '' }, false],
   ['sessions.create', { repo: '/r', branch: 'b', harness: 'claude', agent: 7 }, false],

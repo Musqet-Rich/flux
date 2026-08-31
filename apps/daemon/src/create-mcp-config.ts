@@ -2,10 +2,13 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { fluxMcpEntry } from './flux-mcp-entry.ts';
+
 // Writes the per-session `.mcp.json` that injects the Flux tools into an agent (ADR 0008) and
-// returns its path for `--mcp-config`. The MCP server is this package's flux-mcp entry, run by
-// the same Node binary as the daemon. A manager session (ADR 0025) additionally gets a separate
-// `flux-manager` server, so the fleet-control tools never leak into an ordinary agent.
+// returns its path for `--mcp-config`. The MCP server is this package's flux-mcp entry (shared
+// with the opencode writer via flux-mcp-entry.ts), run by the same Node binary as the daemon. A
+// manager session (ADR 0025) additionally gets a separate `flux-manager` server, so the
+// fleet-control tools never leak into an ordinary agent.
 
 export interface McpConfigOptions {
   dataDir: string;
@@ -33,7 +36,7 @@ export const createMcpConfig = (
 ): ((session: string, manager: boolean) => string) => {
   const dir = join(options.dataDir, 'mcp');
   mkdirSync(dir, { recursive: true });
-  const fluxEntry = entryFor('./flux-mcp.ts', './flux-mcp.mjs');
+  const fluxEntry = fluxMcpEntry();
   const managerEntry = entryFor('./flux-manager-mcp.ts', './flux-manager-mcp.mjs');
   return (session, manager) => {
     const path = join(dir, `${session}.json`);

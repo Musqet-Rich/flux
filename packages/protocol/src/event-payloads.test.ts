@@ -29,6 +29,11 @@ const cases: [EventType, unknown, boolean][] = [
   ],
   [
     'session.created',
+    { repo: '/r', worktree: '/w', branch: 'b', base: 'abc', harness: 'opencode' },
+    true,
+  ],
+  [
+    'session.created',
     { repo: '/r', worktree: '/w', branch: 'b', base: 'abc', harness: 'gpt' },
     false,
   ],

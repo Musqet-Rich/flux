@@ -9,7 +9,7 @@ import { isCodeRef } from './is-code-ref.ts';
 const { isString, isBoolean, isNumber, isInteger, isRecord, isArrayOf, isOneOf, isOptional } =
   guards;
 
-const harnessKinds = ['claude', 'pi'] as const;
+const harnessKinds = ['claude', 'pi', 'opencode'] as const;
 export type HarnessKind = (typeof harnessKinds)[number];
 
 const sessionStates = ['idle', 'running', 'waiting_user', 'ended'] as const;

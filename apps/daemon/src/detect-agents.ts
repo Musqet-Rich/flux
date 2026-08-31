@@ -9,6 +9,7 @@ import { delimiter, isAbsolute, join } from 'node:path';
 export interface DetectAgentsOptions {
   claude: string;
   pi: string;
+  opencode: string;
   path?: string;
 }
 
@@ -31,5 +32,6 @@ export const detectAgents = (options: DetectAgentsOptions): HarnessKind[] => {
   const agents: HarnessKind[] = [];
   if (found(options.claude, path)) agents.push('claude');
   if (found(options.pi, path)) agents.push('pi');
+  if (found(options.opencode, path)) agents.push('opencode');
   return agents;
 };

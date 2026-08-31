@@ -22,6 +22,7 @@ import { runUpdateCheck } from './update/run-update-check.ts';
 //   FLUX_PI          the pi binary, default `pi` on PATH
 //   FLUX_PI_PROVIDER pi's --provider (e.g. anthropic); unset, pi's own settings decide
 //   FLUX_PI_MODEL    pi's --model; unset, pi's own settings decide
+//   FLUX_OPENCODE    the opencode binary, default `opencode` on PATH (ADR 0027)
 //   FLUX_PUSH_SUBJECT VAPID contact (mailto: or https: URL) shown to push services
 //   FLUX_QR_INVERT   set to 1 on a light terminal; the pairing QR is drawn for a dark one
 // `flux help [term]` prints the bundled operator manual (help/manual.ts) — the topic overview with
@@ -204,6 +205,7 @@ const daemon = await createDaemon({
   ...(env['FLUX_PI'] === undefined ? {} : { piCommand: env['FLUX_PI'] }),
   ...(env['FLUX_PI_PROVIDER'] === undefined ? {} : { piProvider: env['FLUX_PI_PROVIDER'] }),
   ...(env['FLUX_PI_MODEL'] === undefined ? {} : { piModel: env['FLUX_PI_MODEL'] }),
+  ...(env['FLUX_OPENCODE'] === undefined ? {} : { opencodeCommand: env['FLUX_OPENCODE'] }),
   // Self-update (ADR 0022): the installed bundle is the siblings of the running index.mjs; a
   // source checkout has no such bundle and self-update is refused.
   distDir: detectDistDir(process.argv[1] ?? '', { exists: existsSync }),

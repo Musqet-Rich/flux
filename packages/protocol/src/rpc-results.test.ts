@@ -45,7 +45,7 @@ const cases: { [M in RpcMethod]: [ok: unknown, bad: unknown] } = {
       daemon: 'd',
       sessions: [summary],
       vapidPublicKey: 'k',
-      agents: ['claude', 'pi'],
+      agents: ['claude', 'pi', 'opencode'],
       version: '1.2.3',
     },
     { protocol: 1 },

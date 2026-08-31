@@ -164,6 +164,9 @@ export const startStack = async (label: string, fixture = defaultFixture): Promi
     FLUX_DATA_DIR: dataDir,
     FLUX_REPOS_DIR: reposDir,
     FLUX_CLAUDE: shim,
+    // opencode is not exercised live here (ADR 0027); pin it absent so the stack is deterministic
+    // whether or not the box running the suite has opencode installed, matching CI.
+    FLUX_OPENCODE: 'no-such-binary-anywhere',
     FLUX_FAKE_FIXTURE: fixture,
     FLUX_E2E_FAKE_CLAUDE: fakeClaude,
     FLUX_E2E_AGENT_STDIN: agentStdin,

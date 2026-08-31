@@ -14,6 +14,7 @@ test('resolves the agents present and the per-agent spawn options', () => {
     piCommand: 'no-such-binary-anywhere',
     piProvider: 'anthropic',
     piModel: 'claude-haiku-4-5',
+    opencodeCommand: 'no-such-binary-anywhere',
   });
   expect(config.agents).toEqual(['claude']);
   expect(config.pool.claudeCommand).toBe('sh');
@@ -24,6 +25,11 @@ test('resolves the agents present and the per-agent spawn options', () => {
     provider: 'anthropic',
     model: 'claude-haiku-4-5',
   });
+  expect(config.pool.opencode).toEqual({
+    config: expect.any(Function),
+    command: 'no-such-binary-anywhere',
+  });
+  expect(config.pool.opencode?.config('s1')).toBe(join(dataDir, 'opencode', 's1.json'));
   expect(config.pool.mcpConfig?.('s1', false)).toBe(join(dataDir, 'mcp', 's1.json'));
   expect(config.pool.env?.('s1')).toMatchObject({
     FLUX_CONTROL_SOCKET: '/run/flux.sock',
@@ -39,6 +45,8 @@ test('leaves unset options out so the binaries and pi settings decide', () => {
     sessionDir: join(dataDir, 'pi-sessions'),
     extension: expect.stringMatching(/flux-pi-extension\.ts$/u),
   });
+  expect(config.pool.opencode?.command).toBeUndefined();
+  expect(config.pool.opencode?.config).toBeTypeOf('function');
 });
 
 test('forget removes the pi session file of an archived session and nothing else', () => {

@@ -14,9 +14,8 @@ import { tempRepo } from '../test/temp-repo.ts';
 import type { Daemon, DaemonConfig } from './create-daemon.ts';
 import { createDaemon } from './create-daemon.ts';
 
-// The whole daemon against a fake relay and the fake agent: pair, hello, create a session,
-// send a message, watch events arrive, sync them back; then a second device, settings, and
-// revocation in both directions.
+// The whole daemon against a fake relay and the fake agent: pair, hello, create a session, send a
+// message, watch events sync back; then a second device, settings, and revocation both ways.
 
 const fake = join(import.meta.dirname, '../test/fake-claude.ts');
 const fixture = join(import.meta.dirname, '../test/fixtures/claude/session-two-turns.jsonl');
@@ -42,8 +41,9 @@ const setup = async (extra: Partial<DaemonConfig> = {}) => {
     daemonName: 'flux@test',
     pushSubject: 'mailto:ops@example.com',
     claudeCommand: fake,
-    // The dev box may have pi on PATH; a test says when it wants one (any executable will do).
+    // The dev box may have pi or opencode on PATH; pin them absent so the harness list is stable.
     piCommand: 'no-such-binary-anywhere',
+    opencodeCommand: 'no-such-binary-anywhere',
     claudeDir,
     ...extra,
   });
