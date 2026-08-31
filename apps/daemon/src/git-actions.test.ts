@@ -252,6 +252,26 @@ test('pr refuses an empty title', async () => {
   await expect(git.pr(repo, { title: ' ' })).rejects.toMatchObject({ code: 'bad_params' });
 });
 
+test('init makes a fresh repo and an empty commit gives it a HEAD to branch a worktree from', async () => {
+  const fresh = join(root, 'help');
+  await mkdir(fresh);
+  await git.init(fresh);
+  await git.emptyCommit(fresh, 'flux help repo');
+  const head = sh(fresh, ['rev-parse', 'HEAD']);
+  expect(head).toMatch(/^[0-9a-f]{40}$/u);
+  // The commit needs no global identity: emptyCommit passes it inline.
+  expect(sh(fresh, ['log', '-1', '--format=%an <%ae>%n%s'])).toBe(
+    'flux <flux@localhost>\nflux help repo',
+  );
+  // HEAD exists, so a worktree can be branched from it (what a Help session does).
+  await git.addWorktree(fresh, join(root, 'help-wt'), 'help-abc123', head);
+  expect(sh(join(root, 'help-wt'), ['rev-parse', 'HEAD'])).toBe(head);
+});
+
+test('emptyCommit refuses a blank message', async () => {
+  await expect(git.emptyCommit(repo, '  ')).rejects.toMatchObject({ code: 'bad_params' });
+});
+
 test('pr without gh on PATH is a gh_error that says so', async () => {
   // A PATH holding only git, so a gh installed on this machine cannot answer.
   const only = join(root, 'only-git');

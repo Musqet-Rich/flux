@@ -1,45 +1,58 @@
-import type { RpcMethods, SessionSummary } from '@flux/protocol';
+import type { HarnessKind, SessionSummary } from '@flux/protocol';
 
 import { DaemonError } from './daemon-error.ts';
 import type { HandlerContext } from './handler-context.ts';
-import { inside } from './inside.ts';
-import { resolveAgent } from './resolve-agent.ts';
+import type { AgentResolution } from './resolve-agent.ts';
 
-// Creating a session (protocol.md § 7, `sessions.create`): resolve the Agent spec, make the
-// worktree, persist the row, log `session.created`. Its own module so the manager surface (ADR
-// 0025) can open a session through the exact same op the wire uses (`create-manager-ops.ts`)
-// without a second value export on `create-session-handlers.ts`.
+// Creating a session (protocol.md § 7, `sessions.create`): make the worktree, persist the row, log
+// `session.created`. Its own module so the manager surface (ADR 0025) and the Help path (ADR 0008,
+// `create-help.ts`) open a session through the exact same op the wire uses, without duplicating
+// create logic.
+//
+// Repo resolution is the CALLER's job (ADR 0008): the wire handler and the manager op resolve the
+// repo under `reposDir` (`resolve-create-params.ts`), while the Help path passes its own repo under
+// the data dir. So `createSession` takes an already-resolved absolute `repo` and never touches
+// `reposDir` itself — the `inside`-under-`reposDir` guard stays with the caller.
+
+// The resolved shape `createSession` needs: an absolute repo, the branch/base/title, the runtime
+// harness, and the resolved model/effort/role/tools/manager (AgentResolution). No `agent` name and
+// no `reposDir`-relative path survive to here.
+export interface SessionSpec {
+  repo: string;
+  branch: string;
+  base?: string;
+  harness: HarnessKind;
+  title?: string;
+  resolution: AgentResolution;
+}
 
 export const createSession = async (
   ctx: HandlerContext,
-  params: RpcMethods['sessions.create']['params'],
+  spec: SessionSpec,
 ): Promise<SessionSummary> => {
-  if (!ctx.agents.includes(params.harness)) {
-    throw new DaemonError('agent_unavailable', `${params.harness} is not installed on the box`);
+  if (!ctx.agents.includes(spec.harness)) {
+    throw new DaemonError('agent_unavailable', `${spec.harness} is not installed on the box`);
   }
-  // Resolve model/effort/role before any side effect, so an unknown agent fails with no worktree.
-  const resolved = resolveAgent(params, ctx.settings.getAgents());
-  const repo = inside(ctx.settings.get().reposDir, params.repo);
-  const exists = (await ctx.git.branches(repo)).includes(params.branch);
-  const base = await ctx.git.revParse(repo, params.base ?? (exists ? params.branch : 'HEAD'));
+  const exists = (await ctx.git.branches(spec.repo)).includes(spec.branch);
+  const base = await ctx.git.revParse(spec.repo, spec.base ?? (exists ? spec.branch : 'HEAD'));
   const session = crypto.randomUUID();
   // `worktreesDir` is a normalised absolute path and `session` a UUID, so this is `join` here.
   const worktree = `${ctx.worktreesDir}/${session}`;
-  await ctx.git.addWorktree(repo, worktree, params.branch, exists ? null : base);
+  await ctx.git.addWorktree(spec.repo, worktree, spec.branch, exists ? null : base);
   const record = ctx.sessions.create({
     session,
-    title: params.title ?? params.branch,
-    repo,
+    title: spec.title ?? spec.branch,
+    repo: spec.repo,
     worktree,
-    branch: params.branch,
+    branch: spec.branch,
     base,
-    harness: params.harness,
-    ...resolved,
+    harness: spec.harness,
+    ...spec.resolution,
   });
   const { title } = record;
   ctx.log.append(session, {
     type: 'session.created',
-    payload: { repo, worktree, branch: params.branch, base, harness: params.harness, title },
+    payload: { repo: spec.repo, worktree, branch: spec.branch, base, harness: spec.harness, title },
   });
   const summary = ctx.sessions.list().find((s) => s.session === session);
   if (summary === undefined) throw new DaemonError('internal', 'session vanished');

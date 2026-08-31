@@ -32,6 +32,10 @@ const cases: [RpcMethod, unknown, boolean][] = [
   ['sessions.create', { repo: '/r', harness: 'claude' }, false],
   ['sessions.create', { repo: '/r', branch: 'b', harness: 'claude', base: 1 }, false],
   ['sessions.create', { repo: '/r', branch: 'b', harness: 'claude', title: 1 }, false],
+  ['sessions.createHelp', { question: 'how do I pair?' }, true],
+  ['sessions.createHelp', { question: '' }, false],
+  ['sessions.createHelp', { question: 7 }, false],
+  ['sessions.createHelp', {}, false],
   ['sessions.archive', s, true],
   ['sessions.archive', { ...s, removeWorktree: true, deleteBranch: true, discard: true }, true],
   ['sessions.archive', { ...s, removeWorktree: 'yes' }, false],
@@ -166,5 +170,5 @@ test.each(cases)('%s params %j accepted=%s', (method, value, expected) => {
 });
 
 test('covers every method in protocol.md § 7', () => {
-  expect(Object.keys(rpcMethods)).toHaveLength(42);
+  expect(Object.keys(rpcMethods)).toHaveLength(43);
 });

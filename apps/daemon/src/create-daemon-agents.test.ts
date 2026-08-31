@@ -100,3 +100,18 @@ test('a saved agent seeds a session, inline model wins, and an unknown agent is 
     call(d, 'sessions.create', { repo, branch: 'flux/a3', harness: 'claude', agent: 'ghost' }),
   ).rejects.toThrow('bad_params');
 });
+
+test('sessions.create resolves the repo under reposDir in the handler, still refusing traversal', async () => {
+  await setup();
+  const d = await device();
+  await pair(d);
+  // Repo resolution moved out of createSession into the wire handler (the help path bypasses it);
+  // the `inside`-under-reposDir guard still runs here, so a path escaping reposDir is bad_params
+  // before any worktree is cut.
+  await expect(
+    call(d, 'sessions.create', { repo: '/etc', branch: 'flux/x', harness: 'claude' }),
+  ).rejects.toThrow('bad_params');
+  await expect(
+    call(d, 'sessions.create', { repo: '../outside', branch: 'flux/y', harness: 'claude' }),
+  ).rejects.toThrow('bad_params');
+});

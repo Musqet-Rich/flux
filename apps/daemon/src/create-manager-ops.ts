@@ -1,9 +1,9 @@
 import type { FluxEvent } from '@flux/protocol';
 
-import { createSession } from './create-session.ts';
 import { emittingLog } from './emitting-log.ts';
 import type { HandlerContext } from './handler-context.ts';
 import type { ManagerControlOptions } from './manager-control.ts';
+import { sessionCreateOps } from './session-create-ops.ts';
 import { sessionLifecycle } from './session-lifecycle.ts';
 
 // The three lifecycle ops the manager control handler needs (ADR 0025), built from the same
@@ -22,7 +22,7 @@ export const createManagerOps = (
     return { ...ctx, log: emittingLog(ctx.log, emit) };
   };
   return {
-    openSession: (params) => createSession(managed(), params),
+    openSession: (params) => sessionCreateOps.fromParams(managed(), params),
     archiveSession: async (session) => {
       await sessionLifecycle.archive(managed(), { session });
     },

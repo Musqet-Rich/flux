@@ -23,6 +23,11 @@ export interface GitActions {
   push: (worktree: string, setUpstream: boolean) => Promise<{ remote: string; branch: string }>;
   // The URL of the branch's open PR, created now or already open.
   pr: (worktree: string, options: PrOptions) => Promise<{ url: string; created: boolean }>;
+  // `git init` a fresh repository (the daemon's managed help repo, ADR 0008).
+  init: (repo: string) => Promise<void>;
+  // `git commit --allow-empty` so `HEAD` exists to branch a worktree from; the identity is passed
+  // inline so it never depends on the flux user's global git config.
+  emptyCommit: (repo: string, message: string) => Promise<void>;
 }
 
 // Absolute paths inside the worktree: `inside` refuses anything that climbs out of it, and the
@@ -114,8 +119,27 @@ const pr = async (
   return { url: (await gh(worktree, args)).trim(), created: true };
 };
 
+const emptyCommit = async (git: Runner, repo: string, message: string): Promise<void> => {
+  if (message.trim() === '') throw new DaemonError('bad_params', 'empty commit message');
+  await git(repo, [
+    '-c',
+    'user.name=flux',
+    '-c',
+    'user.email=flux@localhost',
+    'commit',
+    '--quiet',
+    '--allow-empty',
+    '--message',
+    message,
+  ]);
+};
+
 export const gitActions = (git: Runner, gh: Runner): GitActions => ({
   commit: (worktree, message, paths) => commit(git, worktree, message, paths),
   push: (worktree, setUpstream) => push(git, worktree, setUpstream),
   pr: (worktree, options) => pr(gh, worktree, options),
+  init: async (repo) => {
+    await git(repo, ['init', '--quiet', '--initial-branch', 'main']);
+  },
+  emptyCommit: (repo, message) => emptyCommit(git, repo, message),
 });
