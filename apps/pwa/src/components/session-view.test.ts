@@ -124,40 +124,43 @@ test('shows the thinking indicator until text streams, and the PR link once one 
   store.stop();
 });
 
-// The compaction is a ~59s black box, so a running /compact turn draws an indeterminate
-// indicator until the boundary lands, which then rules across the timeline with the token delta.
-test('shows a Compacting indicator while a /compact turn runs, gone after the boundary', async () => {
-  const box = await pairedStore([]);
-  const { store, relay, event } = box;
-  const wrapper = mount(SessionView, { props: { store, session: 's1' } });
-  await until(() => store.state.logs['s1'] !== undefined);
-  await relay.emit(event(1, 'session.state', { state: 'running' }));
-  await until(() => store.state.sessions[0]?.state === 'running');
-  await flushPromises();
-  // Running, but no /compact turn yet: no indicator.
-  expect(wrapper.find('.compacting').exists()).toBe(false);
-  await relay.emit(event(2, 'msg.user', { text: '/compact' }));
-  await until(() => store.state.logs['s1']?.lastSeq === 2);
-  await flushPromises();
-  expect(wrapper.find('.compacting').text()).toBe('Compacting…');
-  expect(wrapper.find('.compacting .loader').exists()).toBe(true);
-  await relay.emit(
-    event(3, 'compact.boundary', {
-      trigger: 'manual',
-      preTokens: 60065,
-      postTokens: 6202,
-      durationMs: 59369,
-      result: 'success',
-    }),
-  );
-  await until(() => store.state.logs['s1']?.lastSeq === 3);
-  await flushPromises();
-  expect(wrapper.find('.compacting').exists()).toBe(false);
-  expect(wrapper.find('.timeline .rule').text()).toBe(
-    'Context compacted · 60k → 6.2k tokens · 59s',
-  );
-  store.stop();
-});
+// The compaction is a ~59s black box, so a running /compact turn draws an indeterminate indicator
+// until the boundary lands, which then rules across the timeline. A bare `/compact` and a
+// `/compact <focus>` (self-compaction via flux_compact) both drive it, so the gate is not an exact match.
+for (const text of ['/compact', '/compact Preserve: keep the role']) {
+  test(`shows a Compacting indicator while a "${text}" turn runs, gone after the boundary`, async () => {
+    const box = await pairedStore([]);
+    const { store, relay, event } = box;
+    const wrapper = mount(SessionView, { props: { store, session: 's1' } });
+    await until(() => store.state.logs['s1'] !== undefined);
+    await relay.emit(event(1, 'session.state', { state: 'running' }));
+    await until(() => store.state.sessions[0]?.state === 'running');
+    await flushPromises();
+    // Running, but no /compact turn yet: no indicator.
+    expect(wrapper.find('.compacting').exists()).toBe(false);
+    await relay.emit(event(2, 'msg.user', { text }));
+    await until(() => store.state.logs['s1']?.lastSeq === 2);
+    await flushPromises();
+    expect(wrapper.find('.compacting').text()).toBe('Compacting…');
+    expect(wrapper.find('.compacting .loader').exists()).toBe(true);
+    await relay.emit(
+      event(3, 'compact.boundary', {
+        trigger: 'manual',
+        preTokens: 60065,
+        postTokens: 6202,
+        durationMs: 59369,
+        result: 'success',
+      }),
+    );
+    await until(() => store.state.logs['s1']?.lastSeq === 3);
+    await flushPromises();
+    expect(wrapper.find('.compacting').exists()).toBe(false);
+    expect(wrapper.find('.timeline .rule').text()).toBe(
+      'Context compacted · 60k → 6.2k tokens · 59s',
+    );
+    store.stop();
+  });
+}
 
 test('a failed action keeps the draft and surfaces the box error', async () => {
   const box = await pairedStore([]);
