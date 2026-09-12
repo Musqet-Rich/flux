@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 
+import { useEscape } from '../composables/useEscape.ts';
 import type { DeleteOptions } from '../store/session-actions.ts';
 import Icon from './Icon.vue';
 
 // The inline confirm behind "Delete…": what to remove, then, when the box refuses because the
 // worktree holds work that exists nowhere else (`dirty`), the same request again with the
-// box's counts and an explicit "Discard changes".
+// box's counts and an explicit "Discard changes". Escape cancels (useEscape).
 
 const props = defineProps<{ dirty: string | null; busy: boolean }>();
 const emit = defineEmits<{ confirm: [options: DeleteOptions]; cancel: [] }>();
@@ -24,6 +25,7 @@ const confirm = (discard: boolean): void => {
 const cancel = (): void => {
   emit('cancel');
 };
+useEscape(cancel);
 </script>
 
 <template>

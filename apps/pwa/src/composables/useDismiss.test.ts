@@ -25,6 +25,10 @@ test('Escape or a tap outside closes; a tap inside does not; closed means no lis
   const { open, inside } = setup();
   tap(document.body);
   expect(open.value).toBe(false);
+  // Closed, the Escape is nobody's: the session screen's Esc (stop the agent) gets it.
+  const idle = new KeyboardEvent('keydown', { key: escape, cancelable: true });
+  document.dispatchEvent(idle);
+  expect(idle.defaultPrevented).toBe(false);
   open.value = true;
   await nextTick();
   tap(inside);
@@ -35,6 +39,9 @@ test('Escape or a tap outside closes; a tap inside does not; closed means no lis
   await nextTick();
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' }));
   expect(open.value).toBe(true);
-  document.dispatchEvent(new KeyboardEvent('keydown', { key: escape }));
+  const taken = new KeyboardEvent('keydown', { key: escape, cancelable: true });
+  document.dispatchEvent(taken);
   expect(open.value).toBe(false);
+  // Marked consumed, so the session screen's Esc (stop the agent) lets it pass.
+  expect(taken.defaultPrevented).toBe(true);
 });
