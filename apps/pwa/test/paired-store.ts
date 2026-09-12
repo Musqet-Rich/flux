@@ -5,6 +5,7 @@ import { reactive } from 'vue';
 import { createMemoryStorage } from '../src/client/create-memory-storage.ts';
 import type { Store } from '../src/store/create-store.ts';
 import { createStore } from '../src/store/create-store.ts';
+import type { StoreOptions } from '../src/store/store-state.ts';
 import type { FakeRelay, Handlers } from './fake-relay.ts';
 import { createFakeRelay } from './fake-relay.ts';
 
@@ -33,6 +34,8 @@ const recorded = (handlers: Handlers, seen: { method: string; params: unknown }[
 export const pairedStore = async (
   events: FluxEvent[] = [],
   handlers: Handlers = {},
+  // Extra store options, such as a recording `playSound`.
+  options: Partial<StoreOptions> = {},
 ): Promise<PairedStore> => {
   const session: SessionSummary = {
     session: 's1',
@@ -57,7 +60,7 @@ export const pairedStore = async (
       seen,
     ),
   );
-  const store = createStore({ storage: createMemoryStorage(), socket: relay.socket });
+  const store = createStore({ storage: createMemoryStorage(), socket: relay.socket, ...options });
   const secret = new Uint8Array(pairing.secretLength);
   const url = pairing.url('https://relay.example', { boxPub: relay.boxPub, secret });
   await store.pair('https://relay.example', new URL(url).hash);

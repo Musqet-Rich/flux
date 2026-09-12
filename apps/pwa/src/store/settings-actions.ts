@@ -1,6 +1,8 @@
 import type { SettingsPatch } from '@flux/protocol';
 
+import type { SoundName } from '../sound/notification-sounds.ts';
 import { boxLink } from './box-link.ts';
+import { notificationSound } from './notification-sound.ts';
 import type { StoreInternals } from './store-state.ts';
 
 // The settings screen's actions (prd.md P2): devices and box configuration. Each resolves to
@@ -12,6 +14,10 @@ export interface SettingsActions {
   removeDevice: (deviceId: string) => Promise<boolean>;
   refreshSettings: () => Promise<boolean>;
   saveSettings: (patch: SettingsPatch) => Promise<boolean>;
+  // Picks this device's notification sound (notification-sound.ts) and plays it once;
+  // `playSound` plays the current one again.
+  setSound: (name: SoundName) => Promise<boolean>;
+  playSound: () => void;
   // Asks the daemon to discover the latest release and dry-run verify it (ADR 0021/0022). It
   // never surfaces an error: a daemon too old to have the method degrades to a `latest: null`
   // sentinel so Settings shows "couldn't check for updates" instead of hard-failing.
@@ -94,6 +100,10 @@ export const settingsActions = (i: StoreInternals): SettingsActions => ({
       i.state.settings = await boxLink.call(i, 'settings.get', {});
     }),
   saveSettings: (patch) => boxLink.attempt(i, () => saveSettings(i, patch)),
+  setSound: (name) => boxLink.attempt(i, () => notificationSound.set(i, name)),
+  playSound: () => {
+    notificationSound.play(i);
+  },
   checkUpdate: () => checkUpdate(i),
   updateDaemon: (target) => boxLink.attempt(i, () => updateDaemon(i, target)),
   refreshSkills: () => refreshSkills(i),
