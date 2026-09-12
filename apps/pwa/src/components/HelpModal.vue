@@ -2,14 +2,15 @@
 import type { SessionSummary } from '@flux/protocol';
 import { computed, onMounted, ref } from 'vue';
 
+import { useEscape } from '../composables/useEscape.ts';
 import type { Store } from '../store/create-store.ts';
 import { enterKey } from './enter-key.ts';
 import Icon from './Icon.vue';
 
 // "Ask about Flux" (ADR 0008): a modal over the app. The operator types a question; Send opens a
 // daemon-managed Help session seeded with it and navigates there. The device's send key
-// (enter-key.ts) submits, Escape and a tap on the backdrop close it. On failure the modal stays
-// open with the text intact and shows the box's message.
+// (enter-key.ts) submits, Escape (useEscape) and a tap on the backdrop close it. On failure the
+// modal stays open with the text intact and shows the box's message.
 
 const props = defineProps<{ store: Store }>();
 const emit = defineEmits<{ created: [session: SessionSummary]; close: [] }>();
@@ -40,11 +41,9 @@ const submit = async (): Promise<void> => {
 };
 
 const onKeydown = (event: KeyboardEvent): void => {
-  if (event.key === 'Escape') close();
-  else if (enterKey.keydown(props.store.state.sendKey, canSend.value, event, box.value)) {
-    void submit();
-  }
+  if (enterKey.keydown(props.store.state.sendKey, canSend.value, event, box.value)) void submit();
 };
+useEscape(close);
 
 const onLineBreak = (event: InputEvent): void => {
   if (enterKey.lineBreak(props.store.state.sendKey, canSend.value, event, box.value)) {

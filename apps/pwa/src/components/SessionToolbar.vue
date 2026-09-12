@@ -12,9 +12,9 @@ import SessionMenu from './SessionMenu.vue';
 // The strip above the timeline: the branch, a small chip naming what the agent is running as
 // `model:effort` from the log's latest `agent.spec` (ADR 0028; the harness alone until the agent
 // has said, and on the chip's title after), a link to the session's PR once the log has a
-// `pr.published`, Stop while the agent runs, Files, Changes (with the latest changed-file count),
-// and the session menu. The buttons are icons with their names on `aria-label`/`title`: the row
-// has to fit a phone beside the branch (ADR 0029).
+// `pr.published`, Stop while the agent runs (Esc does the same, wired in SessionView), Files,
+// Changes (with the latest changed-file count) and the session menu. The buttons are icons with
+// their names on `aria-label`/`title`: the row has to fit a phone beside the branch (ADR 0029).
 
 const props = defineProps<{
   store: Store;
@@ -95,7 +95,7 @@ const changesLabel = computed(() => `Changes (${changedCount.value})`);
       type="button"
       class="secondary icon-only"
       aria-label="Stop"
-      title="Stop the agent"
+      title="Stop the agent (Esc)"
       @click="$emit('interrupt')"
     >
       <Icon name="stop" />

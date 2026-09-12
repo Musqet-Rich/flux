@@ -1,5 +1,6 @@
 import { mount } from '@vue/test-utils';
 import { expect, test } from 'vitest';
+import { nextTick } from 'vue';
 
 import MessageAttachments from './MessageAttachments.vue';
 
@@ -23,6 +24,14 @@ test('an image with a fetched thumbnail shows it, opening full-size on tap; othe
   await wrapper.find('.image').trigger('click');
   await wrapper.find('.overlay').trigger('click');
   expect(wrapper.find('.overlay').exists()).toBe(false);
+  await wrapper.find('.image').trigger('click');
+  // Escape closes too, marked consumed so the session screen's Esc (stop the agent) lets it pass.
+  const escape = 'Escape';
+  const key = new KeyboardEvent('keydown', { key: escape, cancelable: true });
+  document.dispatchEvent(key);
+  await nextTick();
+  expect(wrapper.find('.overlay').exists()).toBe(false);
+  expect(key.defaultPrevented).toBe(true);
 });
 
 test('an image whose thumbnail is not fetched yet shows as a file', () => {

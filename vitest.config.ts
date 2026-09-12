@@ -24,6 +24,7 @@ const pwaDom = [
   // Need a DOM: listen on `document`, or measure an element's computed style.
   'src/composables/useAutoGrow.test.ts',
   'src/composables/useDismiss.test.ts',
+  'src/composables/useEscape.test.ts',
   'src/composables/useFileDrop.test.ts',
 ];
 

@@ -94,11 +94,24 @@ const answer = (text: string): void => {
 const interrupt = (): void => {
   void props.store.interrupt(props.session);
 };
+// Esc stops the agent as the toolbar's Stop does, from anywhere on the screen, the composer
+// included, so a turn going wrong is one key away. Whatever is open and closes on Escape (a
+// menu, the slash list, the help modal, the Rename…/Delete… forms, the image overlay) marks
+// the key consumed, and that one only closes it: this listens on the window, so theirs, on
+// elements and the document, have run first. A held key repeats, and one interrupt is all a
+// turn needs; an Escape that cancels an IME composition is the IME's.
+const onKey = (event: KeyboardEvent): void => {
+  if (event.key !== 'Escape' || event.repeat || event.isComposing) return;
+  if (event.defaultPrevented || !busy.value) return;
+  interrupt();
+};
 
 onMounted(() => {
+  window.addEventListener('keydown', onKey);
   void props.store.open(props.session);
 });
 onUnmounted(() => {
+  window.removeEventListener('keydown', onKey);
   props.store.leave(props.session);
 });
 watch(

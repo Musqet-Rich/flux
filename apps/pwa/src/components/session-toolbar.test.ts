@@ -25,11 +25,11 @@ const spec = (seq: number, payload: unknown): FluxEvent => ({
   payload,
 });
 
-const toolbar = async (summary: SessionSummary | null, events: FluxEvent[] = []) => {
+const toolbar = async (summary: SessionSummary | null, events: FluxEvent[] = [], busy = false) => {
   const box = await pairedStore();
   box.store.state.sessions = summary === null ? [] : [summary];
   const wrapper = mount(SessionToolbar, {
-    props: { store: box.store, session: 's1', events, branch: 'flux/one', busy: false },
+    props: { store: box.store, session: 's1', events, branch: 'flux/one', busy },
   });
   return { box, wrapper };
 };
@@ -92,5 +92,18 @@ test('the running spec shows even for a session missing from the list', async ()
   const { box, wrapper } = await toolbar(null, [spec(1, { model: 'm', effort: 'e' })]);
   expect(wrapper.find('.spec-chip').text()).toBe('m:e');
   expect(wrapper.find('.spec-chip').attributes('title')).toBe('m:e');
+  box.store.stop();
+});
+
+// Stop's presence and its click are covered with the session (session-view.test.ts); this is
+// the button's own face: the icon and the tooltip naming the shortcut.
+test('Stop shows only while the agent runs and names the Esc shortcut', async () => {
+  const idle = await toolbar(base);
+  expect(idle.wrapper.find('button[aria-label="Stop"]').exists()).toBe(false);
+  idle.box.store.stop();
+  const { box, wrapper } = await toolbar(base, [], true);
+  const stop = wrapper.find('button[aria-label="Stop"]');
+  expect(stop.attributes('title')).toBe('Stop the agent (Esc)');
+  expect(stop.find('[data-icon="stop"]').exists()).toBe(true);
   box.store.stop();
 });
