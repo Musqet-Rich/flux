@@ -147,8 +147,9 @@ const secondTabSawTurn = async (other: Page): Promise<void> => {
 const commentOnDiff = async (page: Page): Promise<void> => {
   await page.getByRole('button', { name: 'Changes' }).click();
   await expect(page.locator('.count')).toHaveText('1 changed');
-  // The row's Edit button is named for the file too; the file button's name is status then path.
-  await page.getByRole('button', { name: /^A greeting\.txt$/u }).click();
+  // The row's Edit button is named for the file too, and the file button's own name opens with
+  // its status letter, `A` from the log's copy or `?` once the fresh `git.status` has landed.
+  await page.locator('.file', { hasText: 'greeting.txt' }).click();
   await expect(page.locator('.path')).toHaveText('greeting.txt');
   await page.locator('.cm-lineNumbers .cm-gutterElement', { hasText: '1' }).click();
   await page.getByLabel('Comment on line 1').fill('Say hello instead');
