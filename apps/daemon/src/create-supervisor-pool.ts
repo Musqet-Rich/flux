@@ -40,6 +40,9 @@ export interface SupervisorPoolOptions {
   sessions: SessionStore;
   git: GitService;
   claudeCommand?: string;
+  // The agent's config directory, where its transcripts are read for the running spec's
+  // effort (ADR 0028); the daemon's `claudeDir`, a scratch directory in tests.
+  claudeDir: string;
   pi?: PiOptions;
   opencode?: OpencodeOptions;
   // Path of the per-session MCP config injecting the Flux tools (ADR 0008); a manager session

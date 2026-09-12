@@ -26,12 +26,16 @@ const isOneOf = <const T extends readonly string[]>(
   options: T,
 ): value is T[number] => isString(value) && options.includes(value);
 
+// A string with something in it: an id, a name, a model, where `''` would be a bug on the wire.
+const isFilledString = (value: unknown): value is string => isString(value) && value !== '';
+
 // `undefined` passes, so the field may be absent; `null` does not (exactOptionalPropertyTypes).
 const isOptional = <T>(value: unknown, guard: (v: unknown) => v is T): value is T | undefined =>
   value === undefined || guard(value);
 
 export const guards: {
   isString: typeof isString;
+  isFilledString: typeof isFilledString;
   isBoolean: typeof isBoolean;
   isNumber: typeof isNumber;
   isInteger: typeof isInteger;
@@ -39,4 +43,14 @@ export const guards: {
   isArrayOf: typeof isArrayOf;
   isOneOf: typeof isOneOf;
   isOptional: typeof isOptional;
-} = { isString, isBoolean, isNumber, isInteger, isRecord, isArrayOf, isOneOf, isOptional };
+} = {
+  isString,
+  isFilledString,
+  isBoolean,
+  isNumber,
+  isInteger,
+  isRecord,
+  isArrayOf,
+  isOneOf,
+  isOptional,
+};

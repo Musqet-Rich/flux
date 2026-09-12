@@ -8,10 +8,11 @@ import type { Store } from '../store/create-store.ts';
 import { sessionPr } from '../store/session-pr.ts';
 import SessionMenu from './SessionMenu.vue';
 
-// The strip above the timeline: the branch, a small harness/model/effort chip (ADR 0023 § 3, the
-// configured values from `SessionSummary`, unset segments omitted), a link to the session's PR
-// once the log has a `pr.published`, Stop while the agent runs, Changes (with the latest
-// changed-file count), and the session menu.
+// The strip above the timeline: the branch, a small chip naming what the agent is running as
+// `model:effort` from the log's latest `agent.spec` (ADR 0028; the harness alone until the agent
+// has said, and on the chip's title after), a link to the session's PR once the log has a
+// `pr.published`, Stop while the agent runs, Changes (with the latest changed-file count), and
+// the session menu.
 
 const props = defineProps<{
   store: Store;
@@ -24,14 +25,35 @@ defineEmits<{ changes: []; files: []; interrupt: []; closed: [] }>();
 
 const harnessLabel = (kind: string): string =>
   kind === 'claude' ? 'Claude Code' : kind === 'pi' ? 'Pi' : kind;
-// The configured harness, model and effort as one chip; segments the box did not set are dropped.
-const chip = computed((): string => {
+const harness = computed((): string => {
   const summary = props.store.state.sessions.find((s) => s.session === props.session);
-  if (summary === undefined) return '';
-  return [harnessLabel(summary.harness), summary.model, summary.effort]
-    .filter((part): part is string => part !== undefined && part !== '')
-    .join(' · ');
+  return summary === undefined ? '' : harnessLabel(summary.harness);
 });
+// The latest `agent.spec`, or null before the agent has said what it runs.
+const spec = computed(() => {
+  const last = props.events.findLast((e) => e.type === 'agent.spec');
+  return last !== undefined && fluxEvent.isKnown(last) && last.type === 'agent.spec'
+    ? last.payload
+    : null;
+});
+// A model id on the chip loses the vendor prefix and a dated snapshot's date, `fable-5-1` for
+// `claude-fable-5-1`, `haiku-4-5` for `claude-haiku-4-5-20251001` (a `[1m]` context suffix
+// stays): on a phone-width toolbar a full id would push the effort, the part the chip exists to
+// show, into the ellipsis. The whole id is on the title.
+const shortModel = (model: string): string =>
+  model.replace(/^claude-/u, '').replace(/-\d{8}(?=\[|$)/u, '');
+const label = (model: string, effort: string | undefined): string =>
+  effort === undefined ? model : `${model}:${effort}`;
+// The running spec is what the chip is for; the harness is its stand-in until the agent has
+// spoken, and rides on the chip's title after, since the toolbar has room for one of them.
+const chip = computed((): string =>
+  spec.value === null ? harness.value : label(shortModel(spec.value.model), spec.value.effort),
+);
+const chipTitle = computed((): string =>
+  [harness.value, spec.value === null ? '' : label(spec.value.model, spec.value.effort)]
+    .filter((part) => part !== '')
+    .join(' · '),
+);
 
 const pr = computed(() => sessionPr(props.events));
 const prLabel = computed(() =>
@@ -51,7 +73,7 @@ const changedCount = computed(() => {
   <div class="toolbar">
     <span class="ident">
       <span class="branch">{{ branch }}</span>
-      <span v-if="chip !== ''" class="spec-chip">{{ chip }}</span>
+      <span v-if="chip !== ''" class="spec-chip" :title="chipTitle">{{ chip }}</span>
     </span>
     <a v-if="pr !== null" class="pr" :href="pr.url" target="_blank" rel="noopener noreferrer">{{
       prLabel
@@ -81,8 +103,8 @@ const changedCount = computed(() => {
    alone are wider than the screen (a PR link and Stop beside Files, Changes and the menu),
    which drops the menu to a second line rather than clipping it. Inside, the chip is sized first
    and the branch takes what is left, down to nothing on a phone: a session's title defaults
-   to its branch, so the tab already names it, while the chip is the only place the harness,
-   model and effort show. */
+   to its branch, so the tab already names it, while the chip is the only place what the agent
+   runs shows. */
 .ident {
   flex: 1 1 0;
   min-width: 0;
@@ -112,7 +134,7 @@ const changedCount = computed(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 12rem;
+  max-width: 14rem;
 }
 
 .pr {

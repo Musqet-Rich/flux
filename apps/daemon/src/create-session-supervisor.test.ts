@@ -2,9 +2,13 @@ import type { FluxEvent } from '@flux/protocol';
 import { fluxEvent } from '@flux/protocol';
 import { expect, test } from 'vitest';
 
+import { copyFileSync, mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { sessionHarness as setup } from '../test/session-harness.ts';
+import { transcriptPath } from './claude/transcript-path.ts';
+import type { EventLog } from './create-event-log.ts';
 import type { AgentAdapter, Mapped } from './create-session-supervisor.ts';
 
 const stubborn = fileURLToPath(new URL('../test/stubborn-agent.ts', import.meta.url));
@@ -141,18 +145,18 @@ test('interrupt kills the agent', async () => {
 // The thinking indicator and a git state change are ephemeral (protocol.md § 6): the supervisor
 // sends them on the session and logs nothing. A stub adapter stands in for a mapping the
 // replayed fixture cannot produce on its own.
-const scripted = (): AgentAdapter => {
-  const replies: Mapped[] = [
-    { events: [], context: { tokens: 238560, model: 'claude-fable-5' } },
-    { events: [], context: { tokens: 300, model: 'mystery' } },
-    { events: [], thinking: { active: true, estimatedTokens: 120 } },
-    { events: [], vcsChanged: 'push' },
-  ];
-  return {
-    mapLine: () => replies.shift() ?? { events: [], thinking: { active: false }, turnEnded: true },
-    reset: () => {},
-  };
-};
+const signals: Mapped[] = [
+  { events: [], context: { tokens: 238560, model: 'claude-fable-5' } },
+  { events: [], context: { tokens: 300, model: 'mystery' } },
+  { events: [], thinking: { active: true, estimatedTokens: 120 } },
+  { events: [], vcsChanged: 'push' },
+];
+
+// One reply per line the fake agent prints, then the turn ends.
+const scripted = (replies: Mapped[] = [...signals]): AgentAdapter => ({
+  mapLine: () => replies.shift() ?? { events: [], thinking: { active: false }, turnEnded: true },
+  reset: () => {},
+});
 
 test('thinking and vcs signals go out as ephemerals and never touch the log', async () => {
   const { supervisor, log, ephemeral } = await setup({}, scripted());
@@ -238,5 +242,107 @@ test('attachments are logged on the message, listed in the prompt and images fla
   });
   const reply = await untilEvent(emitted, 'msg.assistant');
   expect(reply.payload).toEqual({ text: 'red' });
+  await supervisor.close();
+});
+
+// The running spec (protocol.md § 5 `agent.spec`) is logged when it changes, not on every line
+// that names the model: the fixture's init and each message_start all say `claude-fable-5`,
+// and the scratch config dir holds no transcript, so two turns log one row, the model alone.
+test('the running spec is logged once until it changes', async () => {
+  const { supervisor, log, emitted } = await setup();
+  await supervisor.send('first');
+  await untilEvent(emitted, 'turn.ended');
+  await supervisor.send('second');
+  await untilEvent(emitted, 'turn.ended', emitted.length);
+  const specs = log.read('s1', 0).events.filter((e) => e.type === 'agent.spec');
+  expect(specs.map((e) => e.payload)).toEqual([{ model: 'claude-fable-5' }]);
+  // Logged at the first model call, before the first reply.
+  const types = log.read('s1', 0).events.map((e) => e.type);
+  expect(types.indexOf('agent.spec')).toBeLessThan(types.indexOf('msg.assistant'));
+  await supervisor.close();
+});
+
+// The transcript the fake agent's init line points at (its cwd slugged under the config dir,
+// its session id), planted from the captured transcript so the turn's end finds an effort.
+const fixtureCwd =
+  '/private/tmp/claude-501/-Users-richhenderson-code-flux/73ccd0c9-0938-49eb-9548-e002f2d31a8d/scratchpad/fixture-repo';
+const plantTranscript = (configDir: string): void => {
+  const path = transcriptPath(fixtureCwd, '86845ede-f4a6-4fc1-a5fb-b6aa1705796b', configDir);
+  mkdirSync(dirname(path), { recursive: true });
+  copyFileSync(
+    new URL('../test/fixtures/claude/transcript-two-turns.jsonl', import.meta.url),
+    path,
+  );
+};
+
+// Claude names the configured model on every prompt's `init` (`claude-haiku-4-5`) and the
+// resolved one on `message_start` (`claude-haiku-4-5-20251001`); only the latter is the spec,
+// so a turn logs one row, not one per name.
+test('the spec is the resolved model of the call, not the configured name on init', async () => {
+  const fixture = fileURLToPath(
+    new URL('../test/fixtures/claude/session-image-block.jsonl', import.meta.url),
+  );
+  const { supervisor, log, emitted } = await setup({ FLUX_FAKE_FIXTURE: fixture });
+  await supervisor.send('look');
+  await untilEvent(emitted, 'turn.ended');
+  expect(specsOf(log)).toEqual([{ model: 'claude-haiku-4-5-20251001' }]);
+  await supervisor.close();
+});
+
+const specsOf = (log: EventLog): unknown[] =>
+  log
+    .read('s1', 0)
+    .events.filter((e) => e.type === 'agent.spec')
+    .map((e) => e.payload);
+
+test('the effort joins the spec at the turn end, and a fresh daemon logs nothing new', async () => {
+  const box = await setup();
+  plantTranscript(box.configDir);
+  await box.supervisor.send('first');
+  await untilEvent(box.emitted, 'turn.ended');
+  expect(specsOf(box.log)).toEqual([
+    { model: 'claude-fable-5' },
+    { model: 'claude-fable-5', effort: 'high' },
+  ]);
+  await box.supervisor.close();
+  // A new supervisor over the same log (a daemon restart) picks the spec up from the log: the
+  // respawned agent's init names the model alone, which is no change, and its turn end reads
+  // the same effort.
+  const again = box.reopen();
+  const before = box.emitted.length;
+  await again.send('second');
+  await untilEvent(box.emitted, 'turn.ended', before);
+  expect(specsOf(box.log)).toEqual([
+    { model: 'claude-fable-5' },
+    { model: 'claude-fable-5', effort: 'high' },
+  ]);
+  await again.close();
+});
+
+// The supervisor's change check, fed specs the fixture cannot produce: restatements are dropped,
+// a new effort or model is a row.
+test('a spec that changes is logged again, effort included', async () => {
+  const specs = [
+    { model: 'claude-fable-5' },
+    { model: 'claude-fable-5' },
+    { model: 'claude-fable-5', effort: 'high' },
+    { model: 'claude-fable-5', effort: 'high' },
+    // No effort is unknown, not none: the effort on record stands.
+    { model: 'claude-fable-5' },
+    { model: 'claude-fable-5', effort: 'low' },
+    { model: 'claude-opus-5' },
+    { model: 'claude-opus-5', effort: 'low' },
+  ];
+  const adapter = scripted(specs.map((spec): Mapped => ({ events: [], spec })));
+  const { supervisor, log, emitted } = await setup({}, adapter);
+  await supervisor.send('go');
+  await untilState(emitted, 'idle');
+  expect(specsOf(log)).toEqual([
+    { model: 'claude-fable-5' },
+    { model: 'claude-fable-5', effort: 'high' },
+    { model: 'claude-fable-5', effort: 'low' },
+    { model: 'claude-opus-5' },
+    { model: 'claude-opus-5', effort: 'low' },
+  ]);
   await supervisor.close();
 });

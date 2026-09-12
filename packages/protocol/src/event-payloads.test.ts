@@ -201,6 +201,12 @@ const cases: [EventType, unknown, boolean][] = [
     { trigger: 'manual', preTokens: 60065, postTokens: 6202, durationMs: 59369, result: 5 },
     false,
   ],
+  ['agent.spec', { model: 'claude-fable-5-1' }, true],
+  ['agent.spec', { model: 'claude-fable-5-1', effort: 'high' }, true],
+  ['agent.spec', { model: '' }, false],
+  ['agent.spec', { model: 'claude-fable-5-1', effort: '' }, false],
+  ['agent.spec', { model: 'claude-fable-5-1', effort: 3 }, false],
+  ['agent.spec', { effort: 'high' }, false],
   [
     'manager.acted',
     { actor: 's1', action: 'open', target: 's2', detail: 'claude on flux/x' },

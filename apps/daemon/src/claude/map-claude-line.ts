@@ -213,6 +213,10 @@ const thinking = (line: ClaudeLine, pending: Pending): Mapped | null => {
 // An if-chain rather than a switch: the lint set wants a default branch and an exhaustive
 // switch at once, and a chain satisfies both with the `other` case as the final return.
 const mapBody = (line: ClaudeLine, pending: Pending, cwd: string): Mapped => {
+  // `init` names the model as configured (`haiku`), once per prompt; `message_start` names the
+  // one each call actually ran (`claude-haiku-4-5-20251001`, and a `/model` mid-session shows
+  // there). Only the latter is the running spec: the two differ for any dated model, and the
+  // transcript's effort belongs to the resolved id.
   if (line.kind === 'init') return { events: [], agentSessionId: line.sessionId };
   if (line.kind === 'user_text') {
     return { events: [{ type: 'msg.user', payload: { text: line.text } }] };
@@ -227,7 +231,9 @@ const mapBody = (line: ClaudeLine, pending: Pending, cwd: string): Mapped => {
   }
   // The window is the adapter's to resolve (context-window.ts); the mapper only reports the size.
   if (line.kind === 'context') {
-    return { events: [], context: { tokens: line.tokens, model: line.model } };
+    // A line that names no model (the parser's `''`) says nothing about the spec.
+    const spec = line.model === '' ? {} : { spec: { model: line.model } };
+    return { events: [], context: { tokens: line.tokens, model: line.model }, ...spec };
   }
   const mapped = thinking(line, pending) ?? signal(line, pending) ?? compact(line, pending);
   if (mapped !== null) return mapped;

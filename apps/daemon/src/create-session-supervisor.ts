@@ -6,7 +6,7 @@ import type {
   FluxEvent,
   SessionState,
 } from '@flux/protocol';
-import { attachment } from '@flux/protocol';
+import { attachment, fluxEvent } from '@flux/protocol';
 
 import { attachmentImages } from './attachment-images.ts';
 import { contextWindow } from './claude/context-window.ts';
@@ -42,6 +42,14 @@ export interface Mapped {
   // The prompt size of one model call and the model that took it, for the status bar's context
   // reading. The supervisor names the window (context-window.ts); the mappers stay pure.
   context?: { tokens: number; model: string };
+  // What the agent says it is running, whenever it says so (protocol.md § 5 `agent.spec`); the
+  // supervisor logs it when it differs from the last one logged, so the mappers need no memory.
+  spec?: RunningSpec;
+}
+
+export interface RunningSpec {
+  model: string;
+  effort?: string;
 }
 
 export interface AgentAdapter {
@@ -95,6 +103,9 @@ interface Context extends SupervisorOptions {
   worktree: string;
   state: SessionState;
   agentSessionId: string | null;
+  // The last `agent.spec` in the log, so a repeat from the agent (every `message_start` names
+  // the model) is not a row, across daemon restarts too. Null until the agent first says.
+  spec: RunningSpec | null;
   agent: AgentProcess | null;
   closing: boolean;
   // Lines are handled strictly in order even though some handlers await git.
@@ -108,6 +119,20 @@ const changedFile = (file: { path: string; status: string; from?: string }): Cha
     status: status === 'A' || status === 'D' || status === 'R' ? status : 'M',
     ...(file.from === undefined ? {} : { from: file.from }),
   };
+};
+
+// A spec with no effort says the effort is unknown, not that there is none: a fresh process
+// restating the model before its transcript has a line does not unsay the effort on record.
+const restates = (next: RunningSpec, last: RunningSpec | null): boolean =>
+  last !== null &&
+  next.model === last.model &&
+  (next.effort === undefined || next.effort === last.effort);
+
+const lastSpec = (log: EventLog, session: string): RunningSpec | null => {
+  const event = log.lastOfType(session, 'agent.spec');
+  return event !== null && fluxEvent.isKnown(event) && event.type === 'agent.spec'
+    ? event.payload
+    : null;
 };
 
 const append = (ctx: Context, input: EventInput): FluxEvent => {
@@ -152,6 +177,10 @@ const handleLine = async (ctx: Context, line: string): Promise<void> => {
     });
   }
   for (const event of mapped.events) append(ctx, event);
+  if (mapped.spec !== undefined && !restates(mapped.spec, ctx.spec)) {
+    ctx.spec = mapped.spec;
+    append(ctx, { type: 'agent.spec', payload: mapped.spec });
+  }
   if (mapped.filesChanged === true) {
     const files = (await ctx.git.status(ctx.worktree)).map((f) => changedFile(f));
     append(ctx, { type: 'files.changed', payload: { files } });
@@ -233,6 +262,7 @@ export const createSessionSupervisor = (options: SupervisorOptions): SessionSupe
     worktree: options.record.worktree,
     state: options.record.state,
     agentSessionId: options.record.agentSessionId,
+    spec: lastSpec(options.log, options.record.session),
     agent: null,
     closing: false,
     queue: Promise.resolve(),

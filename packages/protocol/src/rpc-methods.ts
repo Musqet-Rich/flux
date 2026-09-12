@@ -17,7 +17,8 @@ export interface SessionSummary {
   branch: string;
   harness: HarnessKind;
   // The configured model and effort the session was spawned with (ADR 0023 § 3), distinct from
-  // the running model reported in `agent.context`. Absent when the box spawned on its defaults.
+  // the running ones, the log's latest `agent.spec` (ADR 0028). Absent when the box spawned on
+  // its defaults.
   model?: string;
   effort?: string;
   state: SessionState;

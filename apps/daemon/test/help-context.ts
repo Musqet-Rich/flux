@@ -47,6 +47,7 @@ export const helpContext = async (): Promise<HelpContext> => {
     sessions,
     git,
     claudeCommand: fake,
+    claudeDir: join(worktreesDir, '..', 'claude'),
     emit: (event) => {
       emitted.push(event);
     },
