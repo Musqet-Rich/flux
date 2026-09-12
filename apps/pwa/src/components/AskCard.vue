@@ -54,6 +54,7 @@ const submit = (): void => {
 
 <style scoped>
 .ask {
+  overflow-wrap: anywhere;
   border: 1px solid var(--warn);
   border-radius: var(--radius);
   padding: 0.75rem;

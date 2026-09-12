@@ -49,8 +49,10 @@ const changedCount = computed(() => {
 
 <template>
   <div class="toolbar">
-    <span class="branch">{{ branch }}</span>
-    <span v-if="chip !== ''" class="spec-chip">{{ chip }}</span>
+    <span class="ident">
+      <span class="branch">{{ branch }}</span>
+      <span v-if="chip !== ''" class="spec-chip">{{ chip }}</span>
+    </span>
     <a v-if="pr !== null" class="pr" :href="pr.url" target="_blank" rel="noopener noreferrer">{{
       prLabel
     }}</a>
@@ -67,10 +69,26 @@ const changedCount = computed(() => {
 .toolbar {
   flex: none;
   display: flex;
-  gap: 0.5rem;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
   align-items: center;
   padding: 0.4rem 0.75rem;
   border-bottom: 1px solid var(--border);
+}
+
+/* The branch and the chip share whatever the buttons leave: a flex basis of zero, so they never
+   push a button off a phone's width, and the row only wraps in the one state where the buttons
+   alone are wider than the screen (a PR link and Stop beside Files, Changes and the menu),
+   which drops the menu to a second line rather than clipping it. Inside, the chip is sized first
+   and the branch takes what is left, down to nothing on a phone: a session's title defaults
+   to its branch, so the tab already names it, while the chip is the only place the harness,
+   model and effort show. */
+.ident {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
 }
 
 .branch {
@@ -84,7 +102,7 @@ const changedCount = computed(() => {
 }
 
 .spec-chip {
-  flex: none;
+  flex: 0 1 auto;
   color: var(--muted);
   background: var(--panel);
   border: 1px solid var(--border);
@@ -102,5 +120,17 @@ const changedCount = computed(() => {
   color: var(--accent);
   font-size: 0.85rem;
   text-decoration: none;
+  white-space: nowrap;
+}
+
+.toolbar > .secondary {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* Only bites on a wrapped second line, where it keeps the menu at the right edge: on one line
+   `.ident` has already grown into the free space, so there is none left for the margin. */
+.toolbar > :last-child {
+  margin-left: auto;
 }
 </style>

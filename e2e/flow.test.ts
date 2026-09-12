@@ -15,7 +15,9 @@ import type { Stack } from './start-stack.ts';
 // nothing sleeps.
 
 const firstPrompt = 'Read notes.txt and write greeting.txt';
-const secondPrompt = 'Change the greeting';
+// An unbreakable run in backticks, wider than a phone: the bubble has to wrap it, not widen.
+const longName = 'a_greeting_identifier_with_no_spaces_that_is_wider_than_the_phone_it_is_read_on';
+const secondPrompt = `Change the greeting in \`${longName}\``;
 const thirdPrompt = 'What colour is this?';
 const connected = /^Connected to flux@/u;
 const png = fileURLToPath(new URL('./red.png', import.meta.url));
@@ -39,6 +41,23 @@ const textOf = (content: Content): string =>
 
 const agentMessages = async (path: string): Promise<string[]> =>
   (await agentContents(path)).map((content) => textOf(content));
+
+// How far past its box each scrolls sideways, read in the page. A string, not a function, like
+// `wipeStorage` below: the harness has no DOM types. Nothing may be wider than the viewport,
+// since a phone that can pan sideways can pan and zoom the whole app. `.app` is the root that
+// clips (App.vue), so it is measured rather than the document, which reads 0 whatever leaks
+// inside it; the timeline is the one scroll container that must never scroll sideways.
+const sidewaysOverflow = `(() => {
+  const over = (el) => (el === null ? null : el.scrollWidth - el.clientWidth);
+  return {
+    app: over(document.querySelector('.app')),
+    timeline: over(document.querySelector('.timeline')),
+  };
+})()`;
+
+const noSidewaysOverflow = async (page: Page): Promise<void> => {
+  expect(await page.evaluate(sidewaysOverflow)).toEqual({ app: 0, timeline: 0 });
+};
 
 const pair = async (page: Page, stack: Stack): Promise<void> => {
   await page.goto(stack.pwaUrl);
@@ -72,10 +91,14 @@ const createSession = async (page: Page): Promise<void> => {
   await page.locator('.empty').getByRole('button', { name: 'New session' }).click();
   await page.getByLabel('Repository').selectOption({ label: 'demo' });
   await page.getByLabel('Branch').fill('e2e/greeting');
+  // A model and an effort fill the toolbar's chip out to the width it has on a real session.
+  await page.getByLabel('Model (optional)').fill('opus');
+  await page.getByLabel('Effort (optional)').fill('high');
   await page.getByLabel('First message').fill(firstPrompt);
   await page.getByRole('button', { name: 'Start agent' }).click();
   await expect(page).toHaveURL(/\/s\/[0-9a-f-]{36}$/u);
   await expect(page.locator('.branch')).toHaveText('e2e/greeting');
+  await expect(page.locator('.spec-chip')).toHaveText('Claude Code · opus · high');
 };
 
 const firstTurn = async (page: Page): Promise<void> => {
@@ -99,6 +122,9 @@ const firstTurn = async (page: Page): Promise<void> => {
     'notes.txt contains "hello", and greeting.txt has been created with "hi there".',
   );
   await expect(timeline.getByText('Agent idle')).toBeVisible();
+  // The bar now carries the fixture's rate windows beside the connection and context readings.
+  await expect(page.locator('.windows')).toBeVisible();
+  await noSidewaysOverflow(page);
 };
 
 // The second tab, which never spoke after its hello, got the turn too; closing it leaves
@@ -139,6 +165,8 @@ const sendWithComment = async (page: Page, stack: Stack): Promise<void> => {
   await expect(timeline.locator('.item.assistant').last()).toHaveText(
     'greeting.txt now says "hi again".',
   );
+  await expect(timeline.locator('.item.user').last().locator('code')).toHaveText(longName);
+  await noSidewaysOverflow(page);
   await expect
     .poll(() => agentMessages(stack.agentStdin))
     .toEqual([firstPrompt, `${secondPrompt}\n\n\`\`\`greeting.txt:1-1\nhi there\n\`\`\``]);
