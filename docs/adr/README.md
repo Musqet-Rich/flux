@@ -35,3 +35,4 @@ Format: Context, Decision, Consequences. Keep each under a page.
 | 0027 | opencode as a third harness: an NDJSON, process-per-turn adapter                            | accepted |
 | 0028 | Running model and effort as a logged `agent.spec`; Claude's effort read from its transcript | accepted |
 | 0029 | Phosphor icons, one path string each, through an in-house `Icon` component                  | accepted |
+| 0030 | Theming: eleven tokens per scheme, light and dark, themes as JSON, self-hosted fonts        | accepted |

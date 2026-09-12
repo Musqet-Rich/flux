@@ -2,6 +2,7 @@ import { pairing } from '@flux/protocol';
 import { expect, test } from 'vitest';
 
 import { createFakeRelay } from '../../test/fake-relay.ts';
+import { storeOptions } from '../../test/store-options.ts';
 import { createMemoryStorage } from '../client/create-memory-storage.ts';
 import { pairedBox } from '../client/paired-box.ts';
 import { createStore } from './create-store.ts';
@@ -17,7 +18,7 @@ const setup = async () => {
   });
   const storage = createMemoryStorage();
   const store = () =>
-    createStore({ storage, socket: relay.socket, minBackoffMs: 1, maxBackoffMs: 5 });
+    createStore(storeOptions({ storage, socket: relay.socket, minBackoffMs: 1, maxBackoffMs: 5 }));
   const link = (): string => {
     const secret = new Uint8Array(pairing.secretLength);
     return new URL(pairing.url('https://relay.example', { boxPub: relay.boxPub, secret })).hash;

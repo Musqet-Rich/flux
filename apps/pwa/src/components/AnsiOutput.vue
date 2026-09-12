@@ -4,7 +4,8 @@ import type { VNode } from 'vue';
 import { renderAnsi } from '../ansi/render-ansi.ts';
 
 // A command's streamed output, its ANSI colour rendered to styled spans (ADR 0026). The <pre>
-// preserves the layout; the spans carry only fixed, parsed colours as inline styles, never markup.
+// preserves the layout; the spans carry only parsed colours as inline styles (the named sixteen
+// as `--ansi-N` tokens, so they follow the scheme), never markup.
 const props = defineProps<{ text: string }>();
 
 const Ansi = (): VNode => renderAnsi(props.text);

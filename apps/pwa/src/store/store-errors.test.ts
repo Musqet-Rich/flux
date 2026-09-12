@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 
-import { createMemoryStorage } from '../client/create-memory-storage.ts';
+import { storeOptions } from '../../test/store-options.ts';
 import { socket } from '../client/socket.ts';
 import { storeErrors } from './store-errors.ts';
 import type { StoreInternals } from './store-state.ts';
@@ -11,8 +11,7 @@ import { storeState } from './store-state.ts';
 const internals = () => {
   const timers: { fn: () => void; ms: number }[] = [];
   const i: StoreInternals = {
-    options: {
-      storage: createMemoryStorage(),
+    options: storeOptions({
       socket,
       schedule: (fn, ms) => {
         const timer = { fn, ms };
@@ -21,7 +20,7 @@ const internals = () => {
           timers.splice(timers.indexOf(timer), 1);
         };
       },
-    },
+    }),
     state: storeState(),
     logs: new Map(),
     connection: null,

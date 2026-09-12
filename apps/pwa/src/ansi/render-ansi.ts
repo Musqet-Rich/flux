@@ -19,33 +19,18 @@ const blank: Sgr = { fg: null, bg: null, bold: false, dim: false, italic: false,
 
 const ESC = '\u001B';
 
-// A readable 16-colour palette for the dark app (the eight normal then eight bright slots).
-const palette: readonly string[] = [
-  '#3b4048',
-  '#f7768e',
-  '#9ece6a',
-  '#e0af68',
-  '#7aa2f7',
-  '#bb9af7',
-  '#7dcfff',
-  '#c0caf5',
-  '#565f89',
-  '#ff9eb1',
-  '#b9f27c',
-  '#f0c987',
-  '#9db9ff',
-  '#d2bbff',
-  '#a0e0ff',
-  '#ffffff',
-];
+// The sixteen named colours are the stylesheet's `--ansi-N` tokens (styles/base.css), one set
+// per scheme, so a span coloured by a code follows the page from dark to light. Only the
+// 256-colour cube and truecolor, where the program named an exact colour, are literal.
+const ansi = (n: number): string => `var(--ansi-${n})`;
 
 const rgb = (r: number, g: number, b: number): string => `rgb(${r}, ${g}, ${b})`;
 
-// An xterm 256-colour index to a CSS colour: the first 16 from the palette, then the 6×6×6 cube,
+// An xterm 256-colour index to a CSS colour: the first 16 the named tokens, then the 6×6×6 cube,
 // then the 24-step greyscale ramp.
 const cubeStep = (n: number): number => (n === 0 ? 0 : 55 + n * 40);
 const xterm256 = (n: number): string => {
-  if (n < 16) return palette[n] ?? '#c0caf5';
+  if (n < 16) return ansi(n);
   if (n > 231) {
     const v = 8 + (n - 232) * 10;
     return rgb(v, v, v);
@@ -81,10 +66,10 @@ const applyOne = (style: Sgr, params: number[], i: number, code: number): number
   else if (code === 24) style.underline = false;
   else if (code === 39) style.fg = null;
   else if (code === 49) style.bg = null;
-  else if (code >= 30 && code <= 37) style.fg = palette[code - 30] ?? null;
-  else if (code >= 90 && code <= 97) style.fg = palette[code - 82] ?? null;
-  else if (code >= 40 && code <= 47) style.bg = palette[code - 40] ?? null;
-  else if (code >= 100 && code <= 107) style.bg = palette[code - 92] ?? null;
+  else if (code >= 30 && code <= 37) style.fg = ansi(code - 30);
+  else if (code >= 90 && code <= 97) style.fg = ansi(code - 82);
+  else if (code >= 40 && code <= 47) style.bg = ansi(code - 40);
+  else if (code >= 100 && code <= 107) style.bg = ansi(code - 92);
   else if (code === 38 || code === 48) return extended(style, params, i, code === 38 ? 'fg' : 'bg');
   return i;
 };

@@ -2,12 +2,12 @@ import type { FluxEvent, SessionSummary } from '@flux/protocol';
 import { pairing } from '@flux/protocol';
 import { reactive } from 'vue';
 
-import { createMemoryStorage } from '../src/client/create-memory-storage.ts';
 import type { Store } from '../src/store/create-store.ts';
 import { createStore } from '../src/store/create-store.ts';
 import type { StoreOptions } from '../src/store/store-state.ts';
 import type { FakeRelay, Handlers } from './fake-relay.ts';
 import { createFakeRelay } from './fake-relay.ts';
+import { storeOptions } from './store-options.ts';
 
 // A store already paired with a fake box, for component tests: the box holds one session
 // `s1` whose log is `events`, and answers whatever `handlers` add. Every handled call is
@@ -60,7 +60,7 @@ export const pairedStore = async (
       seen,
     ),
   );
-  const store = createStore({ storage: createMemoryStorage(), socket: relay.socket, ...options });
+  const store = createStore(storeOptions({ socket: relay.socket, ...options }));
   const secret = new Uint8Array(pairing.secretLength);
   const url = pairing.url('https://relay.example', { boxPub: relay.boxPub, secret });
   await store.pair('https://relay.example', new URL(url).hash);

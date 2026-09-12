@@ -6,10 +6,9 @@ import { reactive } from 'vue';
 import type { FakeRelay, Handlers } from '../../test/fake-relay.ts';
 import { createFakeRelay } from '../../test/fake-relay.ts';
 import { settingsFixture } from '../../test/settings-fixture.ts';
+import { storeOptions } from '../../test/store-options.ts';
 import { until } from '../../test/until.ts';
 import { ClientError } from '../client/client-error.ts';
-import type { Storage } from '../client/create-memory-storage.ts';
-import { createMemoryStorage } from '../client/create-memory-storage.ts';
 import type { Store } from './create-store.ts';
 import { createStore } from './create-store.ts';
 import { notificationSound } from './notification-sound.ts';
@@ -64,12 +63,15 @@ const emitter = (store: Store, relay: FakeRelay) => {
   };
 };
 
-const setup = async (storage: Storage = createMemoryStorage(), settings = settingsFixture()) => {
+type Storage = ReturnType<typeof storeOptions>['storage'];
+
+// `storage` is given to bring a second store up on the first's, as the next page load would.
+const setup = async (storage?: Storage, settings = settingsFixture()) => {
   const { relay, fetches, refuse } = await box(settings);
   const played = reactive<string[]>([]);
   const timers: (() => void)[] = [];
-  const store = createStore({
-    storage,
+  const options = storeOptions({
+    ...(storage === undefined ? {} : { storage }),
     socket: relay.socket,
     playSound: (name) => {
       played.push(name);
@@ -83,6 +85,7 @@ const setup = async (storage: Storage = createMemoryStorage(), settings = settin
     minBackoffMs: 1,
     maxBackoffMs: 5,
   });
+  const store = createStore(options);
   const secret = new Uint8Array(pairing.secretLength);
   const url = pairing.url('https://relay.example', { boxPub: relay.boxPub, secret });
   await store.pair('https://relay.example', new URL(url).hash);
@@ -92,22 +95,31 @@ const setup = async (storage: Storage = createMemoryStorage(), settings = settin
       fn();
     });
   };
-  return { store, relay, played, timers, emit: emitter(store, relay), quiet, fetches, refuse };
+  return {
+    store,
+    relay,
+    storage: options.storage,
+    played,
+    timers,
+    emit: emitter(store, relay),
+    quiet,
+    fetches,
+    refuse,
+  };
 };
 
 test('picking a sound plays it at once and keeps it for the next boot', async () => {
-  const storage = createMemoryStorage();
-  const first = await setup(storage);
+  const first = await setup();
   expect(first.store.state.sound).toBe('none');
   expect(await first.store.setSound('chime')).toBe(true);
   expect(first.store.state.sound).toBe('chime');
   expect(first.played).toEqual(['chime']);
-  expect(await storage.get(notificationSound.storageKey)).toBe('chime');
+  expect(await first.storage.get(notificationSound.storageKey)).toBe('chime');
   first.store.stop();
   // A second store on the same storage (the next page load) comes up with the choice made and
   // fetches the box's triggers on every connect, so it knows what to ring for; a box that
   // refuses leaves the last fetched settings in place.
-  const second = await setup(storage);
+  const second = await setup(first.storage);
   await until(() => second.store.state.settings !== null);
   expect(second.store.state.sound).toBe('chime');
   expect(second.fetches).toEqual(['sent']);
@@ -123,8 +135,8 @@ test('picking a sound plays it at once and keeps it for the next boot', async ()
   expect(second.store.state.error).toBeNull();
   second.store.stop();
   // A stored value from another build is ignored rather than trusted.
-  await storage.set(notificationSound.storageKey, 'gong');
-  const third = await setup(storage);
+  await first.storage.set(notificationSound.storageKey, 'gong');
+  const third = await setup(first.storage);
   expect(third.store.state.sound).toBe('none');
   expect(third.fetches).toEqual([]);
   third.store.stop();

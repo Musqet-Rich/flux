@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { LineRange } from '@flux/protocol';
 import { fluxEvent } from '@flux/protocol';
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
 import { ClientError } from '../client/client-error.ts';
 import type { DiffEditor } from '../editor/create-diff-editor.ts';
@@ -63,6 +63,7 @@ const original = async (rev: string): Promise<string> => {
 const mount = (parent: HTMLElement, before: string, current: string): void => {
   editor = createDiffEditor({
     parent,
+    dark: props.store.appearance.scheme.value === 'dark',
     original: before,
     current,
     onSelection: (range) => {
@@ -110,6 +111,12 @@ const comment = async (): Promise<void> => {
 const remove = (commentId: string): void => {
   void props.store.removeComment(props.session, commentId);
 };
+
+// The scheme can change under an open diff (system mode, the device flipping at dusk).
+watch(
+  () => props.store.appearance.scheme.value === 'dark',
+  (dark) => editor?.setDark(dark),
+);
 
 onMounted(() => {
   void load();

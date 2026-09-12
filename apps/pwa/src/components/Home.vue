@@ -96,6 +96,9 @@ const onPair = (relayUrl: string, fragment: string): void => {
   --flux-mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
   --flux-line: oklch(0.28 0.03 150);
   --flux-max: 1160px;
+  /* Its own dark look whatever the device's scheme (ADR 0030): the landing is the product's
+     face, and its controls should not go light under a light system. */
+  color-scheme: dark;
 
   position: relative;
   flex: 1;

@@ -1,5 +1,5 @@
 import { unifiedMergeView } from '@codemirror/merge';
-import { EditorSelection, EditorState } from '@codemirror/state';
+import { Compartment, EditorSelection, EditorState } from '@codemirror/state';
 import type { BlockInfo } from '@codemirror/view';
 import { EditorView, lineNumbers } from '@codemirror/view';
 import type { LineRange } from '@flux/protocol';
@@ -14,10 +14,15 @@ import { selectionRange } from './selection-range.ts';
 export interface DiffEditor {
   destroy: () => void;
   clearSelection: () => void;
+  // Rebuilds the theme for the other scheme (editor-theme.ts), as the view does when the
+  // system flips while the diff is open.
+  setDark: (dark: boolean) => void;
 }
 
 export interface DiffEditorOptions {
   parent: HTMLElement;
+  // Whether the app's scheme is dark at creation (ADR 0030); `setDark` follows it after.
+  dark: boolean;
   original: string;
   current: string;
   onSelection: (range: LineRange | null) => void;
@@ -44,6 +49,7 @@ export const createDiffEditor = (options: DiffEditorOptions): DiffEditor => {
   // relay's CSP (default-src 'self', no unsafe-inline) blocks. Inside a shadow root it uses a
   // constructed stylesheet instead, which CSP does not govern, so the editor lives in one.
   const root = options.parent.shadowRoot ?? options.parent.attachShadow({ mode: 'open' });
+  const theme = new Compartment();
   const view = new EditorView({
     root,
     parent: root,
@@ -64,7 +70,7 @@ export const createDiffEditor = (options: DiffEditorOptions): DiffEditor => {
         EditorView.updateListener.of((update) => {
           if (update.selectionSet) options.onSelection(selectionRange(update.state));
         }),
-        editorTheme,
+        theme.of(editorTheme(options.dark)),
         gutterTheme,
       ],
     }),
@@ -75,6 +81,10 @@ export const createDiffEditor = (options: DiffEditorOptions): DiffEditor => {
     },
     clearSelection: () => {
       view.dispatch({ selection: EditorSelection.cursor(0) });
+    },
+    // Not recorded, unlike the code editor's: nothing here builds a fresh state.
+    setDark: (dark) => {
+      view.dispatch({ effects: theme.reconfigure(editorTheme(dark)) });
     },
   };
 };

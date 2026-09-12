@@ -22,9 +22,18 @@ test('plain text becomes a single string child, no spans', () => {
 test('a foreground colour becomes a styled span, and reset returns to plain text', () => {
   const kids = children(`${E}[31mred${E}[0m tail`);
   expect(kids).toHaveLength(2);
-  expect(styleOf(kids[0])).toMatchObject({ color: '#f7768e' });
+  expect(styleOf(kids[0])).toMatchObject({ color: 'var(--ansi-1)' });
   expect((kids[0] as VNode).children).toBe('red');
   expect(kids[1]).toBe(' tail');
+});
+
+// Each of the four named ranges lands on its slot: bright is the upper eight, background is
+// its own property.
+test('the bright and background ranges land on their tokens', () => {
+  const kids = children(`${E}[91mr${E}[0m${E}[42mg${E}[0m${E}[102mb${E}[0m`);
+  expect(styleOf(kids[0])).toEqual({ color: 'var(--ansi-9)' });
+  expect(styleOf(kids[1])).toEqual({ backgroundColor: 'var(--ansi-2)' });
+  expect(styleOf(kids[2])).toEqual({ backgroundColor: 'var(--ansi-10)' });
 });
 
 test('bold sets a weight and 22 clears it', () => {
