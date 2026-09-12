@@ -3,13 +3,17 @@ import { afterEach, expect, test } from 'vitest';
 
 import { fakeAppearance } from '../../test/fake-appearance.ts';
 import { applyAppearance } from './apply-appearance.ts';
+import { presets } from './presets.ts';
 
 // The document is shared by every test in the file; each leaves it bare, whatever it asserted.
 afterEach(() => {
   delete document.documentElement.dataset['scheme'];
-  document.documentElement.style.fontSize = '';
+  document.documentElement.style.cssText = '';
   for (const el of document.head.querySelectorAll('meta, style')) el.remove();
 });
+
+const { nord } = presets;
+const property = (name: string): string => document.documentElement.style.getPropertyValue(name);
 
 test('the scheme and the size go on the root at once and follow each change', async () => {
   const a = fakeAppearance();
@@ -35,6 +39,27 @@ const metaOf = (content: string): HTMLMetaElement => {
   document.head.append(meta);
   return meta;
 };
+
+test('the theme goes on the root as light-dark pairs, the default too, and follows a change', async () => {
+  const a = fakeAppearance();
+  const stop = applyAppearance(document, a);
+  expect(property('--bg')).toBe('light-dark(#f5f6f8, #0f1115)');
+  expect(property('--ansi-15')).toBe('light-dark(#1a1d24, #ffffff)');
+  a.setTheme(nord);
+  await nextTick();
+  expect(property('--bg')).toBe('light-dark(#eceff4, #2e3440)');
+  expect(property('--accent-fg')).toBe('light-dark(#eceff4, #2e3440)');
+  expect(property('--ansi-15')).toBe('light-dark(#2e3440, #eceff4)');
+  a.setTheme({ name: 'x', dark: { accent: '#ff00ff' } });
+  await nextTick();
+  // Nothing of the previous theme is left where the new one said nothing.
+  expect(property('--bg')).toBe('light-dark(#f5f6f8, #0f1115)');
+  expect(property('--accent')).toBe('light-dark(#2a63c4, #ff00ff)');
+  a.setTheme(null);
+  await nextTick();
+  expect(property('--accent')).toBe('light-dark(#2a63c4, #4f8cff)');
+  stop();
+});
 
 test('the theme-color metas keep their markup values while the page has no background', () => {
   const meta = metaOf('#0f1115');

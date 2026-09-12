@@ -3,10 +3,11 @@ import { computed } from 'vue';
 
 import type { Appearance, Mode } from '../appearance/appearance.ts';
 import { appearance as spec } from '../appearance/appearance.ts';
+import ThemePicker from './ThemePicker.vue';
 
-// How the app looks on this device (ADR 0030): light, dark or the system's, and the text size.
-// Each applies as it is changed and is kept on the device, so there is no Save and nothing
-// goes to the box. A slider for the size rather than a field: on a phone the operator is
+// How the app looks on this device (ADR 0030): light, dark or the system's, the theme, and the
+// text size. Each applies as it is changed and is kept on the device, so there is no Save and
+// nothing goes to the box. A slider for the size rather than a field: on a phone the operator is
 // judging the result by eye, and a thumb on a slider does that.
 
 const props = defineProps<{ appearance: Appearance }>();
@@ -42,6 +43,7 @@ const pickSize = (event: Event): void => {
       </select>
       <p id="flux-mode-hint" class="hint">System follows this device's light or dark setting.</p>
     </div>
+    <ThemePicker :appearance="appearance" />
     <div class="field">
       <label for="flux-font-size">Text size</label>
       <div class="size">

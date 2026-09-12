@@ -9,10 +9,13 @@
    apply-appearance.ts puts the scheme in force on the root as `data-scheme`, which overrides
    the system either way. The root font size is the device's text size, set by the same
    script (its default in appearance.ts is this 15px, and the two must agree or the page
-   resizes on load); everything below is em- or rem-sized from it. On light, text, muted,
-   ok, warn, danger and the accent hold at least 4.5:1 against the page and both panels, and
-   the sixteen ANSI colours against the page, where a command's output sits; bright green
-   and yellow sit close to their normal ones for it. */
+   resizes on load); everything below is em- or rem-sized from it. The values here are also
+   the default theme in appearance/theme.ts, which sets them on the root as a theme would:
+   change one here, change it there, or the page re-colours as the script runs (`pnpm run
+   check` refuses the two differing). On light, text, muted, ok, warn, danger and the accent
+   hold at least 4.5:1 against the page and both panels, and the sixteen ANSI colours against
+   the page, where a command's output sits; bright green and yellow sit close to their normal
+   ones for it. */
 
 :root {
   --bg: light-dark(#f5f6f8, #0f1115);
