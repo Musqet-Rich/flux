@@ -451,3 +451,24 @@ test('a failed compaction reflects the status line result on the boundary event'
   );
   expect(boundary.events[0]?.payload).toMatchObject({ result: 'failure' });
 });
+
+// The running model (protocol.md § 5 `agent.spec`): the resolved id on every message_start,
+// nothing on a line whose model the parser could not read, and nothing on init, whose model is
+// the configured name (`claude-haiku-4-5` against the call's `claude-haiku-4-5-20251001`).
+test('message_start carries the model as the running spec; init, the configured name, does not', () => {
+  const pending: Pending = { tools: new Map(), thinking: null, agents: new Map() };
+  expect(
+    mapClaudeLine({ kind: 'init', sessionId: 'sid', model: 'claude-fable-5', cwd }, pending, cwd),
+  ).toEqual({ events: [], agentSessionId: 'sid' });
+  expect(
+    mapClaudeLine({ kind: 'context', tokens: 5, model: 'claude-opus-5' }, pending, cwd),
+  ).toEqual({
+    events: [],
+    context: { tokens: 5, model: 'claude-opus-5' },
+    spec: { model: 'claude-opus-5' },
+  });
+  expect(mapClaudeLine({ kind: 'context', tokens: 5, model: '' }, pending, cwd)).toEqual({
+    events: [],
+    context: { tokens: 5, model: '' },
+  });
+});

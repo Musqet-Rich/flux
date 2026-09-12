@@ -120,13 +120,17 @@ test('malformed signals fall back to other rather than half-parsed', () => {
   for (const value of bad) expect(parseStreamLine(JSON.stringify(value))?.kind).toBe('other');
 });
 
-test('init carries the agent session id and model', () => {
+test('init carries the agent session id, the model and the cwd the agent slugs', () => {
   const init = lines.map((l) => parseStreamLine(l)).find((l) => l?.kind === 'init');
   expect(init).toEqual({
     kind: 'init',
     sessionId: '86845ede-f4a6-4fc1-a5fb-b6aa1705796b',
     model: 'claude-fable-5',
+    cwd: '/private/tmp/claude-501/-Users-richhenderson-code-flux/73ccd0c9-0938-49eb-9548-e002f2d31a8d/scratchpad/fixture-repo',
   });
+  expect(
+    parseStreamLine(JSON.stringify({ type: 'system', subtype: 'init', session_id: 'x' })),
+  ).toEqual({ kind: 'init', sessionId: 'x', model: '', cwd: '' });
 });
 
 test('assistant lines keep text and tool_use blocks in order', () => {

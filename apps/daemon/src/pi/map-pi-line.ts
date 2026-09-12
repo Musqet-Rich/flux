@@ -53,14 +53,19 @@ const assistant = (message: PiAssistantMessage, pending: PiPending): Mapped => {
   const { run } = pending;
   run.messages += 1;
   run.stopReason = message.stopReason;
-  if (message.usage === undefined) return { events };
+  // The model pi names on a message it got an answer from is the running one (protocol.md § 5
+  // `agent.spec`); a failed call names the model that did not run. pi reports no thinking level,
+  // so the spec is the model alone.
+  const failed = message.stopReason === 'error';
+  const spec = message.model === '' || failed ? {} : { spec: { model: message.model } };
+  if (message.usage === undefined) return { events, ...spec };
   add(run.usage, message.usage);
   // pi's per-message usage is this one model call's, so its input side (prompt, cache reads
   // and writes) is the context in use, the way Claude's `message_start` usage is. A failed call
   // reports zeros and says nothing about the context.
   const tokens = message.usage.input + message.usage.cacheRead + message.usage.cacheWrite;
-  if (tokens === 0) return { events };
-  return { events, context: { tokens, model: message.model } };
+  if (tokens === 0) return { events, ...spec };
+  return { events, context: { tokens, model: message.model }, ...spec };
 };
 
 const toolStart = (

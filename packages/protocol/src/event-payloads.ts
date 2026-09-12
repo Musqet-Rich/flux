@@ -6,8 +6,17 @@ import { isCodeRef } from './is-code-ref.ts';
 // Payload shapes and guards for every event type (protocol.md § 5). One guard per type, looked up
 // by the envelope guard in flux-event.ts. Adding an event means a type, a guard and a test here.
 
-const { isString, isBoolean, isNumber, isInteger, isRecord, isArrayOf, isOneOf, isOptional } =
-  guards;
+const {
+  isString,
+  isFilledString,
+  isBoolean,
+  isNumber,
+  isInteger,
+  isRecord,
+  isArrayOf,
+  isOneOf,
+  isOptional,
+} = guards;
 
 const harnessKinds = ['claude', 'pi', 'opencode'] as const;
 export type HarnessKind = (typeof harnessKinds)[number];
@@ -78,6 +87,11 @@ export interface EventPayloads {
     usage?: TokenUsage;
   };
   rate_limit: { windows: RateWindow[] };
+  // What the agent reports it is running (ADR 0028): the model id as the harness names it on
+  // its stream, and the effort when the box can learn it (for Claude Code, from its transcript).
+  // Logged when either changes, so the latest row is the current spec; distinct from the
+  // configured `model`/`effort` on `SessionSummary`, which are what the session was asked for.
+  'agent.spec': { model: string; effort?: string };
   ask: { askId: string; question: string; options?: string[]; timeoutAt: string };
   'ask.answered': { askId: string; answer: string; by: 'device' | 'timeout' | 'aborted' };
   notify: { level: 'info' | 'done' | 'blocked'; summary: string };
@@ -198,6 +212,8 @@ export const eventPayloads: PayloadGuards = {
     isOptional(v['usage'], isTokenUsage),
   rate_limit: (v): v is EventPayloads['rate_limit'] =>
     isRecord(v) && isArrayOf(v['windows'], isRateWindow),
+  'agent.spec': (v): v is EventPayloads['agent.spec'] =>
+    isRecord(v) && isFilledString(v['model']) && isOptional(v['effort'], isFilledString),
   ask: (v): v is EventPayloads['ask'] =>
     isRecord(v) &&
     isString(v['askId']) &&

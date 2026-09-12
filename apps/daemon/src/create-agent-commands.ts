@@ -14,6 +14,8 @@ import { piExtensionPath } from './pi/pi-extension-path.ts';
 export interface AgentCommandsInput {
   dataDir: string;
   controlSocket: string;
+  // The agent's config directory (create-daemon.ts `claudeDir`), where its transcripts are.
+  claudeDir: string;
   claudeCommand?: string;
   piCommand?: string;
   piProvider?: string;
@@ -23,7 +25,10 @@ export interface AgentCommandsInput {
 
 export interface AgentCommands {
   agents: HarnessKind[];
-  pool: Pick<SupervisorPoolOptions, 'claudeCommand' | 'pi' | 'opencode' | 'mcpConfig' | 'env'>;
+  pool: Pick<
+    SupervisorPoolOptions,
+    'claudeCommand' | 'claudeDir' | 'pi' | 'opencode' | 'mcpConfig' | 'env'
+  >;
   // Drops what the agent kept for a session once it is archived: pi's session file (Claude's
   // transcript stays; ADR 0007 reads it as a source).
   forget: (session: string) => void;
@@ -57,6 +62,7 @@ export const createAgentCommands = (input: AgentCommandsInput): AgentCommands =>
   },
   pool: {
     ...(input.claudeCommand === undefined ? {} : { claudeCommand: input.claudeCommand }),
+    claudeDir: input.claudeDir,
     mcpConfig: createMcpConfig({ dataDir: input.dataDir, controlSocket: input.controlSocket }),
     pi: {
       sessionDir: join(input.dataDir, 'pi-sessions'),

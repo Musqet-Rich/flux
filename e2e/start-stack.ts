@@ -57,6 +57,9 @@ const isolatedEnv = (home: string): NodeJS.ProcessEnv => ({
   HOME: home,
   XDG_CONFIG_HOME: home,
   GIT_CONFIG_NOSYSTEM: '1',
+  // Where the daemon reads the agent's transcripts (ADR 0028): the isolated home's, which the
+  // daemon would resolve from HOME anyway, pinned here so a set CLAUDE_CONFIG_DIR cannot differ.
+  CLAUDE_CONFIG_DIR: join(home, '.claude'),
 });
 
 // A pidfile per child in the temp dir, so a run that finds this dir left behind can kill the

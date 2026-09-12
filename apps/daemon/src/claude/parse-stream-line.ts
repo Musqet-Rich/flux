@@ -39,7 +39,8 @@ export interface RateWindowInfo {
 }
 
 type ClaudeLineBody =
-  | { kind: 'init'; sessionId: string; model: string }
+  // `cwd` is the directory the agent slugs into its transcript path (read-transcript-effort.ts).
+  | { kind: 'init'; sessionId: string; model: string; cwd: string }
   | { kind: 'status'; status: string }
   | { kind: 'delta'; text: string }
   | { kind: 'assistant'; blocks: (TextBlock | ToolUseBlock)[] }
@@ -245,6 +246,7 @@ const system = (line: Record<string, unknown>): ClaudeLine => {
       kind: 'init',
       sessionId: line['session_id'],
       model: isString(line['model']) ? line['model'] : '',
+      cwd: isString(line['cwd']) ? line['cwd'] : '',
     };
   }
   if (line['subtype'] === 'status' && isString(line['status'])) {

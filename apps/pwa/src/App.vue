@@ -42,5 +42,8 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   height: 100%;
+  /* A page wider than the viewport lets a phone pan and zoom the whole app; every screen wraps
+     or scrolls its own content, and this is the backstop should one leak. */
+  overflow: hidden;
 }
 </style>

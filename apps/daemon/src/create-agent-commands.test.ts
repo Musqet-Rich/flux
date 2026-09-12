@@ -10,6 +10,7 @@ test('resolves the agents present and the per-agent spawn options', () => {
   const config = createAgentCommands({
     dataDir,
     controlSocket: '/run/flux.sock',
+    claudeDir: join(dataDir, 'claude'),
     claudeCommand: 'sh',
     piCommand: 'no-such-binary-anywhere',
     piProvider: 'anthropic',
@@ -18,6 +19,7 @@ test('resolves the agents present and the per-agent spawn options', () => {
   });
   expect(config.agents).toEqual(['claude']);
   expect(config.pool.claudeCommand).toBe('sh');
+  expect(config.pool.claudeDir).toBe(join(dataDir, 'claude'));
   expect(config.pool.pi).toEqual({
     sessionDir: join(dataDir, 'pi-sessions'),
     extension: expect.stringMatching(/flux-pi-extension\.ts$/u),
@@ -39,7 +41,11 @@ test('resolves the agents present and the per-agent spawn options', () => {
 
 test('leaves unset options out so the binaries and pi settings decide', () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'flux-agent-commands-'));
-  const config = createAgentCommands({ dataDir, controlSocket: '/run/flux.sock' });
+  const config = createAgentCommands({
+    dataDir,
+    controlSocket: '/run/flux.sock',
+    claudeDir: join(dataDir, 'claude'),
+  });
   expect(config.pool.claudeCommand).toBeUndefined();
   expect(config.pool.pi).toEqual({
     sessionDir: join(dataDir, 'pi-sessions'),
@@ -57,10 +63,18 @@ test('forget removes the pi session file of an archived session and nothing else
   const other = join(slug, '2026-08-29T13-19-01-154Z_s2.jsonl');
   writeFileSync(mine, '{}\n');
   writeFileSync(other, '{}\n');
-  const commands = createAgentCommands({ dataDir, controlSocket: '/run/flux.sock' });
+  const commands = createAgentCommands({
+    dataDir,
+    controlSocket: '/run/flux.sock',
+    claudeDir: join(dataDir, 'claude'),
+  });
   commands.forget('s1');
   expect(existsSync(mine)).toBe(false);
   expect(existsSync(other)).toBe(true);
   commands.forget('s3');
-  createAgentCommands({ dataDir: join(dataDir, 'none'), controlSocket: '/s' }).forget('s1');
+  createAgentCommands({
+    dataDir: join(dataDir, 'none'),
+    controlSocket: '/s',
+    claudeDir: '/c',
+  }).forget('s1');
 });

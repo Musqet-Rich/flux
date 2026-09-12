@@ -23,8 +23,8 @@ const pageSize = 200;
 // for the ask, comment, sync and Changes logic, but they are noise on a phone: hooks and streaming
 // envelopes would put half a dozen bare rows around every reply, a subagent repeats `files.changed`
 // on every write, and the status bar and Changes button already carry what they say.
-// `task.progress` only feeds the agents strip.
-const hiddenTypes = new Set(['raw', 'rate_limit', 'files.changed', 'task.progress']);
+// `task.progress` only feeds the agents strip, `agent.spec` the toolbar's chip.
+const hiddenTypes = new Set(['raw', 'rate_limit', 'files.changed', 'task.progress', 'agent.spec']);
 
 // A /compact turn is in flight when the latest top-level `msg.user` is `/compact` — bare, or with
 // a focus argument (a self-compaction via the flux_compact tool queues `/compact <focus>`) — and no

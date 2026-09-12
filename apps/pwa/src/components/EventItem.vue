@@ -102,6 +102,10 @@ const describeNote = (event: KnownEvent): View => {
       return note(`Turn ended${money(event.payload.costUsd)}`);
     case 'rate_limit':
       return note('Rate limit changed');
+    case 'agent.spec': {
+      const { model, effort } = event.payload;
+      return note(`Running ${effort === undefined ? model : `${model}:${effort}`}`);
+    }
     case 'ask':
       return note(`Asked: ${event.payload.question}`, 'warn');
     case 'ask.answered':
@@ -307,6 +311,7 @@ const quoteLine = computed(
   /* A flex child's min-width is its content by default, so one unbreakable token (a quoted
      grep pattern, a long path) would widen the whole timeline past the viewport. */
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .user,
@@ -389,7 +394,6 @@ const quoteLine = computed(
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.8rem;
   width: 100%;
-  overflow-wrap: anywhere;
 }
 
 .summary:disabled {
@@ -464,7 +468,6 @@ const quoteLine = computed(
   text-align: left;
   font-size: 0.8rem;
   white-space: pre-wrap;
-  overflow-wrap: anywhere;
 }
 
 .report {

@@ -102,7 +102,12 @@ pre {
 /* Messages (markdown/render-markdown.ts), used by the timeline and the streaming bubble:
    paragraphs and blocks are spaced, headings are bold lines a step below the app's own, code
    sits in a panel, tables scroll sideways on a narrow screen. Global because both components
-   render the same tree. */
+   render the same tree. A long unbreakable run (an identifier in backticks, a URL, a path)
+   breaks anywhere rather than widening the bubble past the screen. */
+
+.markdown {
+  overflow-wrap: anywhere;
+}
 
 .markdown > :first-child {
   margin-top: 0;
@@ -178,9 +183,12 @@ pre {
   overflow-x: auto;
 }
 
+/* Whole words: with `anywhere` inherited, every cell's minimum is one character, so the table
+   would always fit and wrap mid-token instead of the wrapper scrolling. */
 .markdown table {
   border-collapse: collapse;
   font-size: 0.9em;
+  overflow-wrap: normal;
 }
 
 .markdown th,

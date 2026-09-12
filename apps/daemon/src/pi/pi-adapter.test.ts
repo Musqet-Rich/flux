@@ -38,9 +38,11 @@ test('a reply streams, a tool call is rendered, the turn ends with cost and the 
   await untilEvent(emitted, 'turn.ended');
   await untilState(emitted, 'idle');
   const events = log.read('s1', 0).events;
+  // The first assistant message names the model pi runs: the running spec, logged once.
   expect(events.map((e) => e.type)).toEqual([
     'msg.user',
     'session.state',
+    'agent.spec',
     'tool.start',
     'tool.start',
     'tool.end',
@@ -50,13 +52,14 @@ test('a reply streams, a tool call is rendered, the turn ends with cost and the 
     'turn.ended',
     'session.state',
   ]);
-  expect(events[2]?.payload).toMatchObject({ name: 'read', summary: 'read notes.txt' });
-  expect(events[8]?.payload).toMatchObject({
+  expect(events[2]?.payload).toEqual({ model: 'claude-haiku-4-5-20251001' });
+  expect(events[3]?.payload).toMatchObject({ name: 'read', summary: 'read notes.txt' });
+  expect(events[9]?.payload).toMatchObject({
     costUsd: expect.any(Number),
     numTurns: 2,
     usage: { input: expect.any(Number) },
   });
-  const ended = events[8] as { payload: { costUsd: number } };
+  const ended = events[9] as { payload: { costUsd: number } };
   expect(ended.payload.costUsd).toBeGreaterThan(0);
   expect(ephemeral.some((m) => m.type === 'delta')).toBe(true);
   expect(spawns).toEqual([{ cwd: expect.any(String), session: 's1' }]);

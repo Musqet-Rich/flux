@@ -32,6 +32,7 @@ const setup = async () => {
     sessions,
     git: createGitService(),
     claudeCommand: stubborn,
+    claudeDir: `${worktree}-claude`,
     emit: () => {},
     emitEphemeral: () => {},
     // Long enough that only killAll can end the test.
