@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onUnmounted, ref } from 'vue';
 
 import { useDismiss } from '../composables/useDismiss.ts';
 import Icon from './Icon.vue';
+import { writeClipboard } from './write-clipboard.ts';
 
 // The overflow menu on a message bubble: copy the text as written (the agent's Markdown, the
 // operator's own typing), or reply to it. Same shape as SessionMenu: a button with
@@ -26,24 +27,19 @@ const toggle = (): void => {
   open.value = !open.value;
 };
 
-// The async clipboard is missing off HTTPS (a box reached over plain http on the LAN) and
-// can be refused; neither is worth an unhandled rejection, so the button reports instead.
-const writeClipboard = async (text: string): Promise<boolean> => {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    return false;
-  }
-};
-
+// One reset at a time, and none after the timeline's sliding window has unmounted the bubble.
+let reset: number | undefined;
 const copy = async (): Promise<void> => {
   open.value = false;
   outcome.value = (await writeClipboard(props.text)) ? 'copied' : 'failed';
-  setTimeout(() => {
+  window.clearTimeout(reset);
+  reset = window.setTimeout(() => {
     outcome.value = null;
   }, 1500);
 };
+onUnmounted(() => {
+  window.clearTimeout(reset);
+});
 
 const reply = (): void => {
   open.value = false;
@@ -65,6 +61,10 @@ const reply = (): void => {
     >
       <Icon :name="face" />
     </button>
+    <!-- The tick is only a picture; a screen reader hears the outcome here. -->
+    <span class="visually-hidden" role="status">{{
+      outcome === 'copied' ? 'Copied' : outcome === 'failed' ? 'Copy failed' : ''
+    }}</span>
     <div v-if="open" class="menu" role="menu" aria-label="Message">
       <button type="button" role="menuitem" @click="copy"><Icon name="copy" />Copy</button>
       <button type="button" role="menuitem" @click="reply"><Icon name="reply" />Reply</button>
