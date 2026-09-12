@@ -157,7 +157,7 @@ Explicitly rejected, with the reason, so nobody re-proposes them:
 
 ## What the tooling enforces
 
-`pnpm run check` (fmt, lint, types, tests with coverage), `.githooks/pre-commit` (Node 24, exact pins, ledger line for every added dependency, secret shapes, TODO without issue, commented-out code, decorators, `function` keyword, files over 500 lines, lockfile drift, then `check`), `.githooks/commit-msg` (format above), and CI (`check`, `audit`, `hooks` self-tests, `diff` over the PR range, `commits`, and `e2e` for the Playwright flow). `.github/rulesets/main.json` makes those required on `main`; a repo admin applies it with the command in its README. Every rule above not in this list is enforced by review:
+`pnpm run check` (fmt, lint, the default theme against `base.css`, types, tests with coverage), `.githooks/pre-commit` (Node 24, exact pins, ledger line for every added dependency, secret shapes, TODO without issue, commented-out code, decorators, `function` keyword, files over 500 lines, lockfile drift, then `check`), `.githooks/commit-msg` (format above), and CI (`check`, `audit`, `hooks` self-tests, `diff` over the PR range, `commits`, and `e2e` for the Playwright flow). `.github/rulesets/main.json` makes those required on `main`; a repo admin applies it with the command in its README. Every rule above not in this list is enforced by review:
 
 - One primary export per file, named the same as the file (the diff check catches the obvious cases only).
 - Comments explain why; templates stay dumb; theme colours come from CSS custom properties.

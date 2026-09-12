@@ -1,0 +1,146 @@
+import type { Theme } from './theme.ts';
+
+// The themes Settings offers besides the default (ADR 0030): two well-known palettes, each with
+// a light and a dark side, as much to show what the JSON looks like as to be chosen. The dark
+// sides are the palettes as published, contrast included (Nord's red on its background is
+// 3:1; Solarized is famously low), except a colour that would vanish outright: Solarized's
+// bright black is its own page, and stands in as its next grey. The light sides are derived:
+// both palettes were drawn for a dark terminal, and their colours do not read on a light
+// page, so each is darkened in its own hue until it holds 4.5:1 against the page, Solarized's
+// whites, which are its light page, becoming its darks. Where a palette has no colour for a
+// token (Nord has no mid grey for muted text, Solarized no third background) the nearest mix
+// in its own hues stands in.
+
+const nord: Theme = {
+  name: 'Nord',
+  light: {
+    bg: '#eceff4',
+    fg: '#2e3440',
+    muted: '#4c566a',
+    panel: '#ffffff',
+    'panel-2': '#e5e9f0',
+    border: '#d8dee9',
+    accent: '#506e92',
+    'accent-fg': '#eceff4',
+    danger: '#a5464f',
+    ok: '#4d7638',
+    warn: '#87681b',
+    ansi: [
+      '#3b4252',
+      '#a5464f',
+      '#4d7638',
+      '#87681b',
+      '#506e92',
+      '#7e6379',
+      '#50717b',
+      '#4c566a',
+      '#5d6778',
+      '#a6545c',
+      '#607053',
+      '#7a6a48',
+      '#596f85',
+      '#7e6379',
+      '#567170',
+      '#2e3440',
+    ],
+  },
+  dark: {
+    bg: '#2e3440',
+    fg: '#eceff4',
+    muted: '#a4adc0',
+    panel: '#3b4252',
+    'panel-2': '#434c5e',
+    border: '#4c566a',
+    accent: '#88c0d0',
+    'accent-fg': '#2e3440',
+    danger: '#bf616a',
+    ok: '#a3be8c',
+    warn: '#ebcb8b',
+    ansi: [
+      '#3b4252',
+      '#bf616a',
+      '#a3be8c',
+      '#ebcb8b',
+      '#81a1c1',
+      '#b48ead',
+      '#88c0d0',
+      '#e5e9f0',
+      '#4c566a',
+      '#bf616a',
+      '#a3be8c',
+      '#ebcb8b',
+      '#81a1c1',
+      '#b48ead',
+      '#8fbcbb',
+      '#eceff4',
+    ],
+  },
+};
+
+const solarized: Theme = {
+  name: 'Solarized',
+  light: {
+    bg: '#fdf6e3',
+    fg: '#586e75',
+    muted: '#657b83',
+    panel: '#ffffff',
+    'panel-2': '#eee8d5',
+    border: '#d9d2c0',
+    accent: '#2076b2',
+    'accent-fg': '#fdf6e3',
+    danger: '#d5312e',
+    ok: '#687700',
+    warn: '#8f6c00',
+    ansi: [
+      '#073642',
+      '#d5312e',
+      '#687700',
+      '#8f6c00',
+      '#2076b2',
+      '#c8337c',
+      '#217e77',
+      '#586e75',
+      '#002b36',
+      '#c34815',
+      '#586e75',
+      '#5f747b',
+      '#667375',
+      '#666ab8',
+      '#687272',
+      '#002b36',
+    ],
+  },
+  dark: {
+    bg: '#002b36',
+    fg: '#93a1a1',
+    muted: '#839496',
+    panel: '#073642',
+    'panel-2': '#0d4552',
+    border: '#1a4f5c',
+    accent: '#268bd2',
+    'accent-fg': '#fdf6e3',
+    danger: '#dc322f',
+    ok: '#859900',
+    warn: '#b58900',
+    ansi: [
+      '#073642',
+      '#dc322f',
+      '#859900',
+      '#b58900',
+      '#268bd2',
+      '#d33682',
+      '#2aa198',
+      '#eee8d5',
+      '#586e75',
+      '#cb4b16',
+      '#586e75',
+      '#657b83',
+      '#839496',
+      '#6c71c4',
+      '#93a1a1',
+      '#fdf6e3',
+    ],
+  },
+};
+
+export const presets: Readonly<Record<'nord' | 'solarized', Theme>> = { nord, solarized };
