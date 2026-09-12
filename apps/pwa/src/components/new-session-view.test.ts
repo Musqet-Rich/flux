@@ -85,7 +85,7 @@ test('offers a harness picker only when the box has more than one, with model an
   expect(box.calls('sessions.create')).toEqual([
     {
       repo: '/repos/a',
-      branch: expect.stringMatching(/^flux\//u),
+      branch: expect.stringMatching(/^flux\/\d{4}-\d{2}-\d{2}-[a-z0-9]{4}$/u),
       harness: 'pi',
       model: 'sonnet',
       effort: 'high',
@@ -168,7 +168,7 @@ test('an agent picker prefills model and effort and sends the agent name', async
   expect(box.calls('sessions.create')).toEqual([
     {
       repo: '/repos/a',
-      branch: expect.stringMatching(/^flux\//u),
+      branch: expect.stringMatching(/^flux\/\d{4}-\d{2}-\d{2}-[a-z0-9]{4}$/u),
       harness: 'claude',
       agent: 'reviewer',
       model: 'opus',
