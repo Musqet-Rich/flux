@@ -5,6 +5,7 @@ import type { Store } from '../store/create-store.ts';
 import type { RunnerRun } from '../store/store-state.ts';
 import AnsiOutput from './AnsiOutput.vue';
 import Icon from './Icon.vue';
+import { writeClipboard } from './write-clipboard.ts';
 
 // The operator command runner (ADR 0026 § 7): a distinct screen, not a session tab. It shows each
 // one-off command and its streamed, ANSI-coloured output, with a Stop while it runs and a one-tap
@@ -32,16 +33,14 @@ const stop = (): void => {
   if (runId !== null) void props.store.shellInterrupt(runId);
 };
 
+// A refused clipboard leaves the button as it was: the runner has no failure face, and the
+// output is still on screen to select by hand.
 const copy = async (run: RunnerRun): Promise<void> => {
-  try {
-    await navigator.clipboard.writeText(run.output);
-    copiedRunId.value = run.runId;
-    window.setTimeout(() => {
-      if (copiedRunId.value === run.runId) copiedRunId.value = null;
-    }, 1500);
-  } catch {
-    // The clipboard is missing off HTTPS or can be refused; not worth an unhandled rejection.
-  }
+  if (!(await writeClipboard(run.output))) return;
+  copiedRunId.value = run.runId;
+  window.setTimeout(() => {
+    if (copiedRunId.value === run.runId) copiedRunId.value = null;
+  }, 1500);
 };
 
 // The exit line: a signal reads as killed, otherwise the numeric code; a bounded run says so.

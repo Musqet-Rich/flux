@@ -77,6 +77,19 @@ button.icon-only {
   line-height: 1;
 }
 
+/* Text for a screen reader only: a label a control cannot show, the outcome of a tap. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 button.secondary {
   background: var(--panel-2);
   color: var(--fg);
@@ -113,9 +126,11 @@ pre {
 
 /* Messages (markdown/render-markdown.ts), used by the timeline and the streaming bubble:
    paragraphs and blocks are spaced, headings are bold lines a step below the app's own, code
-   sits in a panel, tables scroll sideways on a narrow screen. Global because both components
-   render the same tree. A long unbreakable run (an identifier in backticks, a URL, a path)
-   breaks anywhere rather than widening the bubble past the screen. */
+   sits in a panel (the `pre`; `.code-block` is components/CodeBlock.vue's wrapper holding it
+   and its Copy button, and carries the block's margin), tables scroll sideways on a narrow
+   screen. Global because both components render the same tree. A long unbreakable run (an
+   identifier in backticks, a URL, a path) breaks anywhere rather than widening the bubble past
+   the screen. */
 
 .markdown {
   overflow-wrap: anywhere;
@@ -132,7 +147,7 @@ pre {
 .markdown p,
 .markdown ul,
 .markdown ol,
-.markdown pre,
+.markdown .code-block,
 .markdown blockquote,
 .markdown .table {
   margin: 0.5em 0;
