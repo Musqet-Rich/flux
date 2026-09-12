@@ -121,9 +121,18 @@ const firstTurn = async (page: Page): Promise<void> => {
   await expect(timeline.locator('.item.assistant').first()).toHaveText(
     'Reading notes.txt, then writing greeting.txt.',
   );
-  // Lines the adapter does not read are logged as `raw` and never rendered, so the tool rows
-  // are the only `.tool` items.
+  await expect(timeline.locator('.item.assistant').last()).toHaveText(
+    'notes.txt contains "hello", and greeting.txt has been created with "hi there".',
+  );
+  // The reply landed after the tool calls, so they are history, folded behind one line; opened,
+  // each row is there and its detail still opens. (Every fixture turn ends in a reply, so a flat
+  // trailing run is the unit tests' to cover.) Lines the adapter does not read are logged as
+  // `raw` and never rendered, so the tool rows are the only `.tool` items.
+  const fold = timeline.locator('details.fold');
+  await expect(fold.locator('summary')).toHaveText('2 tool calls');
   const tools = timeline.locator('.item.tool .summary');
+  await expect(tools.first()).toBeHidden();
+  await fold.locator('summary').click();
   await expect(tools).toHaveText([
     'Bash: cat notes.txt',
     'Bash ok, 1 line',
@@ -132,9 +141,6 @@ const firstTurn = async (page: Page): Promise<void> => {
   ]);
   await tools.first().click();
   await expect(timeline.locator('.item.tool .detail')).toContainText('"command": "cat notes.txt"');
-  await expect(timeline.locator('.item.assistant').last()).toHaveText(
-    'notes.txt contains "hello", and greeting.txt has been created with "hi there".',
-  );
   await expect(timeline.getByText('Agent idle')).toBeVisible();
   // The bar now carries the fixture's rate windows beside the connection and context readings.
   await expect(page.locator('.windows')).toBeVisible();
@@ -301,7 +307,8 @@ const hidden = new Set(['raw', 'rate_limit', 'files.changed', 'agent.spec']);
 const reloadCold = async (page: Page, stack: Stack): Promise<void> => {
   const items = page.locator('.timeline .item');
   const session = new URL(page.url()).pathname.slice('/s/'.length);
-  const before = await items.allInnerTexts();
+  // Text content, not inner text: the rows inside a closed fold are not laid out.
+  const before = await items.allTextContents();
   await page.evaluate(wipeStorage);
   await page.reload();
   await page.getByLabel('Or paste the link').fill(await stack.pair());
@@ -325,7 +332,7 @@ const reloadCold = async (page: Page, stack: Stack): Promise<void> => {
 // archiving keeps a session's attachments (ADR 0020), only deleting it takes them.
 const archiveAndReopen = async (page: Page): Promise<void> => {
   const items = page.locator('.timeline .item');
-  const before = await items.allInnerTexts();
+  const before = await items.allTextContents();
   await page.getByRole('button', { name: 'Session menu' }).click();
   await page.getByRole('menuitem', { name: 'Archive' }).click();
   await expect(page.getByText('No sessions yet.')).toBeVisible();
