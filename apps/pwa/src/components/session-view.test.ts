@@ -3,6 +3,7 @@ import type { DOMWrapper, VueWrapper } from '@vue/test-utils';
 import { flushPromises, mount } from '@vue/test-utils';
 import { expect, test } from 'vitest';
 
+import { fakeScroller } from '../../test/fake-scroller.ts';
 import type { PairedStore } from '../../test/paired-store.ts';
 import { pairedStore } from '../../test/paired-store.ts';
 import { until } from '../../test/until.ts';
@@ -216,27 +217,14 @@ test('the Files button opens the worktree browser', async () => {
   store.stop();
 });
 
-// happy-dom has no layout, so the scroller's geometry is pinned by hand: a 1000 px log in a
-// 200 px viewport, `scrollTop` writable so the component's jumps show up.
-const withGeometry = (el: HTMLElement): HTMLElement => {
-  Object.defineProperty(el, 'scrollHeight', { value: 1000, configurable: true });
-  Object.defineProperty(el, 'clientHeight', { value: 200, configurable: true });
-  Object.defineProperty(el, 'scrollTop', { value: 800, writable: true, configurable: true });
-  return el;
-};
-
-const scrollTo = async (el: HTMLElement, top: number): Promise<void> => {
-  el.scrollTop = top;
-  el.dispatchEvent(new Event('scroll'));
-  await flushPromises();
-};
+const { pin, scrollTo } = fakeScroller;
 
 test('follows the tail only while at it, with a pill to catch up', async () => {
   const box = await pairedStore([], { 'agent.send': () => ({ seq: 9 }) });
   const { store, relay, event } = box;
   const wrapper = mount(SessionView, { props: { store, session: 's1' } });
   await until(() => store.state.logs['s1'] !== undefined);
-  const el = withGeometry(wrapper.find<HTMLElement>('.timeline').element);
+  const el = pin(wrapper.find<HTMLElement>('.timeline').element);
   await scrollTo(el, 800);
   await relay.emit(event(1, 'msg.assistant', { text: 'one' }));
   await until(() => store.state.logs['s1']?.lastSeq === 1);
@@ -404,38 +392,6 @@ test('an ended task leaves the strip on the next message, kept while its chat is
   await wrapper.find('.aside button').trigger('click');
   await flushPromises();
   expect(stripRows(wrapper)).toEqual(['main', 'Explore Read a.txt']);
-  store.stop();
-});
-
-// Hundreds of rows per task is normal; the last 200 render and a button brings the rest.
-test('a long subagent chat shows its last 200 rows until asked for earlier ones', async () => {
-  const ts = '2026-01-01T00:00:00Z';
-  const events: FluxEvent[] = [
-    { seq: 1, ts, session: 's1', type: 'task.started', payload: started('t1', 'u1', 'Long') },
-  ];
-  for (let seq = 2; seq <= 252; seq += 1) {
-    const payload = { text: `row ${seq}` };
-    events.push({ seq, ts, session: 's1', type: 'msg.assistant', payload, parent: 'u1' });
-  }
-  const box = await pairedStore(events);
-  const { store } = box;
-  const wrapper = mount(SessionView, { props: { store, session: 's1' } });
-  await until(() => store.state.logs['s1']?.lastSeq === 252);
-  await flushPromises();
-  await wrapper.findAll('.agents .row')[1]?.trigger('click');
-  await flushPromises();
-  expect(wrapper.findAll('.item').length).toBe(200);
-  expect(wrapper.find('.item').text()).toBe('row 53');
-  expect(wrapper.find('.earlier').text()).toBe('Show 51 earlier');
-  // The operator is at the top to press it; the rows it brings in are old, not new activity.
-  const el = withGeometry(wrapper.find<HTMLElement>('.timeline').element);
-  await scrollTo(el, 0);
-  await wrapper.find('.earlier').trigger('click');
-  await flushPromises();
-  expect(wrapper.findAll('.item').length).toBe(251);
-  expect(wrapper.find('.earlier').exists()).toBe(false);
-  expect(wrapper.find('.new-activity').exists()).toBe(false);
-  expect(el.scrollTop).toBe(0);
   store.stop();
 });
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 
 import { useSessionTimeline } from '../composables/useSessionTimeline.ts';
 import { useTailScroll } from '../composables/useTailScroll.ts';
@@ -69,24 +69,44 @@ const ended = ref(false);
 const pick = (seq: number): void => {
   if (onMain.value) startReply(seq);
 };
-// Scrolls the quoted message into view. Replies are main-only and main shows every row (the
-// last-200 cut applies to subagent chats alone), so the source is rendered whenever the log
-// has it; a source the log lacks leaves the scroll where it is.
-const jump = (seq: number): void => {
+// Scrolls the quoted message into view, first widening the window to it when it has slid out
+// of the top; a source the log lacks leaves the scroll where it is.
+const showQuoted = async (seq: number): Promise<void> => {
+  chat.reveal(seq);
+  await nextTick();
   scroller.value?.querySelector(`[data-seq="${seq}"]`)?.scrollIntoView({ block: 'center' });
+};
+const jump = (seq: number): void => {
+  void showQuoted(seq);
 };
 
 const pill = computed(() => (unread.value > 0 ? `↓ ${unread.value} new` : '↓ New activity'));
+
+// Landing at the tail is also when the window is cut back to size: rows the operator has read
+// past need not stay in the DOM, and cutting them above the viewport is invisible because the
+// jump sets the scroll from the end once the DOM has changed.
+const catchUp = async (): Promise<void> => {
+  chat.trim();
+  await tail.jump();
+};
+// New rows follow the same rule: at the tail the window slides with them, scrolled up it holds
+// and the pill counts them, so nothing being read moves or vanishes. The measure here only
+// decides the trim; `follow` measures again for itself.
+const arrived = async (added: number): Promise<void> => {
+  tail.measure();
+  if (tail.atTail.value) chat.trim();
+  await tail.follow(added);
+};
 
 // Switching chats always lands at the end of the one opened.
 const select = (next: string | null): void => {
   chat.select(next);
   tail.reset();
-  void tail.jump();
+  void catchUp();
 };
 
 const answer = (text: string): void => {
-  void tail.jump();
+  void catchUp();
   void props.store.answer(props.session, ask.value?.askId ?? '', text);
 };
 
@@ -116,7 +136,7 @@ watch(
   (rows, before) => {
     const last = before.at(-1)?.seq ?? 0;
     const added = rows.filter((row) => row.seq > last).length;
-    if (added > 0) void tail.follow(added);
+    if (added > 0) void arrived(added);
   },
 );
 // Immediate: a session the store already holds (reopened from the list, say) has its rows
@@ -195,7 +215,7 @@ watch(
         </article>
         <AskCard v-if="ask !== null" :key="ask.askId" :ask="ask" @answer="answer" />
       </div>
-      <button v-if="behind" type="button" class="new-activity" @click="tail.jump">
+      <button v-if="behind" type="button" class="new-activity" @click="catchUp">
         {{ pill }}
       </button>
     </div>
@@ -205,7 +225,7 @@ watch(
       :session="session"
       :events="events"
       :reply="reply"
-      @sent="tail.jump"
+      @sent="catchUp"
       @unreply="cancelReply"
     />
     <div v-else class="aside">
