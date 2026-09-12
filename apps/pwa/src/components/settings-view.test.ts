@@ -20,6 +20,7 @@ test('fetches devices and settings on open, shows every section, and goes back',
   expect(wrapper.findAll('h2').map((h) => h.text())).toEqual([
     'Devices',
     'This device',
+    'Appearance',
     'Flux',
     'Agents',
     'Skills',
@@ -29,6 +30,7 @@ test('fetches devices and settings on open, shows every section, and goes back',
   expect(wrapper.find('#flux-repos').element).toBeInstanceOf(HTMLInputElement);
   expect(wrapper.find('#flux-sound').element).toBeInstanceOf(HTMLSelectElement);
   expect(wrapper.find('#flux-send-key').element).toBeInstanceOf(HTMLSelectElement);
+  expect(wrapper.find('#flux-mode').element).toBeInstanceOf(HTMLSelectElement);
   expect(wrapper.find('#harness-md').element).toBeInstanceOf(HTMLTextAreaElement);
   await wrapper.find('.toolbar button').trigger('click');
   expect(wrapper.emitted('back')).toEqual([[]]);

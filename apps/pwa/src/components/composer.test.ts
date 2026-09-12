@@ -146,8 +146,13 @@ test('arrow keys move the highlight, Enter takes it, Escape dismisses the list',
   expect(wrapper.find('textarea').element.value).toBe('/deploy ');
   await wrapper.find('textarea').setValue('/re');
   expect(wrapper.find('.slash-suggest').exists()).toBe(true);
-  await press('Escape');
+  // Consumed, so the session screen's Esc (stop the agent) lets it pass.
+  const escape = 'Escape';
+  const esc = new KeyboardEvent('keydown', { key: escape, bubbles: true, cancelable: true });
+  wrapper.find('textarea').element.dispatchEvent(esc);
+  await flushPromises();
   expect(wrapper.find('.slash-suggest').exists()).toBe(false);
+  expect(esc.defaultPrevented).toBe(true);
   wrapper.unmount();
   store.stop();
 });

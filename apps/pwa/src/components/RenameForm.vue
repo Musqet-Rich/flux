@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 
+import { useEscape } from '../composables/useEscape.ts';
+
 // The inline form behind "Rename…": the current title, editable, submitted as the new one. The
 // box trims and refuses a blank or over-long title (protocol.md § 7), so the submit is disabled
 // on a blank one and the input stops at the box's limit rather than sending what it would refuse.
+// Escape cancels (useEscape).
 
 const titleLimit = 200;
 
@@ -24,6 +27,7 @@ const confirm = (): void => {
 const cancel = (): void => {
   emit('cancel');
 };
+useEscape(cancel);
 </script>
 
 <template>

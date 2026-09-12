@@ -1,16 +1,27 @@
 <script setup lang="ts">
 import type { Attachment } from '@flux/protocol';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 
+import { useDismiss } from '../composables/useDismiss.ts';
 import { formatBytes } from './format-bytes.ts';
 import Icon from './Icon.vue';
 
 // The files under a sent message (ADR 0020): a thumbnail where the store has fetched one,
 // otherwise the name and size. Tapping a thumbnail opens the image full-size in a plain
-// overlay; there is no download yet.
+// overlay, closed by its button, a tap on it or Escape (useDismiss, which marks the key
+// consumed so the session screen's Esc, which stops the agent, lets it pass); there is no
+// download yet.
 
 defineProps<{ attachments: Attachment[]; thumbs: Record<string, string> }>();
 const open = ref<string | null>(null);
+const overlay = ref<HTMLElement | null>(null);
+const shown = computed({
+  get: (): boolean => open.value !== null,
+  set: (on: boolean): void => {
+    if (!on) open.value = null;
+  },
+});
+useDismiss(shown, overlay);
 </script>
 
 <template>
@@ -32,7 +43,14 @@ const open = ref<string | null>(null);
       </span>
     </li>
   </ul>
-  <div v-if="open !== null" class="overlay" role="dialog" aria-label="Image" @click="open = null">
+  <div
+    v-if="open !== null"
+    ref="overlay"
+    class="overlay"
+    role="dialog"
+    aria-label="Image"
+    @click="open = null"
+  >
     <img :src="open" alt="" />
     <button
       type="button"

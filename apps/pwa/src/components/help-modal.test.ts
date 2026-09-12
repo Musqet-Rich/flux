@@ -28,6 +28,7 @@ test('Send is disabled until the question has non-whitespace text', async () => 
   expect(send?.attributes('disabled')).toBeDefined();
   await wrapper.find('textarea').setValue('How do I pair?');
   expect(send?.attributes('disabled')).toBeUndefined();
+  wrapper.unmount();
   box.store.stop();
 });
 
@@ -51,6 +52,7 @@ test('Send opens a help session with the trimmed question and emits created', as
   await flushPromises();
   expect(box.calls('sessions.createHelp')).toEqual([{ question: 'How do I pair a device?' }]);
   expect(wrapper.emitted('created')?.[0]?.[0]).toMatchObject({ session: 'help-1' });
+  wrapper.unmount();
   box.store.stop();
 });
 
@@ -73,6 +75,7 @@ test('Cmd/Ctrl+Enter submits', async () => {
   press(ta.element, { key: 'Enter', ctrlKey: true });
   await until(() => box.calls('sessions.createHelp').length === 2);
   expect(box.calls('sessions.createHelp')).toEqual([{ question: 'go' }, { question: 'again' }]);
+  wrapper.unmount();
   box.store.stop();
 });
 
@@ -103,6 +106,7 @@ test('with Enter as the send key a bare Enter submits and ⌘ Enter breaks the l
   expect(breakLine().defaultPrevented).toBe(true);
   await until(() => box.calls('sessions.createHelp').length === 1);
   expect(box.calls('sessions.createHelp')).toEqual([{ question: 'one' }]);
+  wrapper.unmount();
   box.store.stop();
 });
 
@@ -111,14 +115,20 @@ test('Escape and a backdrop tap close without submitting', async () => {
   const esc = 'Escape';
   const first = mount(HelpModal, { props: { store: box.store } });
   await first.find('textarea').setValue('typed');
-  await first.find('textarea').trigger('keydown', { key: esc });
+  // From wherever the focus is: the document, not the textarea. Marked consumed, so the session
+  // screen's Esc (stop the agent) lets it pass.
+  const taken = new KeyboardEvent('keydown', { key: esc, cancelable: true });
+  document.dispatchEvent(taken);
   expect(first.emitted('close')).toHaveLength(1);
+  expect(taken.defaultPrevented).toBe(true);
+  first.unmount();
   expect(first.emitted('created')).toBeUndefined();
 
   const second = mount(HelpModal, { props: { store: box.store } });
   await second.find('.backdrop').trigger('click');
   expect(second.emitted('close')).toHaveLength(1);
   expect(box.calls('sessions.createHelp')).toHaveLength(0);
+  second.unmount();
   box.store.stop();
 });
 
@@ -135,5 +145,6 @@ test('an error keeps the modal open with the text intact and shows the message',
   expect(wrapper.find('.error').text()).toBe('no sessions.createHelp');
   expect(wrapper.find<HTMLTextAreaElement>('textarea').element.value).toBe('why');
   expect(wrapper.emitted('created')).toBeUndefined();
+  wrapper.unmount();
   box.store.stop();
 });

@@ -95,13 +95,27 @@ test('delete confirms what to remove; a dirty refusal asks again before discardi
   store.stop();
 });
 
-test('cancel closes the confirm without a call', async () => {
+// Escape closes either form from wherever the focus is (useEscape: the document), consumed so
+// the session screen's Esc (stop the agent) lets it pass.
+const pressEscape = (): KeyboardEvent => {
+  const key = new KeyboardEvent('keydown', { key: escape, cancelable: true });
+  document.dispatchEvent(key);
+  return key;
+};
+
+test('cancel or Escape closes the confirm without a call', async () => {
   const { wrapper, calls, store } = await setup();
   await wrapper.find('button[aria-haspopup="menu"]').trigger('click');
   await wrapper.findAll('[role="menuitem"]')[3]?.trigger('click');
   expect(wrapper.find('form.confirm').exists()).toBe(true);
   await wrapper.find('form.confirm button.secondary').trigger('click');
   expect(wrapper.find('form.confirm').exists()).toBe(false);
+  await wrapper.find('button[aria-haspopup="menu"]').trigger('click');
+  await wrapper.findAll('[role="menuitem"]')[3]?.trigger('click');
+  const key = pressEscape();
+  await flushPromises();
+  expect(wrapper.find('form.confirm').exists()).toBe(false);
+  expect(key.defaultPrevented).toBe(true);
   expect(calls('sessions.archive')).toEqual([]);
   store.stop();
 });
@@ -128,7 +142,7 @@ test('rename shows the current title, refuses a blank one, and sends the trimmed
   store.stop();
 });
 
-test('cancel closes the rename form without a call; opening delete closes it too', async () => {
+test('cancel or Escape closes the rename form without a call; opening delete closes it too', async () => {
   const { wrapper, calls, store } = await setup();
   await wrapper.find('button[aria-haspopup="menu"]').trigger('click');
   await wrapper.findAll('[role="menuitem"]')[0]?.trigger('click');
@@ -136,10 +150,18 @@ test('cancel closes the rename form without a call; opening delete closes it too
   expect(wrapper.find('form.rename').exists()).toBe(false);
   await wrapper.find('button[aria-haspopup="menu"]').trigger('click');
   await wrapper.findAll('[role="menuitem"]')[0]?.trigger('click');
+  const key = pressEscape();
+  await flushPromises();
+  expect(wrapper.find('form.rename').exists()).toBe(false);
+  expect(key.defaultPrevented).toBe(true);
+  await wrapper.find('button[aria-haspopup="menu"]').trigger('click');
+  await wrapper.findAll('[role="menuitem"]')[0]?.trigger('click');
   await wrapper.find('button[aria-haspopup="menu"]').trigger('click');
   await wrapper.findAll('[role="menuitem"]')[3]?.trigger('click');
   expect(wrapper.find('form.rename').exists()).toBe(false);
   expect(wrapper.find('form.confirm').exists()).toBe(true);
   expect(calls('sessions.rename')).toEqual([]);
+  // The confirm is still open: unmounted so its Escape closer does not outlive the test.
+  wrapper.unmount();
   store.stop();
 });

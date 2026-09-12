@@ -3,8 +3,8 @@ import { expect, test } from 'vitest';
 
 import type { Handlers } from '../../test/fake-relay.ts';
 import { createFakeRelay } from '../../test/fake-relay.ts';
+import { storeOptions } from '../../test/store-options.ts';
 import { ClientError } from '../client/client-error.ts';
-import { createMemoryStorage } from '../client/create-memory-storage.ts';
 import { createStore } from './create-store.ts';
 
 // The push subscription's side of the store: when "Enable notifications" is on offer, and what
@@ -34,13 +34,14 @@ const setup = async ({ silentPush = false, pushable = true, pushRefusal }: Optio
       ? Promise.reject(new ClientError(pushRefusal, `push ${pushRefusal}`))
       : Promise.resolve(granted ? { endpoint: 'https://push.example/x' } : null);
   };
-  const store = createStore({
-    storage: createMemoryStorage(),
-    socket: relay.socket,
-    ...(pushable ? { subscribePush } : {}),
-    minBackoffMs: 1,
-    maxBackoffMs: 5,
-  });
+  const store = createStore(
+    storeOptions({
+      socket: relay.socket,
+      ...(pushable ? { subscribePush } : {}),
+      minBackoffMs: 1,
+      maxBackoffMs: 5,
+    }),
+  );
   const secret = new Uint8Array(pairing.secretLength);
   const url = pairing.url('https://relay.example', { boxPub: relay.boxPub, secret });
   await store.pair('https://relay.example', new URL(url).hash);

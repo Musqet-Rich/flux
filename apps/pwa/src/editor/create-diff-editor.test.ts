@@ -3,6 +3,10 @@ import { expect, test } from 'vitest';
 
 import { createDiffEditor } from './create-diff-editor.ts';
 
+// CodeMirror marks the editor with one class for its `&dark` rules and another for `&light`.
+const classesOf = (parent: HTMLElement): string =>
+  parent.shadowRoot?.querySelector('.cm-editor')?.className ?? '';
+
 const adoptedCss = (root: ShadowRoot | null): string =>
   (root?.adoptedStyleSheets ?? [])
     .flatMap((sheet) => Array.from(sheet.cssRules, (rule) => rule.cssText))
@@ -14,6 +18,7 @@ test('mounts inside a shadow root so its styles bypass the CSP, and reports sele
   const ranges: (LineRange | null)[] = [];
   const editor = createDiffEditor({
     parent,
+    dark: true,
     original: 'a\nb\nc\n',
     current: 'a\nB\nc\nd\n',
     onSelection: (range) => {
@@ -25,6 +30,24 @@ test('mounts inside a shadow root so its styles bypass the CSP, and reports sele
   expect(document.head.querySelector('style')).toBeNull();
   expect(parent.shadowRoot?.querySelector('.cm-lineNumbers')).not.toBeNull();
   editor.clearSelection();
+  // Born dark, switched to what an editor born light wears, and back.
+  const other = document.createElement('div');
+  document.body.append(other);
+  const bornLight = createDiffEditor({
+    parent: other,
+    dark: false,
+    original: 'a\n',
+    current: 'b\n',
+    onSelection: () => {},
+  });
+  const dark = classesOf(parent);
+  const light = classesOf(other);
+  expect(light).not.toBe(dark);
+  editor.setDark(false);
+  expect(classesOf(parent)).toBe(light);
+  editor.setDark(true);
+  expect(classesOf(parent)).toBe(dark);
+  bornLight.destroy();
   editor.destroy();
   expect(parent.shadowRoot?.querySelector('.cm-editor')).toBeNull();
 });
@@ -34,6 +57,7 @@ test('wraps long lines and wears the shared theme, on the current and the delete
   document.body.append(parent);
   const editor = createDiffEditor({
     parent,
+    dark: true,
     original: 'a\n',
     current: 'b\n',
     onSelection: () => {},
@@ -62,6 +86,7 @@ test('a gutter tap on a wrapped line selects the whole line, not one visual row'
   const long = 'x'.repeat(400);
   const editor = createDiffEditor({
     parent,
+    dark: true,
     original: `${long}\nb\n`,
     current: `${long}\nb\n`,
     onSelection: (range) => {
