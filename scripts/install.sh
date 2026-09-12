@@ -15,8 +15,11 @@
 #   2. Resolve the target version (releases/latest, or $FLUX_VERSION).
 #   3. Download the five release assets to a private temp dir.
 #   4. Verify the signature and every hash against the vendored trusted keys.
-#   5. Only then place the three .mjs into the install dir and run
-#      `node <installdir>/index.mjs service install` (ADR 0022 supervision).
+#   5. Only then place the three .mjs into the install dir, write a `flux` launcher
+#      and link it onto PATH, and run `flux service install` (ADR 0022 supervision).
+#
+# The daemon connects to the public relay by default (FLUX_RELAY_URL in the daemon),
+# so a fresh install pairs with nothing to configure; set FLUX_RELAY_URL to self-host.
 #
 # Environment overrides:
 #   FLUX_INSTALL_DIR   where the .mjs land (default ~/.flux/bin)
@@ -31,6 +34,10 @@ DEFAULT_REPO='Musqet-Rich/flux'
 
 say() { printf 'flux install: %s\n' "$1"; }
 die() { printf 'flux install: %s\n' "$1" >&2; exit 1; }
+
+# Single-quote a value for safe embedding in a generated shell script (mirrors the daemon's
+# render-wrapper-script `sq`): an embedded single quote is closed, escaped and reopened.
+shq() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
 
 # --- 1. Prerequisites ------------------------------------------------------
 command -v curl >/dev/null 2>&1 || die 'curl is required but was not found on PATH'
@@ -208,6 +215,32 @@ chmod 644 "$install_dir"/*.mjs
 say "placed the verified daemon $version in $install_dir"
 
 entry="$install_dir/index.mjs"
+
+# A `flux` launcher so commands read `flux pair`, not `node .../index.mjs pair`. It delegates to
+# index.mjs BY PATH, so the daemon's self-update (which rewrites index.mjs in place) keeps working.
+launcher="$install_dir/flux"
+printf '#!/bin/sh\nexec node %s "$@"\n' "$(shq "$entry")" >"$launcher"
+chmod 755 "$launcher"
+
+# Link it onto PATH without sudo: prefer a dir that is ALREADY on PATH and writable. Fall back to
+# ~/.local/bin (created if missing) and tell the user to add it — never edit their shell profile.
+flux_cmd="$launcher"
+linked=''
+for d in "$HOME/.local/bin" "$HOME/bin" /usr/local/bin; do
+  case ":$PATH:" in *":$d:"*) ;; *) continue ;; esac
+  if [ -d "$d" ] && [ -w "$d" ]; then
+    if ln -sf "$launcher" "$d/flux" 2>/dev/null; then linked="$d/flux"; flux_cmd='flux'; break; fi
+  fi
+done
+if [ -n "$linked" ]; then
+  say "linked \`flux\` onto your PATH at $linked"
+else
+  mkdir -p "$HOME/.local/bin" && ln -sf "$launcher" "$HOME/.local/bin/flux" 2>/dev/null || true
+  say "installed the \`flux\` launcher at $launcher"
+  say 'to run `flux` from anywhere, add ~/.local/bin to your PATH (then reopen your shell):'
+  echo '  export PATH="$HOME/.local/bin:$PATH"'
+fi
+
 say 'running `service install` to set up the supervisor (ADR 0022)'
 echo '----------------------------------------------------------------------'
 # This runs the freshly VERIFIED index.mjs. It writes the host's supervisor
@@ -219,11 +252,18 @@ echo '----------------------------------------------------------------------'
 cat <<EOF
 flux install: done. The verified daemon $version is in $install_dir.
 
-Next steps:
-  1. Set FLUX_RELAY_URL (and any FLUX_* options) in the daemon's environment,
-     then follow the 'service install' output above to start it on boot.
+The daemon connects to the public relay (https://fluxagent.me) by default, so
+there is nothing to configure. Start it and pair a device:
+
+  1. Start the daemon on boot: follow the 'service install' output above
+     (on a box with an init system it is already enabled; a container without
+     one runs the printed 'nohup ...flux-daemon-run.sh' line).
   2. Pair a device once the daemon is running:
-       node $entry pair
+       $flux_cmd pair
   3. Later, check for a newer signed release without installing it:
-       node $entry update --check
+       $flux_cmd update --check
+
+Self-hosting your own relay? Set FLUX_RELAY_URL in your shell BEFORE running this
+installer (so 'service install' bakes it into the supervisor), or re-run
+'$flux_cmd service install' with it set.
 EOF

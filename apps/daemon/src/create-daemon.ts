@@ -22,6 +22,9 @@ import { openServices } from './open-services.ts';
 // the same channel: pure bundled text, no daemon, but routed here so index.ts stays within budget.
 export { detectDistDir } from './update/detect-dist-dir.ts';
 export { runHelp } from './help/run-help.ts';
+// The default relay rides the same channel: index.ts falls back to it when FLUX_RELAY_URL is unset,
+// routed here so index.ts stays within its dependency budget.
+export { defaultRelayUrl } from './default-relay-url.ts';
 
 // Composition root: wires the stores, the git service, the session supervisors, the device
 // channels and the relay transport together (architecture.md § Daemon).
