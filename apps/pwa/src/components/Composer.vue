@@ -8,6 +8,7 @@ import type { Store } from '../store/create-store.ts';
 import { pendingComments } from '../store/pending-comments.ts';
 import AttachmentChips from './AttachmentChips.vue';
 import CommentTray from './CommentTray.vue';
+import { enterKey } from './enter-key.ts';
 
 // The message box at the foot of the session screen, with the comments waiting to go with the
 // next message, the files attached to it (a + button, a drop on the bottom bar, or a paste)
@@ -118,20 +119,35 @@ const choose = (name: string): void => {
   box.value?.focus();
 };
 
-// Arrow keys move the highlight, Enter takes it, Escape dismisses — only while the list is open,
-// so an ordinary newline and the ⌘/Ctrl-Enter send are untouched when it is not.
-const nav = (event: KeyboardEvent): void => {
-  if (!suggestOpen.value) return;
+// Arrow keys move the highlight, a bare Enter takes it, Escape dismisses — only while the list
+// is open, and true when the key was taken. A bare Enter takes the skill even when it is the
+// device's send key (the next one sends); any chord goes to `key` as usual.
+const nav = (event: KeyboardEvent): boolean => {
+  if (!suggestOpen.value) return false;
   const count = suggestions.value.length;
   if (event.key === 'ArrowDown') active.value = (active.value + 1) % count;
   else if (event.key === 'ArrowUp') active.value = (active.value - 1 + count) % count;
   else if (event.key === 'Escape') dismissed.value = true;
-  else if (event.key === 'Enter' && !event.metaKey && !event.ctrlKey) {
+  else if (enterKey.chord(event) === 'enter') {
     const name = suggestions.value[active.value];
     if (name !== undefined) choose(name);
-  } else return;
+  } else return false;
   event.preventDefault();
+  return true;
 };
+
+// Which Enter sends is the device's choice (enter-key.ts); the rest break the line.
+const ready = computed(() => !blank.value && !sending.value && !uploading.value);
+const key = (event: KeyboardEvent): void => {
+  if (nav(event)) return;
+  if (enterKey.keydown(props.store.state.sendKey, ready.value, event, box.value)) void send();
+};
+const lineBreak = (event: InputEvent): void => {
+  if (enterKey.lineBreak(props.store.state.sendKey, ready.value, event, box.value)) void send();
+};
+const sendHint = computed(
+  () => `Send (${enterKey.label(props.store.state.sendKey, enterKey.apple)})`,
+);
 </script>
 
 <template>
@@ -178,12 +194,11 @@ const nav = (event: KeyboardEvent): void => {
         v-model="draft.text"
         rows="2"
         placeholder="Message the agent"
-        @keydown="nav"
-        @keydown.enter.meta.prevent="send"
-        @keydown.enter.ctrl.prevent="send"
+        @keydown="key"
+        @beforeinput="lineBreak"
         @paste="paste"
       />
-      <button type="submit" :disabled="sending || blank || uploading">Send</button>
+      <button type="submit" :disabled="!ready" :title="sendHint">Send</button>
     </form>
   </div>
 </template>

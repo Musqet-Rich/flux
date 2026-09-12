@@ -7,9 +7,11 @@ import HarnessConfigEditor from './HarnessConfigEditor.vue';
 import DevicesSection from './DevicesSection.vue';
 import FluxSettingsForm from './FluxSettingsForm.vue';
 import SkillsEditor from './SkillsEditor.vue';
+import ThisDeviceSection from './ThisDeviceSection.vue';
 
-// The settings screen (prd.md P2): paired devices, the box's runtime settings, and the agent's
-// global config. Each section talks to the store on its own; this only fetches on open.
+// The settings screen (prd.md P2): paired devices, the box's runtime settings, this device's
+// own choices, and the agent's global config. Each section talks to the store on its own; this
+// only fetches on open.
 
 const props = defineProps<{ store: Store }>();
 defineEmits<{ back: [] }>();
@@ -28,6 +30,7 @@ onMounted(() => {
     </div>
     <div class="sections">
       <DevicesSection :store="store" />
+      <ThisDeviceSection :store="store" />
       <FluxSettingsForm :store="store" />
       <AgentsEditor :store="store" />
       <SkillsEditor :store="store" />
@@ -70,7 +73,9 @@ h1 {
   margin: 0 auto;
 }
 
-/* Wide screens: two forms share the top row, the config editor spans below. */
+/* Wide screens: the devices list and this device's choices stack beside the taller Flux form,
+   the editors span below. On a phone this device's choices come before the Flux form because
+   they are the settings an operator comes back to. */
 @media (min-width: 56rem) {
   .sections {
     max-width: 76rem;
@@ -78,6 +83,7 @@ h1 {
     grid-template-columns: 1fr 1fr;
     grid-template-areas:
       'devices flux'
+      'this-device flux'
       'agents agents'
       'skills skills'
       'config config';
@@ -90,18 +96,22 @@ h1 {
   }
 
   .sections > :nth-child(2) {
-    grid-area: flux;
+    grid-area: this-device;
   }
 
   .sections > :nth-child(3) {
-    grid-area: agents;
+    grid-area: flux;
   }
 
   .sections > :nth-child(4) {
-    grid-area: skills;
+    grid-area: agents;
   }
 
   .sections > :nth-child(5) {
+    grid-area: skills;
+  }
+
+  .sections > :nth-child(6) {
     grid-area: config;
   }
 }
