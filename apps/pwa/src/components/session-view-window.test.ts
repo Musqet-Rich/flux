@@ -2,6 +2,7 @@ import type { FluxEvent } from '@flux/protocol';
 import { flushPromises, mount } from '@vue/test-utils';
 import { expect, test, vi } from 'vitest';
 
+import { fakeResizeObserver } from '../../test/fake-resize-observer.ts';
 import { fakeScroller } from '../../test/fake-scroller.ts';
 import { pairedStore } from '../../test/paired-store.ts';
 import { until } from '../../test/until.ts';
@@ -127,5 +128,30 @@ test('a long subagent chat shows its last 300 rows until asked for earlier ones'
   expect(wrapper.find('.earlier').exists()).toBe(false);
   expect(wrapper.find('.new-activity').exists()).toBe(false);
   expect(el.scrollTop).toBe(0);
+  store.stop();
+});
+
+// The composer growing a line takes it from the bottom of the timeline. At the tail the last
+// lines would slide under it, so the view jumps back to the end; scrolled up it stays put and
+// no pill appears, since nothing new arrived. The composer's ResizeObserver is a fake fired by
+// hand, happy-dom's never calling back.
+test('the timeline holds the tail as the composer grows, and stays put when scrolled up', async () => {
+  fakeResizeObserver.install();
+  const box = await pairedStore(rows(1, 5));
+  const { store } = box;
+  const wrapper = mount(SessionView, { props: { store, session: 's1' } });
+  await until(() => store.state.logs['s1']?.lastSeq === 5);
+  await flushPromises();
+  const el = pin(wrapper.find<HTMLElement>('.timeline').element);
+  await scrollTo(el, 800);
+  fakeResizeObserver.fire();
+  await flushPromises();
+  expect(el.scrollTop).toBe(1000);
+  await scrollTo(el, 0);
+  fakeResizeObserver.fire();
+  await flushPromises();
+  expect(el.scrollTop).toBe(0);
+  expect(wrapper.find('.new-activity').exists()).toBe(false);
+  fakeResizeObserver.uninstall();
   store.stop();
 });
