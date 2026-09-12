@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, shallowRef } from 'vue';
+import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
 
 import type { CodeEditor } from '../editor/create-code-editor.ts';
 import type { Store } from '../store/create-store.ts';
@@ -74,6 +74,7 @@ const mount = async (parent: HTMLElement, doc: string): Promise<void> => {
   const { createCodeEditor } = await import('../editor/create-code-editor.ts');
   editor.value = createCodeEditor({
     parent,
+    dark: props.store.appearance.scheme.value === 'dark',
     doc,
     readOnly: readOnly.value !== null,
     onChange: changed,
@@ -129,6 +130,12 @@ const discard = (): void => {
 const warnUnload = (event: BeforeUnloadEvent): void => {
   if (dirty.value) event.preventDefault();
 };
+
+// The scheme can change under an open editor (system mode, the device flipping at dusk).
+watch(
+  () => props.store.appearance.scheme.value === 'dark',
+  (dark) => editor.value?.setDark(dark),
+);
 
 onMounted(() => {
   void load();

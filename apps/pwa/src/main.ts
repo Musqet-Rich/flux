@@ -1,7 +1,12 @@
 import { createApp } from 'vue';
 
 import App from './App.vue';
+import { appAppearance } from './appearance/app-appearance.ts';
+import { applyAppearance } from './appearance/apply-appearance.ts';
 
+// The scheme and text size go on the document first, so the first paint is the device's choice
+// and not the stylesheet's dark default (ADR 0030).
+applyAppearance(document, appAppearance);
 createApp(App).mount('#app');
 
 // The worker only handles push and notification taps (src/sw.ts, emitted as /sw.js by the

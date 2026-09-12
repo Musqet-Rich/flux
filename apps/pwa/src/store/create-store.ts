@@ -30,6 +30,9 @@ export type SaveOutcome = { ok: true; hash: string } | { ok: false; conflict: bo
 
 export interface Store extends SettingsActions, SessionActions {
   state: StoreState;
+  // The device's scheme and text size (ADR 0030): Settings sets them, the editors read the
+  // scheme when they are built.
+  appearance: StoreOptions['appearance'];
   // Loads the paired box from storage and connects, or lands on the pair screen.
   boot: () => Promise<void>;
   // Pairs from a link's fragment; on failure `state.error` says why and the phase is unpaired.
@@ -229,6 +232,7 @@ export const createStore = (options: StoreOptions): Store => {
     ...settingsActions(i),
     ...sessionActions(i),
     state: i.state,
+    appearance: options.appearance,
     boot: () => boot(i),
     pair: (relayUrl, fragment) => pair(i, relayUrl, fragment),
     // Views fire this from onMounted and cannot handle a rejection; a failed sync is reported.

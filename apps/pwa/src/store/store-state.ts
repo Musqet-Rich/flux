@@ -12,6 +12,7 @@ import type {
 } from '@flux/protocol';
 import { reactive } from 'vue';
 
+import type { Appearance } from '../appearance/appearance.ts';
 import type { Connection, ConnectionStatus } from '../client/create-connection.ts';
 import type { Storage } from '../client/create-memory-storage.ts';
 import type { SessionLog } from '../client/create-session-log.ts';
@@ -169,6 +170,9 @@ export interface StoreState {
 
 export interface StoreOptions {
   storage: Storage;
+  // How the app looks on this device (ADR 0030), built by the browser before the store since it
+  // is applied before anything is on screen; the store only carries it to the views.
+  appearance: Appearance;
   socket: SocketFactory;
   // Resolves to the browser's PushSubscription JSON. With `prompt` false it must not ask the
   // user for permission (there is no gesture to ask under) and resolves to null when it cannot

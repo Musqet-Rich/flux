@@ -1,18 +1,48 @@
 /* The only global stylesheet (engineering.md § Vue): theme tokens and element defaults.
-   Components use the custom properties and scope everything else. */
+   Components use the custom properties and scope everything else.
+
+   The tokens (ADR 0030): eleven colours and the sixteen ANSI colours a command's output may
+   name (ansi/render-ansi.ts), each written once as `light-dark(light, dark)` and picked by
+   `color-scheme`, which also puts the browser's own controls, scrollbars and form fields in
+   step. Dark is the default; the system's preference for light is honoured by the media rule
+   below before any script has run, so a device set to light never paints dark first; and
+   apply-appearance.ts puts the scheme in force on the root as `data-scheme`, which overrides
+   the system either way. The root font size is the device's text size, set by the same
+   script (its default in appearance.ts is this 15px, and the two must agree or the page
+   resizes on load); everything below is em- or rem-sized from it. On light, text, muted,
+   ok, warn, danger and the accent hold at least 4.5:1 against the page and both panels, and
+   the sixteen ANSI colours against the page, where a command's output sits; bright green
+   and yellow sit close to their normal ones for it. */
 
 :root {
-  --bg: #0f1115;
-  --fg: #e8eaf0;
-  --muted: #8b93a1;
-  --panel: #171a21;
-  --panel-2: #1f2430;
-  --border: #2a2f3a;
-  --accent: #4f8cff;
-  --accent-fg: #ffffff;
-  --danger: #ff5f5f;
-  --ok: #3fbf7f;
-  --warn: #ffb347;
+  --bg: light-dark(#f5f6f8, #0f1115);
+  --fg: light-dark(#1a1d24, #e8eaf0);
+  --muted: light-dark(#5c6472, #8b93a1);
+  --panel: light-dark(#ffffff, #171a21);
+  --panel-2: light-dark(#e9ecf1, #1f2430);
+  --border: light-dark(#d3d8e0, #2a2f3a);
+  --accent: light-dark(#2a63c4, #4f8cff);
+  /* The same on both: a pair all the same, so a theme (ADR 0030) can give it two values. */
+  --accent-fg: light-dark(#ffffff, #ffffff);
+  --danger: light-dark(#c53333, #ff5f5f);
+  --ok: light-dark(#1a7a4c, #3fbf7f);
+  --warn: light-dark(#9a5b00, #ffb347);
+  --ansi-0: light-dark(#2e3440, #3b4048);
+  --ansi-1: light-dark(#b3283c, #f7768e);
+  --ansi-2: light-dark(#3f7a1a, #9ece6a);
+  --ansi-3: light-dark(#976800, #e0af68);
+  --ansi-4: light-dark(#2b5fb4, #7aa2f7);
+  --ansi-5: light-dark(#7a45b3, #bb9af7);
+  --ansi-6: light-dark(#0e7490, #7dcfff);
+  --ansi-7: light-dark(#6a717f, #c0caf5);
+  --ansi-8: light-dark(#5b6373, #565f89);
+  --ansi-9: light-dark(#cd394c, #ff9eb1);
+  --ansi-10: light-dark(#437f1f, #b9f27c);
+  --ansi-11: light-dark(#946909, #f0c987);
+  --ansi-12: light-dark(#386ecb, #9db9ff);
+  --ansi-13: light-dark(#8958c4, #d2bbff);
+  --ansi-14: light-dark(#127a92, #a0e0ff);
+  --ansi-15: light-dark(#1a1d24, #ffffff);
   --radius: 10px;
   color-scheme: dark;
   font-family:
@@ -22,6 +52,16 @@
     sans-serif;
   font-size: 15px;
   line-height: 1.4;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-scheme='dark']) {
+    color-scheme: light;
+  }
+}
+
+:root[data-scheme='light'] {
+  color-scheme: light;
 }
 
 html,

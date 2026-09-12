@@ -5,6 +5,7 @@ import { expect, test } from 'vitest';
 import type { Handlers } from '../../test/fake-relay.ts';
 import { createFakeRelay } from '../../test/fake-relay.ts';
 import { settingsFixture } from '../../test/settings-fixture.ts';
+import { storeOptions } from '../../test/store-options.ts';
 import { until } from '../../test/until.ts';
 import { ClientError } from '../client/client-error.ts';
 import { createMemoryStorage } from '../client/create-memory-storage.ts';
@@ -133,20 +134,20 @@ const setup = async ({ pairable = true }: Options = {}) => {
     pushes.push(`${key}:${prompt ? 'prompt' : 'silent'}`);
     return Promise.resolve({ endpoint: 'https://push.example/x' });
   };
-  const another = () =>
-    createStore({
-      storage,
-      socket: relay.socket,
-      schedule: (fn) => {
-        timers.push(fn);
-        return () => {
-          timers.splice(timers.indexOf(fn), 1);
-        };
-      },
-      subscribePush,
-      minBackoffMs: 1,
-      maxBackoffMs: 5,
-    });
+  const options = storeOptions({
+    storage,
+    socket: relay.socket,
+    schedule: (fn) => {
+      timers.push(fn);
+      return () => {
+        timers.splice(timers.indexOf(fn), 1);
+      };
+    },
+    subscribePush,
+    minBackoffMs: 1,
+    maxBackoffMs: 5,
+  });
+  const another = () => createStore(options);
   const link = (): string => {
     const secret = new Uint8Array(pairing.secretLength);
     return new URL(pairing.url('https://relay.example', { boxPub: relay.boxPub, secret })).hash;

@@ -1,7 +1,7 @@
 import type { FluxEvent } from '@flux/protocol';
 import { expect, test } from 'vitest';
 
-import { createMemoryStorage } from '../client/create-memory-storage.ts';
+import { storeOptions } from '../../test/store-options.ts';
 import { createSessionLog } from '../client/create-session-log.ts';
 import { logCache } from './log-cache.ts';
 import type { StoreInternals } from './store-state.ts';
@@ -16,7 +16,7 @@ const ev = (seq: number): FluxEvent => ({
 });
 
 const internals = (): StoreInternals => ({
-  options: { storage: createMemoryStorage(), socket: () => ({ send() {}, close() {}, on() {} }) },
+  options: storeOptions({ socket: () => ({ send() {}, close() {}, on() {} }) }),
   state: storeState(),
   logs: new Map(),
   connection: null,

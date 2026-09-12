@@ -23,10 +23,15 @@ export interface CodeEditor {
   // Replaces the selection (or inserts at the cursor) as typing would: undoable, and reported
   // through onChange. It is how tests edit without a keyboard.
   insert: (text: string) => void;
+  // Rebuilds the theme for the other scheme (editor-theme.ts), as the view does when the
+  // system flips while the editor is open.
+  setDark: (dark: boolean) => void;
 }
 
 export interface CodeEditorOptions {
   parent: HTMLElement;
+  // Whether the app's scheme is dark at creation (ADR 0030); `setDark` follows it after.
+  dark: boolean;
   doc: string;
   readOnly: boolean;
   onChange: () => void;
@@ -39,16 +44,13 @@ const readOnlyOf = (readOnly: boolean) => [
   EditorState.readOnly.of(readOnly),
 ];
 
-export const createCodeEditor = (options: CodeEditorOptions): CodeEditor => {
-  // In a shadow root for the same reason as the diff editor: CodeMirror's injected <style> is
-  // blocked by the relay's CSP in the document, and a constructed stylesheet is not.
-  const root = options.parent.shadowRoot ?? options.parent.attachShadow({ mode: 'open' });
-  const editable = new Compartment();
+// Everything but what a setter can change after creation (the compartments).
+const fixedExtensions = (options: CodeEditorOptions) => {
   const save = (): boolean => {
     options.onSave();
     return true;
   };
-  const extensions = [
+  return [
     lineNumbers(),
     EditorView.lineWrapping,
     history(),
@@ -57,13 +59,28 @@ export const createCodeEditor = (options: CodeEditorOptions): CodeEditor => {
     bracketMatching(),
     indentOnInput(),
     keymap.of([{ key: 'Mod-s', run: save }, ...defaultKeymap, ...historyKeymap, indentWithTab]),
-    editable.of(readOnlyOf(options.readOnly)),
     EditorView.updateListener.of((update) => {
       if (update.docChanged) options.onChange();
     }),
-    editorTheme,
   ];
-  const stateOf = (doc: string): EditorState => EditorState.create({ doc, extensions });
+};
+
+export const createCodeEditor = (options: CodeEditorOptions): CodeEditor => {
+  // In a shadow root for the same reason as the diff editor: CodeMirror's injected <style> is
+  // blocked by the relay's CSP in the document, and a constructed stylesheet is not.
+  const root = options.parent.shadowRoot ?? options.parent.attachShadow({ mode: 'open' });
+  const editable = new Compartment();
+  const theme = new Compartment();
+  const fixed = fixedExtensions(options);
+  // What the compartments hold now, so a fresh state (setDoc) starts from it and not from
+  // the options.
+  let readOnly = options.readOnly;
+  let dark = options.dark;
+  const stateOf = (doc: string): EditorState =>
+    EditorState.create({
+      doc,
+      extensions: [...fixed, editable.of(readOnlyOf(readOnly)), theme.of(editorTheme(dark))],
+    });
   const view = new EditorView({ root, parent: root, state: stateOf(options.doc) });
   return {
     destroy: () => {
@@ -73,8 +90,13 @@ export const createCodeEditor = (options: CodeEditorOptions): CodeEditor => {
     setDoc: (text) => {
       view.setState(stateOf(text));
     },
-    setReadOnly: (readOnly) => {
-      view.dispatch({ effects: editable.reconfigure(readOnlyOf(readOnly)) });
+    setReadOnly: (next) => {
+      readOnly = next;
+      view.dispatch({ effects: editable.reconfigure(readOnlyOf(next)) });
+    },
+    setDark: (next) => {
+      dark = next;
+      view.dispatch({ effects: theme.reconfigure(editorTheme(next)) });
     },
     insert: (text) => {
       view.dispatch(view.state.replaceSelection(text));

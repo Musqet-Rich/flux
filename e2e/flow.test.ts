@@ -165,17 +165,32 @@ const commentOnDiff = async (page: Page): Promise<void> => {
   await page.locator('.cm-lineNumbers .cm-gutterElement', { hasText: '1' }).click();
   await page.getByLabel('Comment on line 1').fill('Say hello instead');
   await page.getByRole('button', { name: 'Add comment' }).click();
+  // The diff's changed-line highlight is a colour-mix over a light-dark() token; it must
+  // resolve to a colour, not vanish, under the light scheme chosen before this.
+  await expect(page.locator('.cm-changedLine').first()).not.toHaveCSS(
+    'background-color',
+    'rgba(0, 0, 0, 0)',
+  );
   await expect(page.locator('.comment .where')).toHaveText('greeting.txt:1');
   await expect(page.locator('.comment .text')).toHaveText('Say hello instead');
 };
 
-// Which Enter sends is a choice kept on this device, made in Settings and applied at once; the
-// session tab brings the operator back to the composer.
+// Which Enter sends and the light scheme are choices kept on this device, made in Settings and
+// applied at once; the session tab brings the operator back to the composer.
 const chooseEnterToSend = async (page: Page): Promise<void> => {
   await page.getByRole('button', { name: 'Settings' }).click();
   await page.getByLabel('Send with').selectOption('enter');
-  // Kept in this device's storage, so it is still there after a reload.
+  await page.getByLabel('Light or dark').selectOption('light');
+  await expect(page.locator('html')).toHaveAttribute('data-scheme', 'light');
+  // The phone's status bar colour follows the page.
+  await expect(page.locator('meta[name="theme-color"]').first()).toHaveAttribute(
+    'content',
+    'rgb(245, 246, 248)',
+  );
+  // Kept in this device's storage, so both are still there after a reload, the scheme from
+  // the first paint.
   await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-scheme', 'light');
   await expect(page.getByLabel('Send with')).toHaveValue('enter');
   await page
     .getByRole('navigation', { name: 'Sessions' })
@@ -319,7 +334,8 @@ test('pair, run an agent, comment on its diff, send, reload', async ({ page, sta
   await test.step('create a session on a new branch of the demo repo', () => createSession(page));
   await test.step('the reply and its tool calls arrive in the timeline', () => firstTurn(page));
   await test.step('the second tab saw the turn too, then closes', () => secondTabSawTurn(other));
-  await test.step('choose Enter as the send key in Settings', () => chooseEnterToSend(page));
+  await test.step('choose Enter as the send key and the light scheme in Settings', () =>
+    chooseEnterToSend(page));
   await test.step('comment on a line of the diff', () => commentOnDiff(page));
   await test.step('send it with a message; the agent gets the reference', () =>
     sendWithComment(page, stack));
