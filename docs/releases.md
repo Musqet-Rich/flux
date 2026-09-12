@@ -19,10 +19,13 @@ curl -fsSL https://raw.githubusercontent.com/Musqet-Rich/flux/main/scripts/insta
 the manifest bytes and every file's SHA-256 against the trusted keys before it places or runs a
 single byte** (the same check the daemon's self-update makes; the trusted keys are copied verbatim
 from `apps/daemon/src/update/trusted-keys.ts`). Only on success does it place the three `.mjs` into
-`~/.flux/bin` (override with `FLUX_INSTALL_DIR`) and run `flux service install` to set up the
-supervisor. Prerequisites are Node 24+ and `curl`. Override the target with `FLUX_VERSION`, or the
-source repo with `FLUX_RELEASE_REPO`. Then set `FLUX_RELAY_URL`, start the service and pair a device
-(`node ~/.flux/bin/index.mjs pair`).
+`~/.flux/bin` (override with `FLUX_INSTALL_DIR`), write a `flux` launcher and link it onto `PATH`
+(a dir already on `PATH` and writable, else `~/.local/bin`), and run `flux service install` to set
+up the supervisor. Prerequisites are Node 24+ and `curl`. Override the target with `FLUX_VERSION`,
+or the source repo with `FLUX_RELEASE_REPO`. The daemon connects to the public relay by default
+(`defaultRelayUrl` in the daemon), so there is nothing to configure: start the service and pair a
+device (`flux pair`). To self-host, set `FLUX_RELAY_URL` before installing so `service install`
+bakes it into the supervisor.
 
 ## The bundle
 

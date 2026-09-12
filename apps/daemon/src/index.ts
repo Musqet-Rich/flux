@@ -7,14 +7,14 @@ import { hostname, userInfo } from 'node:os';
 import { join } from 'node:path';
 
 import type { Daemon } from './create-daemon.ts';
-import { createDaemon, detectDistDir, runHelp } from './create-daemon.ts';
+import { createDaemon, defaultRelayUrl, detectDistDir, runHelp } from './create-daemon.ts';
 import { DaemonError } from './daemon-error.ts';
 import { pairingQr } from './qr/pairing-qr.ts';
 import { runServiceCli } from './service/run-service-cli.ts';
 import { runUpdateCheck } from './update/run-update-check.ts';
 
 // `flux daemon`: the box side of Flux (architecture.md § Daemon). Configuration is environment:
-//   FLUX_RELAY_URL   the relay origin, e.g. https://flux.example.com (required)
+//   FLUX_RELAY_URL   the relay origin; default the public relay, set it only to self-host
 //   FLUX_DATA_DIR    state directory, default ~/.flux
 //   FLUX_REPOS_DIR   directory whose subdirectories are the repositories, default ~/repos
 //   FLUX_CLAUDE      the claude binary, default `claude` on PATH
@@ -187,16 +187,13 @@ if (command === 'help') {
 }
 
 // Only `daemon` talks to the relay; `devices` opens the database and needs no URL, so it works
-// from a login shell without the unit's environment file.
-const relayUrl = env['FLUX_RELAY_URL'];
-if (command === 'daemon' && relayUrl === undefined) {
-  console.error('FLUX_RELAY_URL is required');
-  process.exit(2);
-}
+// from a login shell without the unit's environment file. Unset FLUX_RELAY_URL means the public
+// relay (defaultRelayUrl): a fresh install pairs with nothing to configure; override to self-host.
+const relayUrl = env['FLUX_RELAY_URL'] ?? defaultRelayUrl;
 
 const daemon = await createDaemon({
   dataDir,
-  relayUrl: relayUrl ?? '',
+  relayUrl,
   reposDir: env['FLUX_REPOS_DIR'] ?? join(home, 'repos'),
   daemonName: `flux@${hostname()}`,
   pushSubject: env['FLUX_PUSH_SUBJECT'] ?? `https://${hostname()}`,

@@ -150,10 +150,17 @@ test('the build is flux, flux-mcp, flux-manager-mcp and the pi extension, resolv
   expect(names).toEqual(['flux_ask', 'flux_notify']);
 });
 
-test('flux daemon refuses to start without FLUX_RELAY_URL', async () => {
-  const exit = await runFlux(['daemon'], { HOME: dataDir });
+test('flux daemon rejects an insecure FLUX_RELAY_URL', async () => {
+  // No FLUX_RELAY_URL now defaults to the public relay (defaultRelayUrl) rather than refusing,
+  // so a fresh install pairs with nothing to configure; the value is pinned in create-daemon.test.
+  // A relay that IS set must still be TLS: a plaintext non-loopback URL fails start (exit 2,
+  // protocol.md § 2) before any socket is opened, so this stays offline and deterministic.
+  const exit = await runFlux(['daemon'], {
+    HOME: dataDir,
+    FLUX_RELAY_URL: 'http://relay.example.com',
+  });
   expect(exit.code).toBe(2);
-  expect(exit.stderr).toContain('FLUX_RELAY_URL is required');
+  expect(exit.stderr).toContain('FLUX_RELAY_URL:');
 });
 
 test('flux devices ls needs no relay URL, opens a fresh data dir and exits cleanly', async () => {

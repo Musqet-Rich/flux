@@ -22,24 +22,20 @@ const steps: Step[] = [
         kind: 'code',
         text: 'curl -fsSL https://raw.githubusercontent.com/Musqet-Rich/flux/main/scripts/install.sh | sh',
       },
-    ],
-  },
-  {
-    num: '2',
-    segments: [
-      { kind: 'text', text: 'Point it at the hosted relay: set ' },
-      { kind: 'code', text: 'FLUX_RELAY_URL=https://fluxagent.me' },
-      { kind: 'text', text: " in the daemon's environment. Prefer to run your own relay? See " },
+      {
+        kind: 'text',
+        text: ' It connects to the hosted relay by default. Prefer to run your own? See ',
+      },
       {
         kind: 'link',
         text: 'SELF_HOSTING.md',
         href: 'https://github.com/Musqet-Rich/flux/blob/main/SELF_HOSTING.md',
       },
-      { kind: 'text', text: ' for the self-host path.' },
+      { kind: 'text', text: '.' },
     ],
   },
   {
-    num: '3',
+    num: '2',
     segments: [
       { kind: 'text', text: 'On the box, run ' },
       { kind: 'code', text: 'flux pair' },
@@ -47,7 +43,7 @@ const steps: Step[] = [
     ],
   },
   {
-    num: '4',
+    num: '3',
     segments: [
       {
         kind: 'text',
