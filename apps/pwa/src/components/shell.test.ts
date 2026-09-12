@@ -47,12 +47,12 @@ const helpSummary = {
   updatedAt: '2026-01-01T00:00:00Z',
 };
 
-test('renders the ⓘ button before the gear and opens the help modal on click', async () => {
+test('renders the help button before the gear and opens the help modal on click', async () => {
   const box = await pairedStore([]);
   const router = createRouter(memoryHistory());
   const wrapper = mount(Shell, { props: { store: box.store, router }, global: { stubs } });
   const info = wrapper.get('button[aria-label="Ask about Flux"]');
-  expect(info.text()).toBe('ⓘ');
+  expect(info.find('svg').attributes('data-icon')).toBe('help');
   expect(info.attributes('title')).toBe('Ask about Flux');
   expect(wrapper.findComponent(HelpModal).exists()).toBe(false);
   await info.trigger('click');

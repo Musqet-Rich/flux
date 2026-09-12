@@ -76,6 +76,36 @@ test('Cmd/Ctrl+Enter submits', async () => {
   box.store.stop();
 });
 
+test('with Enter as the send key a bare Enter submits and ⌘ Enter breaks the line', async () => {
+  const box = await withHelp();
+  await box.store.setSendKey('enter');
+  const wrapper = mount(HelpModal, { props: { store: box.store } });
+  const ta = wrapper.find('textarea');
+  // A bare Enter: its keydown, then the line break it produces.
+  const breakLine = (): InputEvent => {
+    press(ta.element, { key: 'Enter' });
+    const event = new InputEvent('beforeinput', {
+      inputType: 'insertLineBreak',
+      bubbles: true,
+      cancelable: true,
+    });
+    ta.element.dispatchEvent(event);
+    return event;
+  };
+  // Blank: nothing to submit and no line to break.
+  expect(breakLine().defaultPrevented).toBe(true);
+  expect(ta.element.value).toBe('');
+  await ta.setValue('one');
+  press(ta.element, { key: 'Enter', metaKey: true });
+  await flushPromises();
+  expect(ta.element.value).toBe('one\n');
+  expect(box.calls('sessions.createHelp')).toEqual([]);
+  expect(breakLine().defaultPrevented).toBe(true);
+  await until(() => box.calls('sessions.createHelp').length === 1);
+  expect(box.calls('sessions.createHelp')).toEqual([{ question: 'one' }]);
+  box.store.stop();
+});
+
 test('Escape and a backdrop tap close without submitting', async () => {
   const box = await withHelp();
   const esc = 'Escape';

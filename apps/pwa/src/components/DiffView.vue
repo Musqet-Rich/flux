@@ -9,6 +9,7 @@ import { createDiffEditor } from '../editor/create-diff-editor.ts';
 import type { Store } from '../store/create-store.ts';
 import { pendingComments } from '../store/pending-comments.ts';
 import CommentTray from './CommentTray.vue';
+import Icon from './Icon.vue';
 
 // One file as a unified diff from the branch base to the worktree, with line comments. The
 // original comes from `git.show` at the base recorded in `session.created`, under the file's
@@ -121,9 +122,25 @@ onUnmounted(() => {
 <template>
   <section class="diff">
     <div class="toolbar">
-      <button type="button" class="secondary" @click="$emit('back')">‹ Changes</button>
+      <button
+        type="button"
+        class="secondary icon-only"
+        aria-label="Back to changes"
+        title="Back to changes"
+        @click="$emit('back')"
+      >
+        <Icon name="back" />
+      </button>
       <code class="path">{{ path }}</code>
-      <button type="button" class="secondary edit" @click="$emit('edit')">Edit</button>
+      <button
+        type="button"
+        class="secondary icon-only edit"
+        aria-label="Edit"
+        title="Edit"
+        @click="$emit('edit')"
+      >
+        <Icon name="edit" />
+      </button>
     </div>
     <p v-if="loading" class="notice">Loading…</p>
     <p v-else-if="failure !== null" class="notice">{{ failure }}</p>

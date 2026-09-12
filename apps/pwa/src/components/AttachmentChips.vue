@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import type { PendingAttachment } from '../store/store-state.ts';
 import { formatBytes } from './format-bytes.ts';
+import Icon from './Icon.vue';
 
 // The files on the composer, one chip each (ADR 0020): a thumbnail for an image, an icon and
 // the name otherwise, the size, a progress bar while the upload runs, the error and a Retry
-// once it failed, and × to take the file off the message.
+// once it failed, and a cross to take the file off the message.
 
 defineProps<{ attachments: PendingAttachment[] }>();
 defineEmits<{ remove: [key: string]; retry: [key: string] }>();
@@ -20,7 +21,7 @@ defineEmits<{ remove: [key: string]; retry: [key: string] }>();
       :title="a.error ?? a.name"
     >
       <img v-if="a.preview !== null" :src="a.preview" :alt="a.name" class="thumb" />
-      <span v-else class="icon" aria-hidden="true">📄</span>
+      <span v-else class="kind"><Icon name="file" /></span>
       <span class="meta">
         <span class="name">{{ a.name }}</span>
         <span class="size">{{ formatBytes(a.size) }}</span>
@@ -36,18 +37,21 @@ defineEmits<{ remove: [key: string]; retry: [key: string] }>();
       <button
         v-if="a.status === 'failed'"
         type="button"
-        class="secondary retry"
+        class="secondary icon-only retry"
+        :aria-label="`Retry ${a.name}`"
+        title="Retry"
         @click="$emit('retry', a.key)"
       >
-        Retry
+        <Icon name="retry" />
       </button>
       <button
         type="button"
-        class="secondary remove"
+        class="secondary icon-only remove"
         :aria-label="`Remove ${a.name}`"
+        title="Remove"
         @click="$emit('remove', a.key)"
       >
-        ×
+        <Icon name="close" />
       </button>
     </li>
   </ul>
@@ -86,8 +90,10 @@ defineEmits<{ remove: [key: string]; retry: [key: string] }>();
   border-radius: 4px;
 }
 
-.icon {
+.kind {
+  display: inline-flex;
   font-size: 1.4rem;
+  color: var(--muted);
 }
 
 .meta {
@@ -123,7 +129,7 @@ defineEmits<{ remove: [key: string]; retry: [key: string] }>();
 }
 
 .chip button {
-  padding: 0.1rem 0.5rem;
-  line-height: 1;
+  padding: 0.2rem 0.4rem;
+  font-size: 0.9rem;
 }
 </style>

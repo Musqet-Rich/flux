@@ -3,10 +3,12 @@ import { computed } from 'vue';
 
 import { notificationSounds } from '../sound/notification-sounds.ts';
 import type { Store } from '../store/create-store.ts';
+import Icon from './Icon.vue';
 
 // This device's notification sound (store/notification-sound.ts): a select that applies on
 // change and plays the pick, so the operator hears it under the tap the browser needs, and a
-// Play button to hear it again. Device-local, so it sits apart from the box's Save.
+// Play button to hear it again. Device-local, so it sits apart from the box's Save, in the
+// "This device" section.
 
 const props = defineProps<{ store: Store }>();
 
@@ -26,15 +28,22 @@ const replay = (): void => {
 
 <template>
   <div class="sound">
-    <label for="flux-sound">On this device, play</label>
+    <label for="flux-sound">Notification sound</label>
     <span class="controls">
       <select id="flux-sound" :value="sound" @change="pick">
         <option v-for="o in notificationSounds.options" :key="o.name" :value="o.name">
           {{ o.label }}
         </option>
       </select>
-      <button type="button" class="secondary" :disabled="sound === 'none'" @click="replay">
-        Play
+      <button
+        type="button"
+        class="secondary icon-only"
+        aria-label="Play"
+        title="Play"
+        :disabled="sound === 'none'"
+        @click="replay"
+      >
+        <Icon name="play" />
       </button>
     </span>
     <p class="hint">

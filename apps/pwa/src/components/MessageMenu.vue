@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 
 import { useDismiss } from '../composables/useDismiss.ts';
+import Icon from './Icon.vue';
 
 // The overflow menu on a message bubble: copy the text as written (the agent's Markdown, the
 // operator's own typing), or reply to it. Same shape as SessionMenu: a button with
@@ -17,6 +18,9 @@ const open = ref(false);
 // What the last copy did: the trigger shows a tick or a cross for a moment.
 const outcome = ref<'copied' | 'failed' | null>(null);
 useDismiss(open, root);
+const face = computed(() =>
+  outcome.value === 'copied' ? 'check' : outcome.value === 'failed' ? 'failed' : 'menu',
+);
 
 const toggle = (): void => {
   open.value = !open.value;
@@ -51,16 +55,19 @@ const reply = (): void => {
   <div ref="root" class="menu-root" :class="side">
     <button
       type="button"
-      class="trigger"
+      class="icon-only trigger"
       :class="outcome"
       aria-haspopup="menu"
       :aria-expanded="open"
       aria-label="Message menu"
+      title="Message menu"
       @click="toggle"
-    />
+    >
+      <Icon :name="face" />
+    </button>
     <div v-if="open" class="menu" role="menu" aria-label="Message">
-      <button type="button" role="menuitem" @click="copy">Copy</button>
-      <button type="button" role="menuitem" @click="reply">Reply</button>
+      <button type="button" role="menuitem" @click="copy"><Icon name="copy" />Copy</button>
+      <button type="button" role="menuitem" @click="reply"><Icon name="reply" />Reply</button>
     </div>
   </div>
 </template>
@@ -85,19 +92,15 @@ const reply = (): void => {
   opacity: 0.6;
   font-size: 1rem;
   line-height: 1;
-  padding: 0.2rem 0.45rem;
+  padding: 0.2rem 0.35rem;
 }
 
-.trigger::before {
-  content: '⋯';
+.trigger.copied {
+  color: var(--ok);
 }
 
-.trigger.copied::before {
-  content: '✓';
-}
-
-.trigger.failed::before {
-  content: '✕';
+.trigger.failed {
+  color: var(--danger);
 }
 
 .trigger:hover,
@@ -128,6 +131,9 @@ const reply = (): void => {
 }
 
 .menu button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   background: transparent;
   color: var(--fg);
   border-radius: 0;

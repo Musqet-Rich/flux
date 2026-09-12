@@ -4,6 +4,7 @@ import { computed, nextTick, ref, watch } from 'vue';
 import type { Store } from '../store/create-store.ts';
 import type { RunnerRun } from '../store/store-state.ts';
 import AnsiOutput from './AnsiOutput.vue';
+import Icon from './Icon.vue';
 
 // The operator command runner (ADR 0026 § 7): a distinct screen, not a session tab. It shows each
 // one-off command and its streamed, ANSI-coloured output, with a Stop while it runs and a one-tap
@@ -52,6 +53,7 @@ const exitLine = (run: RunnerRun): string => {
 };
 
 const isActive = (run: RunnerRun): boolean => runner.value.activeRunId === run.runId;
+const copied = (run: RunnerRun): boolean => copiedRunId.value === run.runId;
 
 // Follow the newest output as it streams and as runs are added.
 watch(
@@ -68,7 +70,15 @@ watch(
 <template>
   <section class="runner">
     <div class="toolbar">
-      <button type="button" class="secondary" @click="$emit('back')">‹ Sessions</button>
+      <button
+        type="button"
+        class="secondary icon-only"
+        aria-label="Back to sessions"
+        title="Back to sessions"
+        @click="$emit('back')"
+      >
+        <Icon name="back" />
+      </button>
       <h1>Command runner</h1>
     </div>
     <div ref="scrollback" class="scrollback">
@@ -83,19 +93,22 @@ watch(
             <button
               v-if="isActive(run)"
               type="button"
-              class="secondary stop"
+              class="secondary icon-only stop"
               aria-label="Stop the running command"
+              title="Stop"
               @click="stop"
             >
-              Stop
+              <Icon name="stop" />
             </button>
             <button
               type="button"
-              class="secondary copy"
+              class="secondary icon-only copy"
+              :class="{ copied: copied(run) }"
               :aria-label="`Copy the output of ${run.command}`"
+              :title="copied(run) ? 'Copied' : 'Copy'"
               @click="copy(run)"
             >
-              {{ copiedRunId === run.runId ? 'Copied' : 'Copy' }}
+              <Icon :name="copied(run) ? 'check' : 'copy'" />
             </button>
           </div>
         </div>
@@ -117,7 +130,15 @@ watch(
         autocorrect="off"
         spellcheck="false"
       />
-      <button type="submit" class="send" :disabled="running || command.trim() === ''">Run</button>
+      <button
+        type="submit"
+        class="icon-only send"
+        aria-label="Run"
+        title="Run"
+        :disabled="running || command.trim() === ''"
+      >
+        <Icon name="play" />
+      </button>
     </form>
   </section>
 </template>
@@ -192,8 +213,12 @@ h1 {
 }
 
 .actions button {
-  font-size: 0.75rem;
-  padding: 0.25rem 0.5rem;
+  font-size: 0.85rem;
+  padding: 0.25rem 0.4rem;
+}
+
+.copy.copied {
+  color: var(--ok);
 }
 
 .exit {

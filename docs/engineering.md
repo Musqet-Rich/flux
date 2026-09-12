@@ -91,6 +91,7 @@ Formatting is Oxfmt's job; nobody discusses it. Beyond formatting:
 - State: composables + `reactive`/`ref`. No Pinia unless an ADR justifies it.
 - No global CSS beyond `src/styles/base.css`. Scoped styles in components. CSS custom properties for theme.
 - Templates stay dumb: no inline logic beyond a ternary. Compute in `<script>`.
+- Icons are Phosphor through `components/Icon.vue` and the map in `src/icons/icons.ts` (ADR 0029): `<Icon name="close" />`, named by meaning. Add an icon there as a `?path` import; never import `@phosphor-icons/core` or a Phosphor component package anywhere else, and never its barrel. An icon-only button carries `aria-label` and `title` and the `icon-only` class.
 
 ## Testing
 

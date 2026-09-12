@@ -3,6 +3,7 @@ import type { AgentSpec, AgentTools, HarnessKind, ToolsMode } from '@flux/protoc
 import { computed, ref, watch } from 'vue';
 
 import type { Store } from '../store/create-store.ts';
+import Icon from './Icon.vue';
 
 // Saved Agents as an editable list (ADR 0023 § 2): each a name, an optional harness, free-text
 // model and effort, a role, and a tool policy (§ 4). Save sends the whole list through
@@ -216,16 +217,16 @@ const save = async (): Promise<void> => {
             :disabled="busy"
             @click="remove(row.id)"
           >
-            Delete
+            <Icon name="trash" /> Delete
           </button>
         </li>
       </ul>
       <button type="button" class="secondary agent-add" :disabled="busy" @click="add">
-        Add agent
+        <Icon name="plus" /> Add agent
       </button>
       <p v-if="notice !== null" class="notice">{{ notice }}</p>
       <button type="submit" :disabled="!dirty || notice !== null || busy">
-        {{ dirty ? 'Save changes' : 'Saved' }}
+        <Icon name="save" /> {{ dirty ? 'Save changes' : 'Saved' }}
       </button>
       <p v-if="failure !== null" class="error">{{ failure }}</p>
     </template>

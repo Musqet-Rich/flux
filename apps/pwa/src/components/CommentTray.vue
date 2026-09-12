@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { PendingComment } from '../store/pending-comments.ts';
+import Icon from './Icon.vue';
 
 // Comments waiting to go with the next message; each can still be withdrawn.
 
@@ -26,11 +27,12 @@ const where = (c: PendingComment): string => {
       </div>
       <button
         type="button"
-        class="secondary remove"
+        class="secondary icon-only remove"
         aria-label="Remove comment"
+        title="Remove comment"
         @click="$emit('remove', c.commentId)"
       >
-        ×
+        <Icon name="close" />
       </button>
     </li>
   </ul>
@@ -75,6 +77,7 @@ const where = (c: PendingComment): string => {
 
 .remove {
   flex: none;
-  padding: 0.2rem 0.6rem;
+  padding: 0.25rem 0.45rem;
+  font-size: 0.9rem;
 }
 </style>

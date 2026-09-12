@@ -151,6 +151,114 @@ test('arrow keys move the highlight, Enter takes it, Escape dismisses the list',
   store.stop();
 });
 
+// test-utils `trigger` does not set the system modifier keys, so a chord is a real KeyboardEvent.
+// A bare Enter is its keydown and then, when nothing cancelled it, the line break it produces.
+const press = (el: Element, init: KeyboardEventInit): KeyboardEvent => {
+  const event = new KeyboardEvent('keydown', {
+    key: 'Enter',
+    bubbles: true,
+    cancelable: true,
+    ...init,
+  });
+  el.dispatchEvent(event);
+  return event;
+};
+const breakLine = (el: Element): InputEvent => {
+  const event = new InputEvent('beforeinput', {
+    inputType: 'insertLineBreak',
+    bubbles: true,
+    cancelable: true,
+  });
+  el.dispatchEvent(event);
+  return event;
+};
+const bareEnter = (el: Element, init: KeyboardEventInit = {}): InputEvent | null =>
+  press(el, init).defaultPrevented ? null : breakLine(el);
+
+test('the send key sends; every other Enter breaks the line', async () => {
+  const { store, wrapper, calls } = await setup();
+  const ta = wrapper.find('textarea');
+  expect(wrapper.find('button[type="submit"]').attributes('title')).toBe('Send (Ctrl+Enter)');
+  await ta.setValue('first');
+  expect(bareEnter(ta.element)?.defaultPrevented).toBe(false);
+  expect(bareEnter(ta.element, { shiftKey: true })?.defaultPrevented).toBe(false);
+  expect(press(ta.element, { altKey: true }).defaultPrevented).toBe(true);
+  await wrapper.vm.$nextTick();
+  expect(ta.element.value).toBe('first\n');
+  expect(calls('agent.send')).toEqual([]);
+  press(ta.element, { ctrlKey: true });
+  await until(() => calls('agent.send').length === 1);
+  expect(calls('agent.send')).toEqual([{ session: 's1', text: 'first' }]);
+  expect(wrapper.emitted('sent')).toHaveLength(1);
+  // The box clears the draft once the message has landed; a send in flight ignores the key.
+  await until(() => store.composer('s1').text === '');
+  await store.setSendKey('enter');
+  await wrapper.vm.$nextTick();
+  expect(wrapper.find('button[type="submit"]').attributes('title')).toBe('Send (Enter)');
+  await ta.setValue('second');
+  press(ta.element, { metaKey: true });
+  await wrapper.vm.$nextTick();
+  expect(ta.element.value).toBe('second\n');
+  expect(store.composer('s1').text).toBe('second\n');
+  expect(bareEnter(ta.element)?.defaultPrevented).toBe(true);
+  await until(() => calls('agent.send').length === 2);
+  expect(calls('agent.send')[1]).toEqual({ session: 's1', text: 'second' });
+  wrapper.unmount();
+  store.stop();
+});
+
+test('a send chord that cannot send breaks the line instead of dying on the disabled button', async () => {
+  const { store, wrapper, calls } = await setup();
+  const ta = wrapper.find('textarea');
+  await store.setSendKey('enter');
+  // Blank: neither a bare Enter nor a chord puts anything in the draft.
+  expect(bareEnter(ta.element)?.defaultPrevented).toBe(true);
+  await store.setSendKey('meta');
+  expect(press(ta.element, { metaKey: true }).defaultPrevented).toBe(true);
+  expect(store.composer('s1').text).toBe('');
+  await store.setSendKey('enter');
+  // A file still uploading: Enter breaks the line, ⌘ Enter under the default would too.
+  store.attach('s1', [txt]);
+  await ta.setValue('wait');
+  expect(bareEnter(ta.element)?.defaultPrevented).toBe(false);
+  await store.setSendKey('meta');
+  expect(press(ta.element, { metaKey: true }).defaultPrevented).toBe(true);
+  await wrapper.vm.$nextTick();
+  expect(ta.element.value).toBe('wait\n');
+  expect(calls('agent.send')).toEqual([]);
+  await until(() => store.composer('s1').attachments[0]?.status === 'ready');
+  press(ta.element, { metaKey: true });
+  await until(() => calls('agent.send').length === 1);
+  wrapper.unmount();
+  store.stop();
+});
+
+test('while the skill list is open a bare Enter takes the skill even as the send key; a chord is itself', async () => {
+  const { store, wrapper, calls } = await withSkills([{ name: 'review', body: '' }]);
+  await store.setSendKey('enter');
+  const ta = wrapper.find('textarea');
+  await ta.setValue('/re');
+  expect(bareEnter(ta.element)).toBeNull();
+  await wrapper.vm.$nextTick();
+  expect(ta.element.value).toBe('/review ');
+  expect(calls('agent.send')).toEqual([]);
+  expect(bareEnter(ta.element)?.defaultPrevented).toBe(true);
+  await until(() => calls('agent.send').length === 1);
+  expect(calls('agent.send')).toEqual([{ session: 's1', text: '/review' }]);
+  await until(() => store.composer('s1').text === '');
+  // ⇧ Enter over the list is the browser's line break rather than a pick; as the send key it
+  // sends over the list.
+  await ta.setValue('/re');
+  expect(bareEnter(ta.element, { shiftKey: true })?.defaultPrevented).toBe(false);
+  expect(wrapper.find('.slash-suggest').exists()).toBe(true);
+  await store.setSendKey('shift');
+  expect(bareEnter(ta.element, { shiftKey: true })?.defaultPrevented).toBe(true);
+  await until(() => calls('agent.send').length === 2);
+  expect(calls('agent.send')[1]).toEqual({ session: 's1', text: '/re' });
+  wrapper.unmount();
+  store.stop();
+});
+
 test('no suggestions once a space is typed, or when the box has no skills', async () => {
   const { store, wrapper } = await withSkills([{ name: 'review', body: '' }]);
   await wrapper.find('textarea').setValue('/review go');

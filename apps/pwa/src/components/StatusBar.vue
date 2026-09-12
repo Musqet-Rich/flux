@@ -5,10 +5,11 @@ import { computed, onMounted, onUnmounted, ref } from 'vue';
 import type { ConnectionStatus } from '../client/create-connection.ts';
 import type { PushState, SessionContext } from '../store/store-state.ts';
 import { formatRenewal } from './format-renewal.ts';
+import Icon from './Icon.vue';
 
 // Connection state, the open session's context-window usage, the agent's rate-limit windows and
-// their renewal times, the way to turn notifications on and the last error with a × to dismiss
-// it, always visible at the bottom.
+// their renewal times, the way to turn notifications on and the last error with a close button
+// to dismiss it, always visible at the bottom.
 
 const props = withDefaults(
   defineProps<{
@@ -115,7 +116,7 @@ const absolute = computed(() =>
       <span v-for="w in windows" :key="w.name" class="win-group">
         <span class="window" :class="{ high: w.high }">{{ w.label }} {{ w.percent }}</span>
         <span v-if="w.renew !== ''" class="renew" :class="{ binding: w.binding }">
-          ↻ {{ w.renew }}</span
+          <Icon name="renew" /> {{ w.renew }}</span
         >
       </span>
     </span>
@@ -123,12 +124,18 @@ const absolute = computed(() =>
       <span v-for="w in absolute" :key="w.label" class="at">{{ w.label }} {{ w.time }}</span>
     </span>
     <button v-if="push === 'off'" type="button" class="secondary push" @click="$emit('enablePush')">
-      Enable notifications
+      <Icon name="bell" /> Enable notifications
     </button>
     <span v-if="error !== null" class="error">
       <span role="alert">{{ error }}</span>
-      <button type="button" class="dismiss" aria-label="Dismiss error" @click="$emit('dismiss')">
-        ×
+      <button
+        type="button"
+        class="icon-only dismiss"
+        aria-label="Dismiss error"
+        title="Dismiss"
+        @click="$emit('dismiss')"
+      >
+        <Icon name="close" />
       </button>
     </span>
   </footer>
@@ -173,7 +180,7 @@ const absolute = computed(() =>
   color: var(--danger);
 }
 
-/* One run, `5h 13% ↻ 2h10m · 7d 24% ↻ 11h`, tapped for a line of absolute times. Each window
+/* One run, `5h 13% ↻ 2h10m · 7d 24% ↻ 11h` (the arrow an Icon), tapped for a line of absolute times. Each window
    is one unbreakable piece; the run wraps between windows when the bar cannot hold them all. */
 .windows {
   cursor: pointer;
@@ -185,7 +192,7 @@ const absolute = computed(() =>
 
 /* On a phone-width bar the whole run would wrap under the connection and context readings, so
    the renewals of the non-binding windows go first and only the most used window keeps its
-   `↻`. A breakpoint rather than a measurement: the bar's other occupants are fixed-size and
+   renewal arrow. A breakpoint rather than a measurement: the bar's other occupants are fixed-size and
    the phone is where the space runs out. */
 @media (max-width: 480px) {
   .renew:not(.binding) {
@@ -230,8 +237,7 @@ const absolute = computed(() =>
 .dismiss {
   background: transparent;
   color: inherit;
-  font-size: 1rem;
-  line-height: 1;
-  padding: 0 0.3rem;
+  font-size: 0.9rem;
+  padding: 0.1rem 0.25rem;
 }
 </style>

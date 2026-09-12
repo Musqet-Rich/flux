@@ -5,6 +5,7 @@ import { computed, ref } from 'vue';
 import { useScanner } from '../composables/useScanner.ts';
 import { requestPushPermission } from '../push/request-push-permission.ts';
 import type { StorePhase } from '../store/store-state.ts';
+import Icon from './Icon.vue';
 
 // The connect affordance in the editorial-brutalist look: scan the QR that `flux pair` prints,
 // or paste the link it encodes. Standalone it heads its own screen (`h1`); the homepage embeds
@@ -76,9 +77,11 @@ const message = computed(() => {
         :disabled="busy"
         @click="start"
       >
-        Scan QR code
+        <Icon name="qr" /> Scan QR code
       </button>
-      <button v-if="active" type="button" class="stop" @click="stop">Stop camera</button>
+      <button v-if="active" type="button" class="stop" @click="stop">
+        <Icon name="stop" /> Stop camera
+      </button>
       <p class="divider">· Or paste the link ·</p>
       <form class="paste" @submit.prevent="submit(link)">
         <label for="pair-link" class="visually-hidden">Or paste the link</label>
@@ -91,7 +94,7 @@ const message = computed(() => {
           :disabled="busy"
         />
         <button type="submit" class="do-pair" :disabled="busy || link === ''">
-          {{ pairLabel }}
+          <Icon name="pair" /> {{ pairLabel }}
         </button>
       </form>
       <p v-if="message !== null" class="error">{{ message }}</p>

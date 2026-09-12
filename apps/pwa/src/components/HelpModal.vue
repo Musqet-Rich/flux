@@ -3,11 +3,13 @@ import type { SessionSummary } from '@flux/protocol';
 import { computed, onMounted, ref } from 'vue';
 
 import type { Store } from '../store/create-store.ts';
+import { enterKey } from './enter-key.ts';
+import Icon from './Icon.vue';
 
 // "Ask about Flux" (ADR 0008): a modal over the app. The operator types a question; Send opens a
-// daemon-managed Help session seeded with it and navigates there. Cmd/Ctrl+Enter submits, Escape
-// and a tap on the backdrop close it. On failure the modal stays open with the text intact and
-// shows the box's message.
+// daemon-managed Help session seeded with it and navigates there. The device's send key
+// (enter-key.ts) submits, Escape and a tap on the backdrop close it. On failure the modal stays
+// open with the text intact and shows the box's message.
 
 const props = defineProps<{ store: Store }>();
 const emit = defineEmits<{ created: [session: SessionSummary]; close: [] }>();
@@ -38,10 +40,14 @@ const submit = async (): Promise<void> => {
 };
 
 const onKeydown = (event: KeyboardEvent): void => {
-  if (event.key === 'Escape') {
-    close();
-  } else if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-    event.preventDefault();
+  if (event.key === 'Escape') close();
+  else if (enterKey.keydown(props.store.state.sendKey, canSend.value, event, box.value)) {
+    void submit();
+  }
+};
+
+const onLineBreak = (event: InputEvent): void => {
+  if (enterKey.lineBreak(props.store.state.sendKey, canSend.value, event, box.value)) {
     void submit();
   }
 };
@@ -63,12 +69,13 @@ onMounted(() => {
         :disabled="busy"
         placeholder="e.g. How do I pair a new device?"
         @keydown="onKeydown"
+        @beforeinput="onLineBreak"
       />
       <p v-if="failure !== null" class="error">{{ failure }}</p>
       <div class="actions">
         <button type="button" class="secondary" @click="close">Cancel</button>
         <button type="button" :disabled="!canSend" @click="submit">
-          {{ busy ? 'Sending…' : 'Send' }}
+          <Icon name="send" /> {{ busy ? 'Sending…' : 'Send' }}
         </button>
       </div>
     </div>

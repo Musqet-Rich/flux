@@ -84,6 +84,7 @@ const pr = {
 
 test('a published PR is a link, a failed hook keeps stderr behind a summary', () => {
   const link = mount(EventItem, { props: { event: ev('pr.published', pr) } }).find('a.link');
+  expect(link.find('svg').attributes('data-icon')).toBe('pullRequest');
   expect(link.text()).toBe('Pull request #19 created · o/r');
   expect(link.attributes()).toMatchObject({
     href: 'https://github.com/o/r/pull/19',
@@ -93,12 +94,14 @@ test('a published PR is a link, a failed hook keeps stderr behind a summary', ()
   const hook = { hookName: 'Stop:lint', hookEvent: 'Stop', exitCode: 2, stderr: 'lint: 3 errors' };
   const warning = mount(EventItem, { props: { event: ev('hook.failed', hook) } });
   expect(warning.find('details summary').text()).toBe('Hook Stop:lint failed (exit 2)');
+  expect(warning.find('summary svg').attributes('data-icon')).toBe('warning');
   expect(warning.find('.stderr').text()).toBe('lint: 3 errors');
   expect(warning.find('.item').classes()).toContain('warn');
   const quiet = ev('hook.failed', { hookName: 'h', hookEvent: 'Stop', stderr: '' });
   const bare = mount(EventItem, { props: { event: quiet } });
   expect(bare.find('details').exists()).toBe(false);
   expect(bare.find('.note').text()).toBe('Hook h failed');
+  expect(bare.find('.note svg').attributes('data-icon')).toBe('warning');
 });
 
 // A newer box may log types this build does not know (protocol.md § 8); they render like raw.
@@ -175,6 +178,7 @@ test('a compaction boundary is a rule with the token delta and duration', () => 
   expect(wrapper.find('.item').classes()).toContain('divider');
   expect(wrapper.find('.rule').attributes('role')).toBe('separator');
   expect(wrapper.text()).toBe('Context compacted · 60k → 6.2k tokens · 59s');
+  expect(wrapper.find('.rule svg').attributes('data-icon')).toBe('compact');
   const failed = ev('compact.boundary', {
     trigger: 'manual',
     preTokens: 1,
@@ -185,6 +189,7 @@ test('a compaction boundary is a rule with the token delta and duration', () => 
   const bad = mount(EventItem, { props: { event: failed } });
   expect(bad.find('.item').classes()).toContain('warn');
   expect(bad.text()).toBe('Compaction failed');
+  expect(bad.find('.rule svg').attributes('data-icon')).toBe('warning');
 });
 
 // A task row opens that subagent's chat; the report behind a task's end is what the parent
@@ -192,7 +197,11 @@ test('a compaction boundary is a rule with the token delta and duration', () => 
 test('a started task is a tappable note, an ended task keeps its report behind a summary', async () => {
   const task = { taskId: 't', toolUseId: 'u', description: 'Run tests', background: true };
   const bare = mount(EventItem, { props: { event: ev('task.started', task) } });
-  expect(bare.find('button.task').text()).toBe('Background task: Run tests ›');
+  expect(bare.find('button.task').text()).toBe('Background task: Run tests');
+  expect(bare.findAll('button.task svg').map((s) => s.attributes('data-icon'))).toEqual([
+    'task',
+    'forward',
+  ]);
   await bare.find('button.task').trigger('click');
   expect(bare.emitted('task')).toEqual([['u']]);
   const typed = ev('task.started', { ...task, background: false, agentType: 'Explore' });
@@ -200,7 +209,7 @@ test('a started task is a tappable note, an ended task keeps its report behind a
     mount(EventItem, { props: { event: typed } })
       .find('button.task')
       .text(),
-  ).toBe('Task: Explore · Run tests ›');
+  ).toBe('Task: Explore · Run tests');
   const report = {
     taskId: 't',
     status: 'completed',
@@ -209,6 +218,7 @@ test('a started task is a tappable note, an ended task keeps its report behind a
   };
   const done = mount(EventItem, { props: { event: ev('task.ended', report) } });
   expect(done.find('details summary').text()).toBe('Task completed · 12.1k tokens');
+  expect(done.find('summary svg').attributes('data-icon')).toBe('succeeded');
   expect(done.find('.report .markdown p.heading strong').text()).toBe('Found');
   expect(done.find('.report li code').text()).toBe('a.ts');
   expect(done.find('.item').classes()).not.toContain('warn');
@@ -217,6 +227,7 @@ test('a started task is a tappable note, an ended task keeps its report behind a
   });
   expect(failed.find('details').exists()).toBe(false);
   expect(failed.find('.note').text()).toBe('Task failed');
+  expect(failed.find('.note svg').attributes('data-icon')).toBe('failed');
   expect(failed.find('.item').classes()).toContain('warn');
 });
 
@@ -229,7 +240,7 @@ test('message bubbles carry a menu on their inboard side; a reply row quotes its
   });
   expect(user.find('.menu-root').classes()).toContain('left');
   expect(user.find('.item').attributes('data-seq')).toBe('3');
-  expect(user.find('.quote').text()).toBe('↩ Plan');
+  expect(user.find('.quote').text()).toBe('Plan');
   await user.find('.quote').trigger('click');
   expect(user.emitted('jump')).toEqual([[1]]);
   await user.find('.trigger').trigger('click');
@@ -240,17 +251,19 @@ test('message bubbles carry a menu on their inboard side; a reply row quotes its
   expect(bot.find('.quote').exists()).toBe(false);
   const note = mount(EventItem, { props: { event: ev('turn.ended', {}) } });
   expect(note.find('.menu-root').exists()).toBe(false);
+  // A plain lifecycle note carries no icon; only the signal rows do.
+  expect(note.find('svg').exists()).toBe(false);
 });
 
 test('the reply chip skips blank leading lines and names a source the log lacks', () => {
   const blank = mount(EventItem, {
     props: { event: ev('msg.user', { text: 'hi', replyTo: 1 }), quote: '\n\n  \nSecond' },
   });
-  expect(blank.find('.quote').text()).toBe('↩ Second');
+  expect(blank.find('.quote').text()).toBe('Second');
   const gone = mount(EventItem, {
     props: { event: ev('msg.user', { text: 'hi', replyTo: 1 }), quote: null },
   });
-  expect(gone.find('.quote').text()).toBe('↩ earlier message');
+  expect(gone.find('.quote').text()).toBe('earlier message');
 });
 
 test('a user message lists its attachments under the text, thumbnails where fetched', () => {

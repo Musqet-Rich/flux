@@ -28,6 +28,9 @@ export type StorePhase = 'booting' | 'unpaired' | 'pairing' | 'paired';
 // stored on the box, `on` after that.
 export type PushState = 'unavailable' | 'off' | 'on';
 
+// The Enter that sends a message on this device (send-key.ts): alone, or with ⌘/Ctrl, ⌥ or ⇧.
+export type SendKey = 'enter' | 'meta' | 'alt' | 'shift';
+
 // The agent is inside a thinking block; the count is Claude's running estimate once reported.
 export interface Thinking {
   estimatedTokens: number | null;
@@ -142,6 +145,8 @@ export interface StoreState {
   // The sound this device plays when the box would push (notification-sound.ts); `none` until
   // the operator picks one in Settings.
   sound: SoundName;
+  // Which Enter sends a message on this device (send-key.ts); `meta` until the operator picks.
+  sendKey: SendKey;
   sessions: SessionSummary[];
   // Harnesses the box can run, from `hello`; a daemon that predates the field has claude only.
   agents: HarnessKind[];
@@ -217,6 +222,7 @@ export const storeState = (): StoreState =>
     error: null,
     push: 'unavailable',
     sound: 'none',
+    sendKey: 'meta',
     sessions: [],
     agents: ['claude'],
     rateWindows: [],
