@@ -89,6 +89,10 @@ importers:
       vue:
         specifier: 3.5.42
         version: 3.5.42(typescript@5.9.3)
+    devDependencies:
+      '@phosphor-icons/core':
+        specifier: 2.1.1
+        version: 2.1.1
 
   apps/relay:
     dependencies:
@@ -718,6 +722,9 @@ packages:
   '@oxlint/plugins@1.79.0':
     resolution: {integrity: sha512-S0uyoxakDINJ4DPgqxGlEEvrdSMeQb7Z2lKVjxoY2gwsbZbfg2Xr8Klfeo5ZeraHmmdBCELFUHkSe6KEmBpMvg==}
     engines: {node: ^12.22.0 || ^14.17.0 || >=16.0.0}
+
+  '@phosphor-icons/core@2.1.1':
+    resolution: {integrity: sha512-v4ARvrip4qBCImOE5rmPUylOEK4iiED9ZyKjcvzuezqMaiRASCHKcRIuvvxL/twvLpkfnEODCOJp5dM4eZilxQ==}
 
   '@playwright/test@1.62.1':
     resolution: {integrity: sha512-DTcUc8qii+cpHvtOwggMtBRMjKZHXYWdw8syRYu2vtzuq4Wxphqq4NfCs5Zt44L6mA8rfDfj+PHnxFc/FeK6mQ==}
@@ -2388,6 +2395,8 @@ snapshots:
     optional: true
 
   '@oxlint/plugins@1.79.0': {}
+
+  '@phosphor-icons/core@2.1.1': {}
 
   '@playwright/test@1.62.1':
     dependencies:

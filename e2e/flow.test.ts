@@ -147,7 +147,9 @@ const secondTabSawTurn = async (other: Page): Promise<void> => {
 const commentOnDiff = async (page: Page): Promise<void> => {
   await page.getByRole('button', { name: 'Changes' }).click();
   await expect(page.locator('.count')).toHaveText('1 changed');
-  await page.getByRole('button', { name: 'greeting.txt' }).click();
+  // The row's Edit button is named for the file too, and the file button's own name opens with
+  // its status letter, `A` from the log's copy or `?` once the fresh `git.status` has landed.
+  await page.locator('.file', { hasText: 'greeting.txt' }).click();
   await expect(page.locator('.path')).toHaveText('greeting.txt');
   await page.locator('.cm-lineNumbers .cm-gutterElement', { hasText: '1' }).click();
   await page.getByLabel('Comment on line 1').fill('Say hello instead');
@@ -175,8 +177,8 @@ const chooseEnterToSend = async (page: Page): Promise<void> => {
 // trailing line break is trimmed off the message.
 const sendWithComment = async (page: Page, stack: Stack): Promise<void> => {
   const timeline = page.locator('.timeline');
-  await page.getByRole('button', { name: '‹ Changes' }).click();
-  await page.getByRole('button', { name: '‹ Session' }).click();
+  await page.getByRole('button', { name: 'Back to changes' }).click();
+  await page.getByRole('button', { name: 'Back to session' }).click();
   await expect(page.locator('.comment .where')).toHaveText('greeting.txt:1');
   const box = page.getByPlaceholder('Message the agent');
   await box.fill(secondPrompt);
@@ -283,9 +285,9 @@ const archiveAndReopen = async (page: Page): Promise<void> => {
   await page.getByRole('button', { name: 'Session menu' }).click();
   await page.getByRole('menuitem', { name: 'Archive' }).click();
   await expect(page.getByText('No sessions yet.')).toBeVisible();
-  await expect(page.getByRole('navigation', { name: 'Sessions' }).getByRole('button')).toHaveText([
-    '+',
-  ]);
+  const tabs = page.getByRole('navigation', { name: 'Sessions' }).getByRole('button');
+  await expect(tabs).toHaveCount(1);
+  await expect(tabs).toHaveAccessibleName('New session');
   await page.getByText('Archived (1)').click();
   await page.getByRole('button', { name: 'Reopen' }).click();
   await expect(page).toHaveURL(/\/s\/[0-9a-f-]{36}$/u);

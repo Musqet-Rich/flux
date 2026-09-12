@@ -21,6 +21,7 @@ test('copy puts the raw text on the clipboard and closes the menu', async () => 
   expect(writeText).toHaveBeenCalledWith('## raw *md*');
   expect(wrapper.find('[role="menu"]').exists()).toBe(false);
   expect(wrapper.find('.trigger').classes()).toContain('copied');
+  expect(wrapper.find('.trigger svg').attributes('data-icon')).toBe('check');
 });
 
 test('copy without a clipboard (plain http) reports failure instead of throwing', async () => {
@@ -30,6 +31,7 @@ test('copy without a clipboard (plain http) reports failure instead of throwing'
   await wrapper.find('[role="menuitem"]').trigger('click');
   await flushPromises();
   expect(wrapper.find('.trigger').classes()).toContain('failed');
+  expect(wrapper.find('.trigger svg').attributes('data-icon')).toBe('failed');
   expect(wrapper.find('[role="menu"]').exists()).toBe(false);
 });
 

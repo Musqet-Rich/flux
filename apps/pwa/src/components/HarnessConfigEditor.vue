@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue';
 
 import type { Store } from '../store/create-store.ts';
+import Icon from './Icon.vue';
 
 // The harness's global config as two plain text areas: `~/.claude/CLAUDE.md` and
 // `~/.claude/settings.json` on the box (ADR 0023 § 1). The JSON is checked here before it is sent
@@ -99,7 +100,7 @@ const save = async (): Promise<void> => {
         </div>
       </div>
       <button type="submit" :disabled="!dirty || jsonError !== null || busy">
-        {{ dirty ? 'Save changes' : 'Saved' }}
+        <Icon name="save" /> {{ dirty ? 'Save changes' : 'Saved' }}
       </button>
       <p v-if="failure !== null" class="error">{{ failure }}</p>
     </template>

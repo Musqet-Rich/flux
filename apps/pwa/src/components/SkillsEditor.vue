@@ -4,6 +4,7 @@ import { skillName } from '@flux/protocol';
 import { computed, onMounted, ref, watch } from 'vue';
 
 import type { Store } from '../store/create-store.ts';
+import Icon from './Icon.vue';
 
 // Box-side skills as an editable list (protocol.md § 7 `skills.*`): each a name and a `SKILL.md`
 // body under the flux user's `~/.claude/skills`. Each row saves and deletes on its own through
@@ -137,7 +138,7 @@ const remove = async (row: Row): Promise<void> => {
               :disabled="!dirty(row) || busy !== null"
               @click="save(row)"
             >
-              {{ dirty(row) ? 'Save' : 'Saved' }}
+              <Icon name="save" /> {{ dirty(row) ? 'Save' : 'Saved' }}
             </button>
             <button
               type="button"
@@ -145,13 +146,13 @@ const remove = async (row: Row): Promise<void> => {
               :disabled="busy !== null"
               @click="remove(row)"
             >
-              Delete
+              <Icon name="trash" /> Delete
             </button>
           </div>
         </li>
       </ul>
       <button type="button" class="secondary skill-add" :disabled="busy !== null" @click="add">
-        Add skill
+        <Icon name="plus" /> Add skill
       </button>
       <p v-if="failure !== null" class="error">{{ failure }}</p>
     </template>

@@ -22,7 +22,7 @@ test('lists the worktree status, disables deleted files, and emits open and back
   expect(wrapper.findAll('.file').length).toBe(3);
   expect(wrapper.find('.count').text()).toBe('3 changed');
   expect(wrapper.findAll('.path').map((p) => p.text())).toEqual(['src/a.ts', 'new.ts', 'gone.ts']);
-  expect(wrapper.find('.from').text()).toBe('← old.ts');
+  expect(wrapper.find('.from').text()).toBe('old.ts');
   expect(wrapper.findAll('.status')[1]?.classes()).toContain('R');
   expect(wrapper.findAll('.file')[2]?.attributes('disabled')).toBeDefined();
   expect(wrapper.findAll('.edit')[2]?.attributes('disabled')).toBeDefined();

@@ -2,28 +2,23 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
 import { useSessionTimeline } from '../composables/useSessionTimeline.ts';
-import { useTailScroll } from '../composables/useTailScroll.ts';
-import { renderMarkdown } from '../markdown/render-markdown.ts';
 import type { Store } from '../store/create-store.ts';
 import AgentStrip from './AgentStrip.vue';
-import AskCard from './AskCard.vue';
 import Composer from './Composer.vue';
-import EventItem from './EventItem.vue';
+import Icon from './Icon.vue';
+import SessionTimeline from './SessionTimeline.vue';
 import SessionToolbar from './SessionToolbar.vue';
 
 // One session: its toolbar (SessionToolbar), the agents strip while it has a task row (a lone
-// `main` says nothing the toolbar does not), the
-// timeline of the open chat (main, or one subagent's), the streaming reply, the agent's open
-// question and the composer. The store owns the data and reports failures; this only renders
-// and dispatches.
+// `main` says nothing the toolbar does not), the timeline of the open chat (SessionTimeline:
+// main's or one subagent's rows, the streaming reply, the agent's open question) and the
+// composer, or on a subagent's chat the note that messages go to main. The store owns the data
+// and reports failures; this only renders and dispatches.
 
 const props = defineProps<{ store: Store; session: string }>();
 defineEmits<{ changes: []; files: []; closed: [] }>();
 
-// The timeline follows new content only while the operator is at the tail; scrolled up, a pill
-// counts what arrived and the view stays put (useTailScroll).
-const tail = useTailScroll();
-const { scroller, behind, unread } = tail;
+const list = ref<InstanceType<typeof SessionTimeline> | null>(null);
 
 const log = computed(() => props.store.state.logs[props.session]);
 const events = computed(() => log.value?.events ?? []);
@@ -42,13 +37,12 @@ const {
   cancelReply,
 } = chat;
 const streaming = computed(() => log.value?.streaming ?? '');
-// The delta buffer renders through the same Markdown pass as the final message, so an open
-// fence is a code block from its first line and the bubble never flickers back to raw text.
-const Streaming = (): ReturnType<typeof renderMarkdown> => renderMarkdown(streaming.value);
 const thinking = computed(() => log.value?.thinking ?? null);
-// "~1.2k tokens" once Claude has reported a count, plain "Thinking…" before that.
-const thinkingText = computed(() => {
-  const tokens = thinking.value?.estimatedTokens ?? null;
+// "~1.2k tokens" once Claude has reported a count, plain "Thinking…" before that; null when the
+// agent is not thinking.
+const thinkingText = computed((): string | null => {
+  if (thinking.value === null) return null;
+  const tokens = thinking.value.estimatedTokens ?? null;
   if (tokens === null) return 'Thinking…';
   const label = tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}k` : String(tokens);
   return `Thinking… ~${label} tokens`;
@@ -69,24 +63,24 @@ const ended = ref(false);
 const pick = (seq: number): void => {
   if (onMain.value) startReply(seq);
 };
-// Scrolls the quoted message into view. Replies are main-only and main shows every row (the
-// last-200 cut applies to subagent chats alone), so the source is rendered whenever the log
-// has it; a source the log lacks leaves the scroll where it is.
-const jump = (seq: number): void => {
-  scroller.value?.querySelector(`[data-seq="${seq}"]`)?.scrollIntoView({ block: 'center' });
-};
 
-const pill = computed(() => (unread.value > 0 ? `↓ ${unread.value} new` : '↓ New activity'));
+// Landing at the tail is also when the window is cut back to size: rows the operator has read
+// past need not stay in the DOM, and cutting them above the viewport is invisible because the
+// jump sets the scroll from the end once the DOM has changed.
+const catchUp = (): void => {
+  chat.trim();
+  void list.value?.jump();
+};
 
 // Switching chats always lands at the end of the one opened.
 const select = (next: string | null): void => {
   chat.select(next);
-  tail.reset();
-  void tail.jump();
+  list.value?.reset();
+  catchUp();
 };
 
 const answer = (text: string): void => {
-  void tail.jump();
+  catchUp();
   void props.store.answer(props.session, ask.value?.askId ?? '', text);
 };
 
@@ -109,16 +103,6 @@ watch(
     void props.store.open(session);
   },
 );
-// Only rows newer than the last one shown count as new: Show earlier prepends rows and a chat
-// switch swaps them, and neither is activity to follow or to put on the pill.
-watch(
-  () => timeline.value,
-  (rows, before) => {
-    const last = before.at(-1)?.seq ?? 0;
-    const added = rows.filter((row) => row.seq > last).length;
-    if (added > 0) void tail.follow(added);
-  },
-);
 // Immediate: a session the store already holds (reopened from the list, say) has its rows
 // before this mounts, and its thumbnails went when it was left.
 watch(
@@ -128,13 +112,6 @@ watch(
   },
   { immediate: true },
 );
-// Only growth counts: the text emptying is the reply landing, and that event is counted above.
-watch(streaming, (text) => {
-  if (text !== '' && onMain.value) void tail.follow(0);
-});
-watch(thinking, (state) => {
-  if (state !== null && onMain.value) void tail.follow(0);
-});
 // A task that ends while its chat is open is said so once, where the composer would be.
 watch(
   () => task.value?.status,
@@ -164,53 +141,45 @@ watch(
       :busy="busy"
       @select="select"
     />
-    <div class="log">
-      <div ref="scroller" class="timeline" @scroll="tail.measure">
-        <button
-          v-if="earlier > 0"
-          type="button"
-          class="secondary earlier"
-          @click="chat.showEarlier"
-        >
-          Show {{ earlier }} earlier
-        </button>
-        <EventItem
-          v-for="e in timeline"
-          :key="e.seq"
-          :event="e"
-          :quote="quoteOf(e) ?? null"
-          :thumbs="thumbs"
-          @task="select"
-          @reply="pick"
-          @jump="jump"
-        />
-        <article v-if="onMain && (streaming !== '' || thinking !== null)" class="streaming">
-          <Streaming v-if="streaming !== ''" />
-          <span v-else class="thinking"
-            ><span class="loader" aria-hidden="true" />{{ thinkingText }}</span
-          >
-        </article>
-        <article v-if="onMain && compacting" class="streaming compacting">
-          <span class="thinking"><span class="loader" aria-hidden="true" />Compacting…</span>
-        </article>
-        <AskCard v-if="ask !== null" :key="ask.askId" :ask="ask" @answer="answer" />
-      </div>
-      <button v-if="behind" type="button" class="new-activity" @click="tail.jump">
-        {{ pill }}
-      </button>
-    </div>
+    <SessionTimeline
+      ref="list"
+      :rows="timeline"
+      :earlier="earlier"
+      :quote-of="quoteOf"
+      :thumbs="thumbs"
+      :on-main="onMain"
+      :streaming="streaming"
+      :thinking="thinkingText"
+      :compacting="compacting"
+      :ask="ask"
+      @task="select"
+      @reply="pick"
+      @answer="answer"
+      @earlier="chat.showEarlier"
+      @trim="chat.trim"
+      @reveal="chat.reveal"
+      @catch-up="catchUp"
+    />
     <Composer
       v-if="onMain"
       :store="store"
       :session="session"
       :events="events"
       :reply="reply"
-      @sent="tail.jump"
+      @sent="catchUp"
       @unreply="cancelReply"
     />
     <div v-else class="aside">
       <span class="hint">{{ ended ? `Task ${task?.status}. ` : '' }}Messages go to main</span>
-      <button type="button" class="secondary" @click="select(null)">Back</button>
+      <button
+        type="button"
+        class="secondary icon-only"
+        aria-label="Back to main"
+        title="Back to main"
+        @click="select(null)"
+      >
+        <Icon name="back" />
+      </button>
     </div>
   </section>
 </template>
@@ -221,61 +190,6 @@ watch(
   min-height: 0;
   display: flex;
   flex-direction: column;
-}
-
-.log {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.timeline {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  /* Rows wrap their own long tokens; tables scroll in their own wrapper. */
-  overflow-x: hidden;
-  overflow-anchor: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding: 0.75rem;
-}
-
-.earlier {
-  align-self: center;
-  font-size: 0.85rem;
-}
-
-.new-activity {
-  position: absolute;
-  bottom: 0.75rem;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 0.35rem 0.9rem;
-  border-radius: 999px;
-  font-size: 0.85rem;
-  box-shadow: 0 2px 8px rgb(0 0 0 / 30%);
-}
-
-.streaming {
-  align-self: flex-start;
-  background: var(--panel-2);
-  border-radius: var(--radius);
-  padding: 0.6rem 0.8rem;
-  max-width: 85%;
-  opacity: 0.8;
-}
-
-.thinking {
-  color: var(--muted);
-  font-style: italic;
-}
-
-.thinking .loader {
-  margin-right: 0.5rem;
 }
 
 .aside {

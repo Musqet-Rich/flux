@@ -4,6 +4,7 @@ import { computed, onMounted, ref } from 'vue';
 
 import type { Store } from '../store/create-store.ts';
 import { enterKey } from './enter-key.ts';
+import Icon from './Icon.vue';
 
 // "Ask about Flux" (ADR 0008): a modal over the app. The operator types a question; Send opens a
 // daemon-managed Help session seeded with it and navigates there. The device's send key
@@ -74,7 +75,7 @@ onMounted(() => {
       <div class="actions">
         <button type="button" class="secondary" @click="close">Cancel</button>
         <button type="button" :disabled="!canSend" @click="submit">
-          {{ busy ? 'Sending…' : 'Send' }}
+          <Icon name="send" /> {{ busy ? 'Sending…' : 'Send' }}
         </button>
       </div>
     </div>

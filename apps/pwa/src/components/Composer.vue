@@ -9,6 +9,7 @@ import { pendingComments } from '../store/pending-comments.ts';
 import AttachmentChips from './AttachmentChips.vue';
 import CommentTray from './CommentTray.vue';
 import { enterKey } from './enter-key.ts';
+import Icon from './Icon.vue';
 
 // The message box at the foot of the session screen, with the comments waiting to go with the
 // next message, the files attached to it (a + button, a drop on the bottom bar, or a paste)
@@ -156,8 +157,14 @@ const sendHint = computed(
     <div v-if="reply !== null" class="reply">
       <span class="who">Replying to {{ replyWho }}</span>
       <span class="line">{{ replyLine }}</span>
-      <button type="button" class="secondary" aria-label="Cancel reply" @click="$emit('unreply')">
-        ×
+      <button
+        type="button"
+        class="secondary icon-only"
+        aria-label="Cancel reply"
+        title="Cancel reply"
+        @click="$emit('unreply')"
+      >
+        <Icon name="close" />
       </button>
     </div>
     <AttachmentChips
@@ -182,12 +189,12 @@ const sendHint = computed(
       <input ref="picker" type="file" multiple class="picker" aria-hidden="true" @change="pick" />
       <button
         type="button"
-        class="secondary attach"
+        class="secondary icon-only attach"
         aria-label="Attach files"
         title="Attach files"
         @click="picker?.click()"
       >
-        +
+        <Icon name="attach" />
       </button>
       <textarea
         ref="box"
@@ -198,7 +205,15 @@ const sendHint = computed(
         @beforeinput="lineBreak"
         @paste="paste"
       />
-      <button type="submit" :disabled="!ready" :title="sendHint">Send</button>
+      <button
+        type="submit"
+        class="icon-only send"
+        aria-label="Send"
+        :title="sendHint"
+        :disabled="!ready"
+      >
+        <Icon name="send" />
+      </button>
     </form>
   </div>
 </template>
@@ -224,11 +239,10 @@ const sendHint = computed(
   display: none;
 }
 
-.attach {
+.attach,
+.send {
   flex: none;
-  font-size: 1.2rem;
-  line-height: 1;
-  padding: 0.45rem 0.7rem;
+  padding: 0.55rem 0.7rem;
 }
 
 .reply {
@@ -256,8 +270,8 @@ const sendHint = computed(
 }
 
 .reply button {
-  padding: 0.1rem 0.5rem;
-  line-height: 1;
+  padding: 0.15rem 0.4rem;
+  font-size: 0.9rem;
 }
 
 .slash-suggest {

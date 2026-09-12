@@ -4,6 +4,7 @@ import { computed, onMounted, ref } from 'vue';
 
 import type { Store } from '../store/create-store.ts';
 import { defaultBranch } from './default-branch.ts';
+import Icon from './Icon.vue';
 
 // Start an agent: pick a repo (and a harness, when the box has more than one), an optional model
 // and effort, name the branch (a new one is created from the repo's HEAD, an existing one is
@@ -169,7 +170,7 @@ onMounted(() => {
     <input id="new-title" v-model="title" type="text" autocomplete="off" :disabled="busy" />
     <label for="new-prompt">First message</label>
     <textarea id="new-prompt" v-model="prompt" rows="6" :disabled="busy" />
-    <button type="submit" :disabled="!ready || busy">Start agent</button>
+    <button type="submit" :disabled="!ready || busy"><Icon name="play" /> Start agent</button>
     <p v-if="failure !== null" class="error">{{ failure }}</p>
   </form>
 </template>

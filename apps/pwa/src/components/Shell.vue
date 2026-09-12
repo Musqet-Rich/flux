@@ -3,15 +3,16 @@ import { computed, defineAsyncComponent, ref } from 'vue';
 
 import type { Route, Router } from '../router/create-router.ts';
 import type { Store } from '../store/create-store.ts';
+import AppHeader from './AppHeader.vue';
 import ArchivedSessions from './ArchivedSessions.vue';
 import HelpModal from './HelpModal.vue';
 import NewSessionView from './NewSessionView.vue';
 import SessionScreens from './SessionScreens.vue';
-import SessionTabs from './SessionTabs.vue';
 import SettingsView from './SettingsView.vue';
 import StatusBar from './StatusBar.vue';
 
-// The paired app: tabs on top, the routed screen in the middle, status at the bottom.
+// The paired app: the header (tabs and the global buttons) on top, the routed screen in the
+// middle, status at the bottom.
 
 // Loaded on demand: the runner is a rarely-opened screen, and this also keeps Shell within its
 // dependency budget (a static import would make it one over).
@@ -48,43 +49,16 @@ const enablePush = (): void => {
 </script>
 
 <template>
-  <header class="top">
-    <SessionTabs
-      :sessions="state.sessions"
-      :active="active"
-      @select="openSession"
-      @create="go({ name: 'new' })"
-    />
-    <button
-      type="button"
-      class="gear term"
-      :class="{ active: route.name === 'runner' }"
-      aria-label="Command runner"
-      title="Run a command"
-      @click="go({ name: 'runner' })"
-    >
-      &gt;_
-    </button>
-    <button
-      type="button"
-      class="gear help"
-      aria-label="Ask about Flux"
-      title="Ask about Flux"
-      @click="helpOpen = true"
-    >
-      ⓘ
-    </button>
-    <button
-      type="button"
-      class="gear"
-      :class="{ active: route.name === 'settings' }"
-      aria-label="Settings"
-      title="Settings"
-      @click="go({ name: 'settings' })"
-    >
-      ⚙
-    </button>
-  </header>
+  <AppHeader
+    :sessions="state.sessions"
+    :active="active"
+    :screen="route.name"
+    @select="openSession"
+    @create="go({ name: 'new' })"
+    @runner="go({ name: 'runner' })"
+    @help="helpOpen = true"
+    @settings="go({ name: 'settings' })"
+  />
   <HelpModal v-if="helpOpen" :store="store" @created="onHelpCreated" @close="helpOpen = false" />
   <main class="body">
     <template v-if="route.name === 'sessions'">
@@ -121,40 +95,6 @@ const enablePush = (): void => {
 </template>
 
 <style scoped>
-.top {
-  flex: none;
-  display: flex;
-  align-items: center;
-  border-bottom: 1px solid var(--border);
-  background: var(--panel);
-  padding-top: env(safe-area-inset-top);
-}
-
-.top > :first-child {
-  flex: 1;
-  min-width: 0;
-}
-
-.gear {
-  flex: none;
-  background: transparent;
-  color: var(--muted);
-  font-size: 1.2rem;
-  line-height: 1;
-  padding: 0.4rem 0.6rem;
-  margin-right: 0.4rem;
-}
-
-.gear.active {
-  color: var(--fg);
-}
-
-.term {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.95rem;
-  font-weight: 600;
-}
-
 .body {
   flex: 1;
   min-height: 0;

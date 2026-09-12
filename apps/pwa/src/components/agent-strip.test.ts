@@ -41,10 +41,16 @@ test('lists main then every task with its state glyph, type and description', ()
   expect(rows.map((r) => label(r))).toEqual([
     'main',
     'Explore List files',
-    '○ Explore Read a.txt',
-    '✗ agent List files',
-    '✗ Explore List files',
+    'Explore Read a.txt',
+    'agent List files',
+    'Explore List files',
     'Explore Running ls',
+  ]);
+  // The ended rows carry a state icon; main and the running tasks carry the spinner instead.
+  expect(rows.slice(2, 5).map((r) => r.find('.glyph svg').attributes('data-icon'))).toEqual([
+    'succeeded',
+    'failed',
+    'failed',
   ]);
   // main spins while the session runs, a task while it has not ended.
   expect(rows[0]?.find('.loader').exists()).toBe(true);
@@ -62,7 +68,7 @@ test('selects a task or main on tap', async () => {
   const tasks = [task({ taskId: 't1', toolUseId: 'u1' })];
   const wrapper = mount(AgentStrip, { props: { tasks, active: 'u1', busy: false } });
   const rows = wrapper.findAll('.row');
-  expect(rows[0]?.find('.glyph').text()).toBe('●');
+  expect(rows[0]?.find('.glyph svg').attributes('data-icon')).toBe('dot');
   expect(rows[1]?.classes()).toContain('active');
   await rows[0]?.trigger('click');
   await rows[1]?.trigger('click');
@@ -75,7 +81,7 @@ test('lists exactly the rows given, the viewed one highlighted', () => {
   const tasks = [task({ taskId: 't1', toolUseId: 'u1', status: 'completed', current: false })];
   const wrapper = mount(AgentStrip, { props: { tasks, active: 'u1', busy: false } });
   const rows = wrapper.findAll('.row');
-  expect(rows.map((r) => label(r))).toEqual(['● main', '○ Explore List files']);
+  expect(rows.map((r) => label(r))).toEqual(['main', 'Explore List files']);
   expect(rows[1]?.classes()).toContain('active');
   expect(rows[1]?.attributes('aria-pressed')).toBe('true');
 });

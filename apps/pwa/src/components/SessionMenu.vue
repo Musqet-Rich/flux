@@ -5,6 +5,7 @@ import { useDismiss } from '../composables/useDismiss.ts';
 import type { Store } from '../store/create-store.ts';
 import type { DeleteOptions } from '../store/session-actions.ts';
 import DeleteConfirm from './DeleteConfirm.vue';
+import Icon from './Icon.vue';
 import RenameForm from './RenameForm.vue';
 
 // The session's own menu, in its toolbar: rename, clear the agent's context, archive, or
@@ -88,20 +89,27 @@ const remove = async (options: DeleteOptions): Promise<void> => {
   <div ref="root" class="menu-root">
     <button
       type="button"
-      class="secondary trigger"
+      class="secondary icon-only"
       aria-haspopup="menu"
       :aria-expanded="open"
       aria-label="Session menu"
+      title="Session menu"
       :disabled="busy"
       @click="toggle"
     >
-      ⋯
+      <Icon name="menu" />
     </button>
     <div v-if="open" class="menu" role="menu" aria-label="Session">
-      <button type="button" role="menuitem" @click="startRename">Rename…</button>
-      <button type="button" role="menuitem" @click="clear">Clear context</button>
-      <button type="button" role="menuitem" @click="archive">Archive</button>
-      <button type="button" role="menuitem" class="danger" @click="startDelete">Delete…</button>
+      <button type="button" role="menuitem" @click="startRename">
+        <Icon name="edit" />Rename…
+      </button>
+      <button type="button" role="menuitem" @click="clear">
+        <Icon name="clear" />Clear context
+      </button>
+      <button type="button" role="menuitem" @click="archive"><Icon name="archive" />Archive</button>
+      <button type="button" role="menuitem" class="danger" @click="startDelete">
+        <Icon name="trash" />Delete…
+      </button>
     </div>
     <div v-if="renaming" class="sheet">
       <RenameForm :title="title" :busy="busy" @confirm="rename" @cancel="cancelRename" />
@@ -116,12 +124,6 @@ const remove = async (options: DeleteOptions): Promise<void> => {
 .menu-root {
   position: relative;
   flex: none;
-}
-
-.trigger {
-  font-size: 1.1rem;
-  line-height: 1;
-  padding: 0.35rem 0.6rem;
 }
 
 .menu {
@@ -140,6 +142,9 @@ const remove = async (options: DeleteOptions): Promise<void> => {
 }
 
 .menu button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   background: transparent;
   color: var(--fg);
   border-radius: 0;

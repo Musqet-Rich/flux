@@ -2,6 +2,7 @@
 import { ref } from 'vue';
 
 import type { DeleteOptions } from '../store/session-actions.ts';
+import Icon from './Icon.vue';
 
 // The inline confirm behind "Delete…": what to remove, then, when the box refuses because the
 // worktree holds work that exists nowhere else (`dirty`), the same request again with the
@@ -42,7 +43,7 @@ const cancel = (): void => {
     <div class="actions">
       <button type="button" class="secondary" @click="cancel">Cancel</button>
       <button type="submit" class="danger" :disabled="busy">
-        {{ dirty === null ? 'Delete' : 'Discard changes' }}
+        <Icon name="trash" /> {{ dirty === null ? 'Delete' : 'Discard changes' }}
       </button>
     </div>
   </form>

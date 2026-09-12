@@ -1,36 +1,23 @@
 <script setup lang="ts">
-import type { Attachment, FluxEvent, KnownEvent } from '@flux/protocol';
-import { fluxEvent } from '@flux/protocol';
+import type { FluxEvent } from '@flux/protocol';
 import type { VNode } from 'vue';
 import { computed, ref } from 'vue';
 
 import { renderMarkdown } from '../markdown/render-markdown.ts';
+import { describeEvent } from './describe-event.ts';
+import Icon from './Icon.vue';
 import MessageAttachments from './MessageAttachments.vue';
 import MessageMenu from './MessageMenu.vue';
 
-// One entry of the session timeline. Every event type renders as one of nine shapes so the
-// template stays a switch on `kind`; the detail (tool input/output) opens on tap, a `link`
-// opens in a new tab, a `warning` keeps its text (hook stderr) behind a disclosure, a
-// `divider` rules across the timeline where the agent's context was cleared, a `task` is a
-// note that opens that subagent's chat, and a `report` keeps the subagent's final report (what
-// the parent actually read) behind a disclosure, rendered as Markdown like any reply. A message
-// bubble carries a menu (MessageMenu) and, when it answers an earlier message, that message's
-// first line as a chip (`quote`, looked up by the parent) that scrolls to it.
-
-interface View {
-  kind: 'user' | 'assistant' | 'tool' | 'note' | 'link' | 'warning' | 'divider' | 'task' | 'report';
-  text: string;
-  // The value behind the tap, stringified lazily; `undefined` means there is nothing to open.
-  detail: unknown;
-  tone: 'ok' | 'warn' | 'error' | null;
-  href?: string;
-  // The Agent call a `task` row opens.
-  task?: string;
-  // The message a `user` row answers.
-  replyTo?: number;
-  // The files sent with a `user` row (ADR 0020); `thumbs` has the fetched images by id.
-  attachments?: Attachment[];
-}
+// One entry of the session timeline. Every event type renders as one of nine shapes
+// (describe-event.ts, event-view.ts) so the template stays a switch on `kind`; the detail (tool
+// input/output) opens on tap, a `link` opens in a new tab, a `warning` keeps its text (hook
+// stderr) behind a disclosure, a `divider` rules across the timeline where the agent's context
+// was cleared, a `task` is a note that opens that subagent's chat, and a `report` keeps the
+// subagent's final report (what the parent actually read) behind a disclosure, rendered as
+// Markdown like any reply. A message bubble carries a menu (MessageMenu) and, when it answers an
+// earlier message, that message's first line as a chip (`quote`, looked up by the parent) that
+// scrolls to it. A signal row (a task, a PR, a failed hook, a compaction) opens with its icon.
 
 const props = withDefaults(
   defineProps<{ event: FluxEvent; quote?: string | null; thumbs?: Record<string, string> }>(),
@@ -48,186 +35,7 @@ const json = (value: unknown): string => {
   return text.length > detailCap ? `${text.slice(0, detailCap)}\n… truncated at 64 KiB` : text;
 };
 
-const money = (usd: number | undefined): string =>
-  usd === undefined ? '' : ` · $${usd.toFixed(3)}`;
-
-// Token counts on the compaction divider, read compactly: 60065 → '60k', 6202 → '6.2k' (one
-// decimal below 10k, none at or above).
-const compactTokens = (n: number): string => {
-  if (n < 1000) return String(n);
-  const k = n / 1000;
-  return k >= 10 ? `${Math.round(k)}k` : `${k.toFixed(1)}k`;
-};
-
-const note = (text: string, tone: View['tone'] = null): View => ({
-  kind: 'note',
-  text,
-  detail: undefined,
-  tone,
-});
-
-// A manager agent acted on this session (ADR 0025): its own system row, styled like other
-// lifecycle notes. `open` lands on the session the manager created, the rest on the one it acted
-// on, so the operator can always see what the manager did to which session.
-type ManagerActed = Extract<KnownEvent, { type: 'manager.acted' }>['payload'];
-const managerNote = (payload: ManagerActed): View => {
-  const { action, target, detail } = payload;
-  const head =
-    action === 'open'
-      ? `opened session ${target}`
-      : action === 'send'
-        ? `sent to ${target}`
-        : action === 'close'
-          ? `archived ${target}`
-          : `read ${target}`;
-  const tail = action === 'send' && detail !== '' ? `: ${detail}` : '';
-  return note(`Manager · ${head}${tail}`);
-};
-
-// Lifecycle, operator-interaction and code events all render as a one-line note.
-const describeNote = (event: KnownEvent): View => {
-  switch (event.type) {
-    case 'session.created':
-      return note(`Session started on ${event.payload.branch}`);
-    case 'session.state':
-      return note(
-        `Agent ${event.payload.state.replace('_', ' ')}`,
-        event.payload.state === 'ended' ? 'warn' : null,
-      );
-    case 'session.renamed':
-      return note(`Renamed to ${event.payload.title}`);
-    case 'session.cleared':
-      return { kind: 'divider', text: 'Context cleared', detail: undefined, tone: null };
-    case 'turn.ended':
-      return note(`Turn ended${money(event.payload.costUsd)}`);
-    case 'rate_limit':
-      return note('Rate limit changed');
-    case 'agent.spec': {
-      const { model, effort } = event.payload;
-      return note(`Running ${effort === undefined ? model : `${model}:${effort}`}`);
-    }
-    case 'ask':
-      return note(`Asked: ${event.payload.question}`, 'warn');
-    case 'ask.answered':
-      return note(`Answered: ${event.payload.answer}`);
-    case 'notify':
-      return note(event.payload.summary, event.payload.level === 'blocked' ? 'error' : 'ok');
-    case 'files.changed':
-      return note(`${event.payload.files.length} file(s) changed`);
-    case 'comment.added':
-      return note(`Comment on ${event.payload.ref.path}: ${event.payload.text}`);
-    case 'comment.removed':
-      return note('Comment removed');
-    case 'comment.sent':
-      return note(`${event.payload.commentIds.length} comment(s) sent`);
-    case 'manager.acted':
-      return managerNote(event.payload);
-    default:
-      return note(`${event.type} event`);
-  }
-};
-
-// Claude Code's own signals (protocol.md § 5): a task around a tool call, a PR the agent
-// opened, a hook that failed. Null for every other type.
-const describeSignal = (event: KnownEvent): View | null => {
-  switch (event.type) {
-    case 'task.started': {
-      const { background, description, agentType, toolUseId } = event.payload;
-      const who = agentType === undefined ? '' : `${agentType} · `;
-      const text = `${background ? 'Background task' : 'Task'}: ${who}${description}`;
-      return { kind: 'task', text, detail: undefined, tone: null, task: toolUseId };
-    }
-    case 'task.ended': {
-      const { status, summary, tokens } = event.payload;
-      const used = tokens === undefined ? '' : ` · ${(tokens / 1000).toFixed(1)}k tokens`;
-      const detail = summary === '' ? undefined : summary;
-      const tone = status === 'completed' ? null : 'warn';
-      return { kind: 'report', text: `Task ${status}${used}`, detail, tone };
-    }
-    case 'pr.published': {
-      const { identifier, action, repo, url } = event.payload;
-      const name = identifier === '' ? 'Pull request' : `Pull request #${identifier}`;
-      return {
-        kind: 'link',
-        text: `${name} ${action} · ${repo}`,
-        detail: undefined,
-        tone: 'ok',
-        href: url,
-      };
-    }
-    case 'hook.failed': {
-      const { hookName, exitCode, stderr } = event.payload;
-      const exit = exitCode === undefined ? '' : ` (exit ${exitCode})`;
-      const detail = stderr === '' ? undefined : stderr;
-      return { kind: 'warning', text: `Hook ${hookName} failed${exit}`, detail, tone: 'warn' };
-    }
-    case 'compact.boundary': {
-      const { preTokens, postTokens, durationMs, result } = event.payload;
-      if (result !== 'success') {
-        return { kind: 'divider', text: 'Compaction failed', detail: undefined, tone: 'warn' };
-      }
-      const secs = Math.round(durationMs / 1000);
-      const delta = `${compactTokens(preTokens)} → ${compactTokens(postTokens)} tokens`;
-      return {
-        kind: 'divider',
-        text: `Context compacted · ${delta} · ${secs}s`,
-        detail: undefined,
-        tone: null,
-      };
-    }
-    default:
-      return null;
-  }
-};
-
-// Any type this build does not know (protocol.md § 8) shows its name with the payload behind a
-// tap, so a newer box never leaves a blank line in the timeline. `raw` renders the same way,
-// though `SessionView` keeps it out of the timeline.
-const opaque = (type: string, payload: unknown): View => ({
-  kind: 'tool',
-  text: `${type} event`,
-  detail: payload,
-  tone: null,
-});
-
-const describe = (event: FluxEvent): View => {
-  if (!fluxEvent.isKnown(event)) return opaque(event.type, event.payload);
-  switch (event.type) {
-    case 'raw':
-      return opaque(event.type, event.payload);
-    case 'msg.user':
-      return {
-        kind: 'user',
-        text: event.payload.text,
-        detail: undefined,
-        tone: null,
-        ...(event.payload.replyTo === undefined ? {} : { replyTo: event.payload.replyTo }),
-        ...(event.payload.attachments === undefined
-          ? {}
-          : { attachments: event.payload.attachments }),
-      };
-    case 'msg.assistant':
-      return { kind: 'assistant', text: event.payload.text, detail: undefined, tone: null };
-    case 'tool.start':
-      return {
-        kind: 'tool',
-        text: event.payload.summary,
-        detail: event.payload.input,
-        tone: null,
-      };
-    case 'tool.end':
-      return {
-        kind: 'tool',
-        text: event.payload.summary,
-        detail: event.payload.output,
-        tone: event.payload.ok ? 'ok' : 'error',
-      };
-    default:
-      return describeSignal(event) ?? describeNote(event);
-  }
-};
-
-const view = computed(() => describe(props.event));
+const view = computed(() => describeEvent(props.event));
 // Both sides write Markdown (the operator pastes agent output back and uses tables and code
 // too). A functional component so the VNode tree is built inside its own render, not in the
 // template.
@@ -260,7 +68,7 @@ const quoteLine = computed(
       class="quote"
       @click="$emit('jump', view.replyTo)"
     >
-      ↩ {{ quoteLine }}
+      <Icon name="reply" /> {{ quoteLine }}
     </button>
     <template v-if="isMessage">
       <Markdown />
@@ -282,14 +90,18 @@ const quoteLine = computed(
       :href="view.href"
       target="_blank"
       rel="noopener noreferrer"
-      >{{ view.text }}</a
+      ><Icon v-if="view.icon !== undefined" :name="view.icon" /> {{ view.text }}</a
     >
     <details v-else-if="view.kind === 'warning' && hasDetail" class="disclosure">
-      <summary class="note">{{ view.text }}</summary>
+      <summary class="note">
+        <Icon v-if="view.icon !== undefined" :name="view.icon" /> {{ view.text }}
+      </summary>
       <pre class="detail stderr">{{ view.detail }}</pre>
     </details>
     <details v-else-if="view.kind === 'report' && hasDetail" class="disclosure">
-      <summary class="note">{{ view.text }}</summary>
+      <summary class="note">
+        <Icon v-if="view.icon !== undefined" :name="view.icon" /> {{ view.text }}
+      </summary>
       <div class="detail report"><Report /></div>
     </details>
     <button
@@ -298,9 +110,15 @@ const quoteLine = computed(
       class="note task"
       @click="$emit('task', view.task ?? '')"
     >
-      {{ view.text }} ›
+      <Icon v-if="view.icon !== undefined" :name="view.icon" /> {{ view.text }}
+      <Icon name="forward" />
     </button>
-    <span v-else-if="view.kind === 'divider'" class="rule" role="separator">{{ view.text }}</span>
+    <span v-else-if="view.kind === 'divider'" class="rule" role="separator"
+      ><Icon v-if="view.icon !== undefined" :name="view.icon" /> {{ view.text }}</span
+    >
+    <span v-else-if="view.icon !== undefined" class="note"
+      ><Icon :name="view.icon" /> {{ view.text }}</span
+    >
     <span v-else class="note">{{ view.text }}</span>
   </article>
 </template>
