@@ -21,7 +21,8 @@ const pwaDom = [
   'src/components/**/*.test.ts',
   'src/editor/**/*.test.ts',
   'src/markdown/render-markdown.test.ts',
-  // Listen on `document`, so they are exercised against one.
+  // Need a DOM: listen on `document`, or measure an element's computed style.
+  'src/composables/useAutoGrow.test.ts',
   'src/composables/useDismiss.test.ts',
   'src/composables/useFileDrop.test.ts',
 ];

@@ -14,7 +14,8 @@ import LiveBubble from './LiveBubble.vue';
 // stays put (useTailScroll). The parent owns the data, the chat selection and the window of rows
 // (useSessionTimeline): this says when to `trim` it (new rows landing at the tail, a catch-up)
 // and when to `reveal` a row (a reply chip), and is asked to `jump` to the end (a send, an
-// answer, a chat switch, after the parent has trimmed) and to `reset` the tail state.
+// answer, a chat switch, after the parent has trimmed), to `keep` the tail as the composer grows
+// and to `reset` the tail state.
 
 const props = defineProps<{
   rows: FluxEvent[];
@@ -90,7 +91,13 @@ watch(
   },
 );
 
-defineExpose({ jump: tail.jump, reset: tail.reset });
+// The composer growing takes its room from the bottom of this list, hiding the last lines
+// from an operator at the tail; a jump puts them back. `atTail` is the last scroll's reading,
+// not re-measured, since the shrunk viewport would read as scrolled up.
+const keep = (): void => {
+  if (tail.atTail.value) void tail.jump();
+};
+defineExpose({ jump: tail.jump, reset: tail.reset, keep });
 </script>
 
 <template>

@@ -1,36 +1,38 @@
 <script setup lang="ts">
-import type { FluxEvent } from '@flux/protocol';
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
 import type { ReplyTarget } from '../composables/useMessageReply.ts';
+import { useAutoGrow } from '../composables/useAutoGrow.ts';
 import { useFileDrop } from '../composables/useFileDrop.ts';
 import type { Store } from '../store/create-store.ts';
-import { pendingComments } from '../store/pending-comments.ts';
+import type { PendingComment } from '../store/pending-comments.ts';
 import AttachmentChips from './AttachmentChips.vue';
 import CommentTray from './CommentTray.vue';
 import { enterKey } from './enter-key.ts';
 import Icon from './Icon.vue';
 
 // The message box at the foot of the session screen, with the comments waiting to go with the
-// next message, the files attached to it (a + button, a drop on the bottom bar, or a paste)
-// and, when the operator picked Reply on a bubble, the message being answered. The draft, text
-// and files, lives in the store so leaving the session keeps it. Sends through the store,
-// which reports failures; a failed send keeps the draft and the reply.
+// next message (the parent derives them from the log it owns), the files attached to it (a +
+// button, a drop on the bottom bar, or a paste) and, when the operator picked Reply on a
+// bubble, the message being answered. The draft, text and files, lives in the store so leaving
+// the session keeps it. Sends through the store, which reports failures; a failed send keeps
+// the draft and the reply. Says when it `resized`: the box growing a line, a reply row, the
+// tray, chips or the skill list all take their room from the timeline above, which the screen
+// then keeps at its tail.
 
 const props = defineProps<{
   store: Store;
   session: string;
-  events: readonly FluxEvent[];
+  comments: PendingComment[];
   reply: ReplyTarget | null;
 }>();
-const emit = defineEmits<{ sent: []; unreply: [] }>();
+const emit = defineEmits<{ sent: []; unreply: []; resized: [] }>();
 
 const draft = computed(() => props.store.composer(props.session));
 const sending = ref(false);
 const box = ref<HTMLTextAreaElement | null>(null);
 const root = ref<HTMLElement | null>(null);
 const picker = ref<HTMLInputElement | null>(null);
-const pending = computed(() => pendingComments(props.events));
 const replyLine = computed(
   () => props.reply?.text.split('\n').find((line) => line.trim() !== '') ?? '',
 );
@@ -38,6 +40,17 @@ const replyWho = computed(() => (props.reply?.from === 'user' ? 'you' : 'the age
 // Every file must be on the box before the message that names them goes.
 const uploading = computed(() => draft.value.attachments.some((a) => a.status !== 'ready'));
 const blank = computed(() => draft.value.text.trim() === '');
+// The box is a line tall and grows with the text to ten lines (useAutoGrow).
+useAutoGrow(box, () => draft.value.text);
+// Any change of height, whatever inside it caused it.
+let observer: ResizeObserver | null = null;
+onMounted(() => {
+  observer = new ResizeObserver(() => emit('resized'));
+  if (root.value !== null) observer.observe(root.value);
+});
+onUnmounted(() => {
+  observer?.disconnect();
+});
 
 const add = (files: File[]): void => {
   props.store.attach(props.session, files);
@@ -153,7 +166,7 @@ const sendHint = computed(
 
 <template>
   <div ref="root" class="composer" :class="{ over: drop.over.value }">
-    <CommentTray :comments="pending" @remove="remove" />
+    <CommentTray :comments="comments" @remove="remove" />
     <div v-if="reply !== null" class="reply">
       <span class="who">Replying to {{ replyWho }}</span>
       <span class="line">{{ replyLine }}</span>
@@ -199,7 +212,7 @@ const sendHint = computed(
       <textarea
         ref="box"
         v-model="draft.text"
-        rows="2"
+        rows="1"
         placeholder="Message the agent"
         @keydown="key"
         @beforeinput="lineBreak"
@@ -237,6 +250,12 @@ const sendHint = computed(
 
 .picker {
   display: none;
+}
+
+/* Sized by useAutoGrow, so the base min-height and the drag handle are off. */
+.row textarea {
+  min-height: 0;
+  resize: none;
 }
 
 .attach,

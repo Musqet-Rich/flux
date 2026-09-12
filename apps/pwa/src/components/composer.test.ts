@@ -3,6 +3,7 @@ import type { VueWrapper } from '@vue/test-utils';
 import { flushPromises, mount } from '@vue/test-utils';
 import { expect, test } from 'vitest';
 
+import { fakeResizeObserver } from '../../test/fake-resize-observer.ts';
 import { pairedStore } from '../../test/paired-store.ts';
 import { until } from '../../test/until.ts';
 import Composer from './Composer.vue';
@@ -22,7 +23,7 @@ const setup = async () => {
     'agent.send': () => ({ seq: 2 }),
   });
   const wrapper = mount(Composer, {
-    props: { store: box.store, session: 's1', events: [], reply: null },
+    props: { store: box.store, session: 's1', comments: [], reply: null },
     attachTo: document.body,
   });
   return { ...box, wrapper };
@@ -105,7 +106,7 @@ const withSkills = async (skills: Skill[]) => {
     'agent.send': () => ({ seq: 2 }),
   });
   const wrapper = mount(Composer, {
-    props: { store: box.store, session: 's1', events: [], reply: null },
+    props: { store: box.store, session: 's1', comments: [], reply: null },
     attachTo: document.body,
   });
   await until(() => box.store.state.skills !== null);
@@ -267,7 +268,7 @@ test('no suggestions once a space is typed, or when the box has no skills', asyn
   store.stop();
   const bare = await pairedStore([], { 'agent.send': () => ({ seq: 2 }) });
   const w2 = mount(Composer, {
-    props: { store: bare.store, session: 's1', events: [], reply: null },
+    props: { store: bare.store, session: 's1', comments: [], reply: null },
     attachTo: document.body,
   });
   await until(() => bare.store.state.skills !== null);
@@ -284,10 +285,39 @@ test('the draft text and files survive a remount of the composer', async () => {
   store.attach('s1', [txt]);
   wrapper.unmount();
   const again = mount(Composer, {
-    props: { store, session: 's1', events: [], reply: null },
+    props: { store, session: 's1', comments: [], reply: null },
   });
   expect(again.find('textarea').element.value).toBe('draft');
   expect(chips(again)).toEqual(['notes.txt']);
   again.unmount();
   store.stop();
+});
+
+// The box is a line tall, sized by useAutoGrow with no drag handle, on a keystroke and on another
+// session's draft coming in, which changes the text under it; a ResizeObserver on the composer
+// tells the screen it resized, whatever inside it grew, and goes with the component.
+test('the box starts at one line and grows with the draft, on typing and on a session switch', async () => {
+  fakeResizeObserver.install();
+  const { store, wrapper } = await setup();
+  const area = wrapper.find('textarea');
+  expect(area.attributes('rows')).toBe('1');
+  area.element.style.lineHeight = '20px';
+  let lines = 1;
+  Object.defineProperty(area.element, 'scrollHeight', {
+    get: () => lines * 20,
+    configurable: true,
+  });
+  lines = 2;
+  await area.setValue('a\nb');
+  expect(area.element.style.height).toBe('40px');
+  store.composer('s2').text = 'a\nb\nc';
+  lines = 3;
+  await wrapper.setProps({ session: 's2' });
+  expect(area.element.style.height).toBe('60px');
+  expect(fakeResizeObserver.observed()).toEqual([wrapper.element]);
+  fakeResizeObserver.fire();
+  expect(wrapper.emitted('resized')).toHaveLength(1);
+  wrapper.unmount();
+  expect(fakeResizeObserver.disconnected()).toBe(1);
+  fakeResizeObserver.uninstall();
 });

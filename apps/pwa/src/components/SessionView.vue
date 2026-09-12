@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
 import { useSessionTimeline } from '../composables/useSessionTimeline.ts';
 import type { Store } from '../store/create-store.ts';
+import { pendingComments } from '../store/pending-comments.ts';
 import AgentStrip from './AgentStrip.vue';
 import Composer from './Composer.vue';
 import Icon from './Icon.vue';
@@ -22,6 +23,7 @@ const list = ref<InstanceType<typeof SessionTimeline> | null>(null);
 
 const log = computed(() => props.store.state.logs[props.session]);
 const events = computed(() => log.value?.events ?? []);
+const comments = computed(() => pendingComments(events.value));
 const chat = useSessionTimeline(() => events.value);
 const {
   strip,
@@ -70,6 +72,11 @@ const pick = (seq: number): void => {
 const catchUp = (): void => {
   chat.trim();
   void list.value?.jump();
+};
+
+// The composer taking more room takes it from the timeline; at the tail, the end is kept.
+const keep = (): void => {
+  list.value?.keep();
 };
 
 // Switching chats always lands at the end of the one opened.
@@ -164,10 +171,11 @@ watch(
       v-if="onMain"
       :store="store"
       :session="session"
-      :events="events"
+      :comments="comments"
       :reply="reply"
       @sent="catchUp"
       @unreply="cancelReply"
+      @resized="keep"
     />
     <div v-else class="aside">
       <span class="hint">{{ ended ? `Task ${task?.status}. ` : '' }}Messages go to main</span>

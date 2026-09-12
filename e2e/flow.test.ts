@@ -55,6 +55,17 @@ const sidewaysOverflow = `(() => {
   };
 })()`;
 
+// The message box's height and how far the timeline is from its end: a one-line box is 21 px of
+// text, 15 of padding and 2 of border.
+const composerMetrics = `(() => {
+  const box = document.querySelector('.composer textarea');
+  const timeline = document.querySelector('.timeline');
+  return {
+    height: box.getBoundingClientRect().height,
+    gap: timeline.scrollHeight - timeline.scrollTop - timeline.clientHeight,
+  };
+})()`;
+
 const noSidewaysOverflow = async (page: Page): Promise<void> => {
   expect(await page.evaluate(sidewaysOverflow)).toEqual({ app: 0, timeline: 0 });
 };
@@ -181,9 +192,14 @@ const sendWithComment = async (page: Page, stack: Stack): Promise<void> => {
   await page.getByRole('button', { name: 'Back to session' }).click();
   await expect(page.locator('.comment .where')).toHaveText('greeting.txt:1');
   const box = page.getByPlaceholder('Message the agent');
+  await expect.poll(() => page.evaluate(composerMetrics)).toEqual({ height: 38, gap: 0 });
   await box.fill(secondPrompt);
+  // The prompt wraps to four lines at a phone's width; the break adds a fifth (21 px each), and
+  // the timeline stays at its tail as the box takes its room.
+  await expect.poll(() => page.evaluate(composerMetrics)).toEqual({ height: 101, gap: 0 });
   await box.press('Control+Enter');
   await expect(box).toHaveValue(`${secondPrompt}\n`);
+  await expect.poll(() => page.evaluate(composerMetrics)).toEqual({ height: 122, gap: 0 });
   await box.press('Enter');
   await expect(page.locator('.comment')).toHaveCount(0);
   await expect(timeline.getByText('1 comment(s) sent')).toBeVisible();
