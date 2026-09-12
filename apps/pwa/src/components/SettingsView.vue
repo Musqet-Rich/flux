@@ -6,6 +6,7 @@ import AgentsEditor from './AgentsEditor.vue';
 import HarnessConfigEditor from './HarnessConfigEditor.vue';
 import DevicesSection from './DevicesSection.vue';
 import FluxSettingsForm from './FluxSettingsForm.vue';
+import Icon from './Icon.vue';
 import SkillsEditor from './SkillsEditor.vue';
 
 // The settings screen (prd.md P2): paired devices, the box's runtime settings, and the agent's
@@ -23,7 +24,15 @@ onMounted(() => {
 <template>
   <section class="settings">
     <div class="toolbar">
-      <button type="button" class="secondary" @click="$emit('back')">‹ Sessions</button>
+      <button
+        type="button"
+        class="secondary icon-only"
+        aria-label="Back to sessions"
+        title="Back to sessions"
+        @click="$emit('back')"
+      >
+        <Icon name="back" />
+      </button>
       <h1>Settings</h1>
     </div>
     <div class="sections">

@@ -52,7 +52,7 @@ test('main keeps its last 300 rows: sliding at the tail, held while scrolled up'
   await until(() => store.state.logs['s1']?.lastSeq === 322);
   await flushPromises();
   expect(shown(wrapper)).toEqual([301, 'row 22']);
-  expect(wrapper.find('.new-activity').text()).toBe('↓ 1 new');
+  expect(wrapper.find('.new-activity').text()).toBe('1 new');
   await wrapper.find('.new-activity').trigger('click');
   await flushPromises();
   expect(shown(wrapper)).toEqual([300, 'row 23']);

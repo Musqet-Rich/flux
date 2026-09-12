@@ -5,6 +5,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 
 import type { Store } from '../store/create-store.ts';
 import GitActions from './GitActions.vue';
+import Icon from './Icon.vue';
 
 // The worktree's changed files. The last `files.changed` event renders at once; `git.status`
 // refreshes it, since that event only follows an agent write. A rename opens with its old
@@ -70,9 +71,26 @@ watch(
 <template>
   <section class="changes">
     <div class="toolbar">
-      <button type="button" class="secondary" @click="$emit('back')">‹ Session</button>
+      <button
+        type="button"
+        class="secondary icon-only"
+        aria-label="Back to session"
+        title="Back to session"
+        @click="$emit('back')"
+      >
+        <Icon name="back" />
+      </button>
       <span class="count">{{ files.length }} changed</span>
-      <button type="button" class="secondary" :disabled="loading" @click="refresh">Refresh</button>
+      <button
+        type="button"
+        class="secondary icon-only"
+        aria-label="Refresh"
+        title="Refresh"
+        :disabled="loading"
+        @click="refresh"
+      >
+        <Icon name="refresh" />
+      </button>
     </div>
     <p v-if="files.length === 0" class="empty">No changes in the worktree.</p>
     <ul v-else class="list">
@@ -87,15 +105,17 @@ watch(
         <button type="button" class="file" :disabled="f.status === 'D'" @click="open(f)">
           <span class="status" :class="f.status">{{ f.status }}</span>
           <span class="path">{{ f.path }}</span>
-          <span v-if="f.from !== undefined" class="from">← {{ f.from }}</span>
+          <span v-if="f.from !== undefined" class="from"><Icon name="from" /> {{ f.from }}</span>
         </button>
         <button
           type="button"
-          class="secondary edit"
+          class="secondary icon-only edit"
+          :aria-label="`Edit ${f.path}`"
+          title="Edit"
           :disabled="f.status === 'D'"
           @click="$emit('edit', f.path)"
         >
-          Edit
+          <Icon name="edit" />
         </button>
       </li>
     </ul>
@@ -149,8 +169,8 @@ watch(
 .edit {
   flex: none;
   margin-right: 0.75rem;
-  padding: 0.3rem 0.6rem;
-  font-size: 0.85rem;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.95rem;
 }
 
 .pick {

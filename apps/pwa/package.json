@@ -17,6 +17,9 @@
     "@flux/protocol": "workspace:*",
     "vue": "3.5.42"
   },
+  "devDependencies": {
+    "@phosphor-icons/core": "2.1.1"
+  },
   "engines": {
     "node": ">=24"
   }

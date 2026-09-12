@@ -33,8 +33,8 @@ const stripListsTasks = async (page: Page): Promise<void> => {
   const rows = page.getByRole('navigation', { name: 'Agents' }).getByRole('button');
   await expect(rows).toHaveText([
     /main$/u,
-    /○\s*Explore\s*List directory files/u,
-    /○\s*Explore\s*Read a.txt contents/u,
+    /^Explore\s*List directory files/u,
+    /^Explore\s*Read a.txt contents/u,
   ]);
   const timeline = page.locator('.timeline');
   await expect(timeline.locator('.item.assistant').last()).toHaveText('done');
@@ -57,7 +57,7 @@ const openSubagentChat = async (page: Page): Promise<void> => {
   await expect(timeline.locator('.item.tool .summary')).toHaveText([/^Bash: ls/u, /^Bash ok/u]);
   await expect(page.locator('.aside .hint')).toHaveText('Task completed. Messages go to main');
   await expect(page.getByPlaceholder('Message the agent')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Back' }).click();
+  await page.getByRole('button', { name: 'Back to main', exact: true }).click();
   await expect(page.getByPlaceholder('Message the agent')).toBeVisible();
   await expect(timeline.locator('.item.assistant').last()).toHaveText('done');
   await expect(rows.first()).toHaveAttribute('aria-pressed', 'true');

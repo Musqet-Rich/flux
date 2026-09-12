@@ -5,6 +5,7 @@ import { computed, ref } from 'vue';
 import type { Store } from '../store/create-store.ts';
 import type { DeleteOptions } from '../store/session-actions.ts';
 import DeleteConfirm from './DeleteConfirm.vue';
+import Icon from './Icon.vue';
 
 // The archived sessions, folded away at the bottom of the list screen. Each can be reopened
 // (not when its worktree is gone from the box: there is nothing to come back to) or deleted.
@@ -65,10 +66,10 @@ const remove = async (options: DeleteOptions): Promise<void> => {
           :title="s.worktreeExists === false ? goneHint : undefined"
           @click="reopen(s.session)"
         >
-          Reopen
+          <Icon name="reopen" /> Reopen
         </button>
         <button type="button" class="secondary" :disabled="busy" @click="startDelete(s.session)">
-          Delete
+          <Icon name="trash" /> Delete
         </button>
         <DeleteConfirm
           v-if="confirming === s.session"

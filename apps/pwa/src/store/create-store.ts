@@ -65,7 +65,7 @@ export interface Store extends SettingsActions, SessionActions {
   shellRun: (command: string, cwd?: string) => Promise<string | null>;
   shellInterrupt: (runId: string) => Promise<boolean>;
   call: Connection['call'];
-  // The status bar's × on the shown error.
+  // The status bar's close button on the shown error.
   dismissError: () => void;
   stop: () => void;
 }

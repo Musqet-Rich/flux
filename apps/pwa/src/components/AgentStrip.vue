@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import type { IconName } from '../icons/icons.ts';
 import type { SessionTask } from '../store/session-tasks.ts';
+import Icon from './Icon.vue';
 
 // The agents of one session, as Claude Code's own TUI lists them under its status bar: `main`
 // first, then one row per subagent task, nested tasks indented under the task that spawned
@@ -11,8 +13,9 @@ import type { SessionTask } from '../store/session-tasks.ts';
 defineProps<{ tasks: SessionTask[]; active: string | null; busy: boolean }>();
 defineEmits<{ select: [view: string | null] }>();
 
-// A spinner while running, ○ once ended, ✗ when it failed or the session moved on without it.
-const glyph = (status: string): string => (status === 'completed' ? '○' : '✗');
+// A spinner while running, a tick once ended, a cross when it failed or the session moved on
+// without it.
+const glyph = (status: string): IconName => (status === 'completed' ? 'succeeded' : 'failed');
 
 const tone = (status: string): string => {
   if (status === 'running' || status === 'completed') return '';
@@ -30,7 +33,7 @@ const tone = (status: string): string => {
       @click="$emit('select', null)"
     >
       <span v-if="busy" class="loader" aria-hidden="true" />
-      <span v-else class="glyph">●</span>
+      <span v-else class="glyph"><Icon name="dot" /></span>
       <span class="type">main</span>
     </button>
     <button
@@ -45,7 +48,7 @@ const tone = (status: string): string => {
       @click="$emit('select', task.toolUseId)"
     >
       <span v-if="task.status === 'running'" class="loader" aria-hidden="true" />
-      <span v-else class="glyph">{{ glyph(task.status) }}</span>
+      <span v-else class="glyph"><Icon :name="glyph(task.status)" /></span>
       <span class="type">{{ task.agentType ?? 'agent' }}</span>
       <span class="description">{{ task.progress ?? task.description }}</span>
     </button>
@@ -92,6 +95,15 @@ const tone = (status: string): string => {
   flex: none;
   width: 1rem;
   text-align: center;
+}
+
+.glyph {
+  display: inline-flex;
+  justify-content: center;
+}
+
+.main .glyph {
+  font-size: 0.6rem;
 }
 
 .type {
