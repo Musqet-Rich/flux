@@ -147,6 +147,8 @@ const absolute = computed(() =>
   background: var(--panel);
   color: var(--muted);
   font-size: 0.8rem;
+  /* A long daemon name or an error carrying a path breaks rather than widening the page. */
+  overflow-wrap: anywhere;
 }
 
 .status.connected {
@@ -171,10 +173,14 @@ const absolute = computed(() =>
   color: var(--danger);
 }
 
-/* One unbroken run, `5h 13% ↻ 2h10m · 7d 24% ↻ 11h`, tapped for a line of absolute times. */
+/* One run, `5h 13% ↻ 2h10m · 7d 24% ↻ 11h`, tapped for a line of absolute times. Each window
+   is one unbreakable piece; the run wraps between windows when the bar cannot hold them all. */
 .windows {
-  white-space: nowrap;
   cursor: pointer;
+}
+
+.win-group {
+  white-space: nowrap;
 }
 
 /* On a phone-width bar the whole run would wrap under the connection and context readings, so
@@ -187,7 +193,8 @@ const absolute = computed(() =>
   }
 }
 
-.win-group + .win-group::before {
+/* The dot trails a window rather than leading the next, so a wrapped line never opens with it. */
+.win-group:not(:last-child)::after {
   content: ' · ';
 }
 
@@ -199,11 +206,11 @@ const absolute = computed(() =>
   color: var(--muted);
 }
 
-.absolute {
+.at {
   white-space: nowrap;
 }
 
-.at + .at::before {
+.at:not(:last-child)::after {
   content: ' · ';
 }
 

@@ -235,6 +235,8 @@ watch(
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* Rows wrap their own long tokens; tables scroll in their own wrapper. */
+  overflow-x: hidden;
   overflow-anchor: auto;
   display: flex;
   flex-direction: column;
