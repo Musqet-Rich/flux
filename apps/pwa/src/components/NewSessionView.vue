@@ -3,6 +3,7 @@ import type { HarnessKind, Repo } from '@flux/protocol';
 import { computed, onMounted, ref } from 'vue';
 
 import type { Store } from '../store/create-store.ts';
+import { defaultBranch } from './default-branch.ts';
 
 // Start an agent: pick a repo (and a harness, when the box has more than one), an optional model
 // and effort, name the branch (a new one is created from the repo's HEAD, an existing one is
@@ -41,7 +42,7 @@ const harness = computed({
 // seeded values (inline values win). "None" is today's bare-harness behaviour.
 const agents = computed(() => props.store.state.settings?.agents ?? []);
 const agentName = ref('');
-const branch = ref(`flux/${new Date().toISOString().slice(0, 10)}`);
+const branch = ref(defaultBranch());
 const title = ref('');
 const model = ref('');
 const effort = ref('');
