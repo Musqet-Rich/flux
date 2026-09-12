@@ -1,6 +1,7 @@
 import { mount } from '@vue/test-utils';
-import { expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 
+import { icons } from '../icons/icons.ts';
 import { renderMarkdown } from './render-markdown.ts';
 
 const render = (text: string) => mount({ render: () => renderMarkdown(text) });
@@ -112,17 +113,48 @@ const allowedTags = new Set([
   'A',
   'BLOCKQUOTE',
   'BR',
+  // The code block's Copy button (CodeBlock.vue) and the Icon inside it. `tagName` keeps an
+  // SVG element's case, so these two are matched exactly: an `a` in the SVG namespace, say,
+  // would not pass as the HTML link.
+  'BUTTON',
+  'svg',
+  'path',
+  'SPAN',
 ]);
 const classAllowed: Record<string, RegExp> = {
-  DIV: /^markdown$/u,
+  DIV: /^(markdown|code-block)$/u,
   P: /^heading h[123]$/u,
   PRE: /^open$/u,
   CODE: /^language-[\w+#.-]+$/u,
+  // The resting face: no probe taps the button.
+  BUTTON: /^icon-only copy$/u,
+  svg: /^icon$/u,
+  SPAN: /^visually-hidden$/u,
+};
+// The Copy button's own fixed attributes: the icon's path is one of the app's own, and the
+// button's name carries the fence's language, which `fenceRe` limits to these characters.
+const iconPaths = new Set(Object.values(icons));
+const fixedAllowed: Record<string, Record<string, (value: string) => boolean>> = {
+  BUTTON: {
+    type: (v) => v === 'button',
+    'aria-label': (v) => /^Copy (?:[\w+#.-]+ )?code$/u.test(v),
+    title: (v) => v === 'Copy',
+  },
+  svg: {
+    viewBox: (v) => v === '0 0 256 256',
+    'data-icon': (v) => v === 'copy',
+    'aria-hidden': (v) => v === 'true',
+    focusable: (v) => v === 'false',
+  },
+  path: { d: (v) => iconPaths.has(v) },
+  SPAN: { role: (v) => v === 'status' },
 };
 const attributesAllowed = (el: Element): boolean =>
   [...el.attributes].every(({ name, value }) => {
     if (name === 'class') return classAllowed[el.tagName]?.test(value) === true;
-    if (el.tagName !== 'A') return false;
+    // Scoped-style markers: a fixed hash, never text.
+    if (/^data-v-[0-9a-f]+$/u.test(name)) return value === '';
+    if (el.tagName !== 'A') return fixedAllowed[el.tagName]?.[name]?.(value) === true;
     if (name === 'href') return /^https?:\/\//u.test(value);
     return (
       (name === 'rel' && value === 'noopener noreferrer') ||
@@ -168,6 +200,27 @@ test.each(probes)('%s never becomes markup', (input) => {
     expect(attributesAllowed(element)).toBe(true);
   }
   expect(wrapper.text().length).toBeGreaterThan(0);
+});
+
+// Each block's Copy is wired to its own body, not the message's first.
+// The clipboard the test installs is taken away again, and its reset timer never fires.
+const original = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+afterEach(() => {
+  vi.useRealTimers();
+  if (original === undefined) delete (navigator as { clipboard?: unknown }).clipboard;
+  else Object.defineProperty(navigator, 'clipboard', original);
+});
+
+test('two fences copy their own bodies', async () => {
+  vi.useFakeTimers();
+  const writeText = vi.fn<() => Promise<void>>(() => Promise.resolve());
+  Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+  const wrapper = render('```\none\n```\n\n```sh\ntwo\n```');
+  const buttons = wrapper.findAll('.copy');
+  expect(buttons.map((b) => b.attributes('aria-label'))).toEqual(['Copy code', 'Copy sh code']);
+  await buttons[1]?.trigger('click');
+  expect(writeText).toHaveBeenCalledWith('two');
+  wrapper.unmount();
 });
 
 // A long reply must render synchronously (mount is synchronous, so a stall here is a hang).

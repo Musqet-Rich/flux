@@ -1,6 +1,7 @@
 import type { VNode, VNodeChild } from 'vue';
 import { h } from 'vue';
 
+import CodeBlock from '../components/CodeBlock.vue';
 import type { InlineNode } from './inline-markdown.ts';
 import { inlineMarkdown } from './inline-markdown.ts';
 import type {
@@ -48,10 +49,9 @@ const lines = (texts: string[]): VNodeChild[] =>
 const listItem = (item: MarkdownListItem): VNode =>
   h('li', item.nested === null ? lines(item.lines) : [...lines(item.lines), block(item.nested)]);
 
+// The one block that is a component rather than a bare element: the Copy button keeps state.
 const code = (node: MarkdownCode): VNode =>
-  h('pre', { class: node.closed ? null : 'open' }, [
-    h('code', { class: node.lang === '' ? null : `language-${node.lang}` }, node.text),
-  ]);
+  h(CodeBlock, { text: node.text, lang: node.lang, closed: node.closed });
 
 // Cell alignment from the delimiter row becomes a `style`, the only attribute the renderer sets
 // from the text, and it is one of three fixed values.
