@@ -158,13 +158,33 @@ const commentOnDiff = async (page: Page): Promise<void> => {
   await expect(page.locator('.comment .text')).toHaveText('Say hello instead');
 };
 
+// Which Enter sends is a choice kept on this device, made in Settings and applied at once; the
+// session tab brings the operator back to the composer.
+const chooseEnterToSend = async (page: Page): Promise<void> => {
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await page.getByLabel('Send with').selectOption('enter');
+  // Kept in this device's storage, so it is still there after a reload.
+  await page.reload();
+  await expect(page.getByLabel('Send with')).toHaveValue('enter');
+  await page
+    .getByRole('navigation', { name: 'Sessions' })
+    .getByRole('button', { name: /e2e\/greeting/u })
+    .click();
+  await expect(page.getByPlaceholder('Message the agent')).toBeVisible();
+};
+
+// With Enter chosen, Ctrl+Enter breaks the line where it used to send, and Enter sends; the
+// trailing line break is trimmed off the message.
 const sendWithComment = async (page: Page, stack: Stack): Promise<void> => {
   const timeline = page.locator('.timeline');
   await page.getByRole('button', { name: 'Back to changes' }).click();
   await page.getByRole('button', { name: 'Back to session' }).click();
   await expect(page.locator('.comment .where')).toHaveText('greeting.txt:1');
-  await page.getByPlaceholder('Message the agent').fill(secondPrompt);
-  await page.getByRole('button', { name: 'Send' }).click();
+  const box = page.getByPlaceholder('Message the agent');
+  await box.fill(secondPrompt);
+  await box.press('Control+Enter');
+  await expect(box).toHaveValue(`${secondPrompt}\n`);
+  await box.press('Enter');
   await expect(page.locator('.comment')).toHaveCount(0);
   await expect(timeline.getByText('1 comment(s) sent')).toBeVisible();
   await expect(timeline.locator('.item.assistant').last()).toHaveText(
@@ -283,6 +303,7 @@ test('pair, run an agent, comment on its diff, send, reload', async ({ page, sta
   await test.step('create a session on a new branch of the demo repo', () => createSession(page));
   await test.step('the reply and its tool calls arrive in the timeline', () => firstTurn(page));
   await test.step('the second tab saw the turn too, then closes', () => secondTabSawTurn(other));
+  await test.step('choose Enter as the send key in Settings', () => chooseEnterToSend(page));
   await test.step('comment on a line of the diff', () => commentOnDiff(page));
   await test.step('send it with a message; the agent gets the reference', () =>
     sendWithComment(page, stack));

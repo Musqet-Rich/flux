@@ -3,7 +3,8 @@ import type { SettingsPatch } from '@flux/protocol';
 import type { SoundName } from '../sound/notification-sounds.ts';
 import { boxLink } from './box-link.ts';
 import { notificationSound } from './notification-sound.ts';
-import type { StoreInternals } from './store-state.ts';
+import { sendKey } from './send-key.ts';
+import type { SendKey, StoreInternals } from './store-state.ts';
 
 // The settings screen's actions (prd.md P2): devices and box configuration. Each resolves to
 // whether it worked and puts the failure in `state.error`, like the other view actions.
@@ -18,6 +19,8 @@ export interface SettingsActions {
   // `playSound` plays the current one again.
   setSound: (name: SoundName) => Promise<boolean>;
   playSound: () => void;
+  // Picks which Enter sends a message on this device (send-key.ts).
+  setSendKey: (name: SendKey) => Promise<boolean>;
   // Asks the daemon to discover the latest release and dry-run verify it (ADR 0021/0022). It
   // never surfaces an error: a daemon too old to have the method degrades to a `latest: null`
   // sentinel so Settings shows "couldn't check for updates" instead of hard-failing.
@@ -104,6 +107,7 @@ export const settingsActions = (i: StoreInternals): SettingsActions => ({
   playSound: () => {
     notificationSound.play(i);
   },
+  setSendKey: (name) => boxLink.attempt(i, () => sendKey.set(i, name)),
   checkUpdate: () => checkUpdate(i),
   updateDaemon: (target) => boxLink.attempt(i, () => updateDaemon(i, target)),
   refreshSkills: () => refreshSkills(i),
