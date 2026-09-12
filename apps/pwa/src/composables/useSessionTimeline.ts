@@ -12,11 +12,20 @@ import { useMessageReply } from './useMessageReply.ts';
 // What the session screen derives from its log: the subagent tasks and the strip's cut of
 // them (the current ones, plus the open chat's own row so Back has somewhere to be), which chat
 // is open (`main`, or a task's Agent call id), that chat's rows, and the agent's open question.
-// Main shows top-level rows only; a subagent's chat shows the rows whose `parent` is its call,
-// the last `pageSize` of them until the operator asks for earlier ones (no virtualisation:
-// hundreds of rows render fine, thousands are what the button is for). The reply state
+// Main shows top-level rows only; a subagent's chat shows the rows whose `parent` is its call.
+// Either chat renders a window of its rows, not all of them: a day's session runs to thousands,
+// and every row is a Markdown tree in the DOM. `trim` cuts the window to the last `windowSize`
+// rows, and the screen calls it when the operator is at the tail, so the window slides with new
+// rows while they are read live and holds its top edge while the operator is scrolled up, so
+// the rows they are reading are not removed under them. Show earlier widens it by `pageSize` a
+// tap at a time, a deliberate trade: the whole history in one tap is the DOM this exists to
+// avoid, at the cost of a long scroll-back and of find-in-page over rows outside the window.
+// `reveal` widens it to a given row so a reply chip can scroll to what it quotes, which can
+// take in a lot of history for a quote from long ago; the next trim at the tail cuts it back.
+// No virtualisation: the rows in the window are all in the DOM. The reply state
 // (useMessageReply) rides along so the screen has one object for what its log means.
 
+const windowSize = 300;
 const pageSize = 200;
 
 // Agent lines Flux does not read (`raw`), rate-limit changes and `files.changed` stay in the log
@@ -53,7 +62,7 @@ export interface SessionTimeline extends MessageReply {
   // The open task's row, null on main or once the task is gone (a cleared context).
   task: ComputedRef<SessionTask | null>;
   timeline: ComputedRef<FluxEvent[]>;
-  // Rows of the open chat left out of `timeline`; Show earlier brings them in.
+  // Rows of the open chat left out of the top of `timeline`; Show earlier brings them in.
   earlier: ComputedRef<number>;
   ask: ComputedRef<EventPayloads['ask'] | null>;
   // A /compact turn with no boundary yet; the screen shows an indeterminate "Compacting…"
@@ -61,23 +70,30 @@ export interface SessionTimeline extends MessageReply {
   awaitingCompaction: ComputedRef<boolean>;
   select: (view: string | null) => void;
   showEarlier: () => void;
+  // Cuts the window back to the last `windowSize` rows.
+  trim: () => void;
+  // Widens the window to take in the row with this seq, if the chat has it.
+  reveal: (seq: number) => void;
 }
 
 export const useSessionTimeline = (events: () => readonly FluxEvent[]): SessionTimeline => {
   const view = ref<string | null>(null);
-  const all = ref(false);
+  // How many rows the window leaves out at the top. A count, not a seq: rows only ever append,
+  // so a fixed count holds the top edge still while the tail grows.
+  const hidden = ref(0);
   const tasks = computed(() => sessionTasks(events()));
   const task = computed(() => tasks.value.find((t) => t.toolUseId === view.value) ?? null);
   const strip = computed(() => tasks.value.filter((t) => t.current || t.toolUseId === view.value));
   const rows = computed(() =>
     events().filter((e) => !hiddenTypes.has(e.type) && (e.parent ?? null) === view.value),
   );
-  const earlier = computed(() =>
-    view.value === null || all.value ? 0 : Math.max(0, rows.value.length - pageSize),
-  );
+  const earlier = computed(() => Math.min(hidden.value, rows.value.length));
   const timeline = computed(() =>
     earlier.value === 0 ? rows.value : rows.value.slice(earlier.value),
   );
+  const trim = (): void => {
+    hidden.value = Math.max(0, rows.value.length - windowSize);
+  };
   const ask = computed(() => openAsk(events()));
   const awaitingCompaction = computed(() => awaitingCompact(events()));
   return {
@@ -92,10 +108,15 @@ export const useSessionTimeline = (events: () => readonly FluxEvent[]): SessionT
     awaitingCompaction,
     select: (next) => {
       view.value = next;
-      all.value = false;
+      trim();
     },
     showEarlier: () => {
-      all.value = true;
+      hidden.value = Math.max(0, earlier.value - pageSize);
+    },
+    trim,
+    reveal: (seq) => {
+      const index = rows.value.findIndex((e) => e.seq === seq);
+      if (index !== -1) hidden.value = Math.min(hidden.value, index);
     },
   };
 };
