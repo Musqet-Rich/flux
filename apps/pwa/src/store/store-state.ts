@@ -17,6 +17,7 @@ import type { Storage } from '../client/create-memory-storage.ts';
 import type { SessionLog } from '../client/create-session-log.ts';
 import type { SocketFactory } from '../client/socket.ts';
 import type { SyncSession } from '../client/sync-session.ts';
+import type { SoundName } from '../sound/notification-sounds.ts';
 
 // What the views see (architecture.md § PWA): one connection store and one view per opened
 // session, all in a single reactive object so components can read it directly.
@@ -138,6 +139,9 @@ export interface StoreState {
   updateCheck: UpdateCheck | null;
   error: StoreError | null;
   push: PushState;
+  // The sound this device plays when the box would push (notification-sound.ts); `none` until
+  // the operator picks one in Settings.
+  sound: SoundName;
   sessions: SessionSummary[];
   // Harnesses the box can run, from `hello`; a daemon that predates the field has claude only.
   agents: HarnessKind[];
@@ -168,6 +172,9 @@ export interface StoreOptions {
   // can never work (the dev server, a browser without it): `state.push` then stays
   // `unavailable` and the status bar offers nothing.
   subscribePush?: (vapidPublicKey: string, prompt: boolean) => Promise<unknown>;
+  // Plays a notification sound (sound/create-sound-player.ts); left out where the page has no
+  // audio.
+  playSound?: (name: SoundName) => void;
   minBackoffMs?: number;
   maxBackoffMs?: number;
   // Runs `fn` after `ms` and returns a cancel; defaults to setTimeout. Tests inject one they fire.
@@ -189,6 +196,8 @@ export interface StoreInternals {
   errorTimer: (() => void) | null;
   // The standing connection error, kept while an action error covers it (store-errors.ts).
   connectionError: StoreError | null;
+  // Cancels the quiet spell after a notification sound, while one is pending.
+  soundHush: (() => void) | null;
   // The composer's files by chip key, off the reactive state (attachment-actions.ts).
   files: Map<string, File>;
   // Thumbnail fetches in flight or done, by attachment id, and which session each belongs to.
@@ -207,6 +216,7 @@ export const storeState = (): StoreState =>
     updateCheck: null,
     error: null,
     push: 'unavailable',
+    sound: 'none',
     sessions: [],
     agents: ['claude'],
     rateWindows: [],

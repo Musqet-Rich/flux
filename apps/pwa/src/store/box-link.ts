@@ -7,6 +7,7 @@ import type { SessionLog } from '../client/create-session-log.ts';
 import { pairedBox } from '../client/paired-box.ts';
 import { syncSession } from '../client/sync-session.ts';
 import { logCache } from './log-cache.ts';
+import { notificationSound } from './notification-sound.ts';
 import { storeErrors } from './store-errors.ts';
 import type { ErrorKind, LogView, StoreInternals } from './store-state.ts';
 
@@ -138,6 +139,16 @@ const afterConnect = async (i: StoreInternals): Promise<void> => {
   if (i.state.push === 'unavailable' && offerPush) i.state.push = 'off';
   await Promise.all([...i.logs.values()].map((log) => syncLog(i, log)));
   await enablePush(i, false);
+  // With a sound chosen the device needs the box's "Notify me when" settings to know which
+  // events to ring for, and another device may have changed them since the last connect; until
+  // they arrive every trigger rings (notification-sound.ts), so a refusal is not an outage.
+  if (i.state.sound !== 'none') {
+    try {
+      i.state.settings = await call(i, 'settings.get', {});
+    } catch {
+      // Whatever the box last sent, or all-on, stands.
+    }
+  }
 };
 
 const patchSummary = (i: StoreInternals, event: FluxEvent): void => {
@@ -160,6 +171,8 @@ const onEvent = (i: StoreInternals, event: FluxEvent): void => {
   if (fluxEvent.isKnown(event) && event.type === 'rate_limit') {
     i.state.rateWindows = event.payload.windows;
   }
+  const wasRunning = i.state.sessions.find((s) => s.session === event.session)?.state === 'running';
+  notificationSound.onEvent(i, event, wasRunning);
   patchSummary(i, event);
   const log = i.logs.get(event.session);
   if (log === undefined) return;
@@ -287,7 +300,11 @@ const options = (i: StoreInternals): LinkOptions => {
   };
 };
 
-const adopt = (i: StoreInternals, connection: Connection): void => {
+// Takes the connection boot or pairing made, and reads the device's own preferences once,
+// here rather than on every connect so a choice being saved is not overwritten by a reconnect.
+// The read comes first: nothing is handled until adoption is complete (onEvent's guard).
+const adopt = async (i: StoreInternals, connection: Connection): Promise<void> => {
+  await notificationSound.load(i);
   i.connection = connection;
   i.sync = syncSession(connection.call);
 };

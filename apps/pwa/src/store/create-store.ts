@@ -80,7 +80,7 @@ const boot = async (i: StoreInternals): Promise<void> => {
   const options = { ...boxLink.options(i), relayUrl: box.record.relayUrl };
   try {
     const connection = await createConnection({ ...options, keys: box.keys, boxPub: box.boxPub });
-    boxLink.adopt(i, connection);
+    await boxLink.adopt(i, connection);
     i.deviceId = box.record.deviceId;
     i.state.phase = 'paired';
     connection.start();
@@ -98,7 +98,7 @@ const pair = async (i: StoreInternals, relayUrl: string, fragment: string): Prom
   try {
     const { box, connection } = await pairDevice({ ...boxLink.options(i), relayUrl, fragment });
     await i.options.storage.set(pairedBox.storageKey, box.record);
-    boxLink.adopt(i, connection);
+    await boxLink.adopt(i, connection);
     i.deviceId = box.record.deviceId;
     i.state.phase = 'paired';
     await boxLink.afterConnect(i);
@@ -200,6 +200,10 @@ const controls = (i: StoreInternals): Pick<Store, 'dismissError' | 'stop'> => ({
   },
   stop: () => {
     boxLink.clearError(i);
+    // The quiet spell after a notification sound (notification-sound.ts) has nothing to guard
+    // once the store is stopped.
+    i.soundHush?.();
+    i.soundHush = null;
     i.connection?.stop();
   },
 });
@@ -216,6 +220,7 @@ export const createStore = (options: StoreOptions): Store => {
     deviceId: null,
     errorTimer: null,
     connectionError: null,
+    soundHush: null,
     files: new Map(),
     thumbLoads: new Map(),
     thumbOwners: new Map(),

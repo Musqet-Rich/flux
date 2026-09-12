@@ -4,9 +4,11 @@ import { computed, onMounted, ref, watch } from 'vue';
 
 import type { Store } from '../store/create-store.ts';
 import { version as appVersion } from '../version.ts';
+import SoundPicker from './SoundPicker.vue';
 
 // The box's runtime settings as a form, and the environment-only values as read-only rows.
-// The form is a copy of what the box last sent; Save sends the whole copy back.
+// The form is a copy of what the box last sent; Save sends the whole copy back. The sound
+// picker under the triggers is this device's own and applies as it is changed.
 
 const props = defineProps<{ store: Store }>();
 
@@ -175,6 +177,7 @@ const save = async (): Promise<void> => {
           <input v-model="form[t.field]" type="checkbox" :disabled="busy" />
           <span>{{ t.text }}</span>
         </label>
+        <SoundPicker :store="store" />
       </fieldset>
       <button type="submit" :disabled="!dirty || busy">
         {{ dirty ? 'Save changes' : 'Saved' }}
