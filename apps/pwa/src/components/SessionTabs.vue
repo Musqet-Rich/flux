@@ -2,6 +2,8 @@
 import type { SessionSummary } from '@flux/protocol';
 import { computed, reactive, ref, watch } from 'vue';
 
+import Icon from './Icon.vue';
+
 // One tab per session in creation order, plus the way to a new one. The order never follows
 // activity: with two agents working, sorting by last event made the tabs swap under the thumb.
 // Activity is shown instead: the state dot, and a count of events since the tab was last active.
@@ -71,8 +73,14 @@ watch(
         {{ unread(s) }}
       </span>
     </button>
-    <button type="button" class="tab add" aria-label="New session" @click="$emit('create')">
-      +
+    <button
+      type="button"
+      class="tab add icon-only"
+      aria-label="New session"
+      title="New session"
+      @click="$emit('create')"
+    >
+      <Icon name="plus" />
     </button>
   </nav>
 </template>
@@ -112,8 +120,9 @@ watch(
 }
 
 .add {
-  font-size: 1.2rem;
+  font-size: 1.05rem;
   line-height: 1;
+  padding: 0.4rem 0.5rem;
 }
 
 .dot {

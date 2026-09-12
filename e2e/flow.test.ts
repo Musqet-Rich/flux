@@ -147,7 +147,8 @@ const secondTabSawTurn = async (other: Page): Promise<void> => {
 const commentOnDiff = async (page: Page): Promise<void> => {
   await page.getByRole('button', { name: 'Changes' }).click();
   await expect(page.locator('.count')).toHaveText('1 changed');
-  await page.getByRole('button', { name: 'greeting.txt' }).click();
+  // The row's Edit button is named for the file too; the file button's name is status then path.
+  await page.getByRole('button', { name: /^A greeting\.txt$/u }).click();
   await expect(page.locator('.path')).toHaveText('greeting.txt');
   await page.locator('.cm-lineNumbers .cm-gutterElement', { hasText: '1' }).click();
   await page.getByLabel('Comment on line 1').fill('Say hello instead');
@@ -158,8 +159,8 @@ const commentOnDiff = async (page: Page): Promise<void> => {
 
 const sendWithComment = async (page: Page, stack: Stack): Promise<void> => {
   const timeline = page.locator('.timeline');
-  await page.getByRole('button', { name: '‹ Changes' }).click();
-  await page.getByRole('button', { name: '‹ Session' }).click();
+  await page.getByRole('button', { name: 'Back to changes' }).click();
+  await page.getByRole('button', { name: 'Back to session' }).click();
   await expect(page.locator('.comment .where')).toHaveText('greeting.txt:1');
   await page.getByPlaceholder('Message the agent').fill(secondPrompt);
   await page.getByRole('button', { name: 'Send' }).click();
@@ -263,9 +264,9 @@ const archiveAndReopen = async (page: Page): Promise<void> => {
   await page.getByRole('button', { name: 'Session menu' }).click();
   await page.getByRole('menuitem', { name: 'Archive' }).click();
   await expect(page.getByText('No sessions yet.')).toBeVisible();
-  await expect(page.getByRole('navigation', { name: 'Sessions' }).getByRole('button')).toHaveText([
-    '+',
-  ]);
+  const tabs = page.getByRole('navigation', { name: 'Sessions' }).getByRole('button');
+  await expect(tabs).toHaveCount(1);
+  await expect(tabs).toHaveAccessibleName('New session');
   await page.getByText('Archived (1)').click();
   await page.getByRole('button', { name: 'Reopen' }).click();
   await expect(page).toHaveURL(/\/s\/[0-9a-f-]{36}$/u);

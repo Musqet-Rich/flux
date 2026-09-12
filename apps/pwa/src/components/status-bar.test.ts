@@ -138,7 +138,7 @@ test('a window shows a relative renewal and taps to swap for absolute times', as
     },
   });
   expect(wrapper.find('.window').text()).toBe('5h 29%');
-  expect(wrapper.find('.renew').text()).toBe('↻ 2h10m');
+  expect(wrapper.find('.renew').text()).toBe('2h10m');
   expect(wrapper.find('.absolute').exists()).toBe(false);
   await wrapper.find('.windows').trigger('click');
   expect(wrapper.find('.absolute').exists()).toBe(true);
@@ -157,11 +157,11 @@ test('the renewal counts down once a minute and the clock stops with the compone
       rateWindows: [{ name: 'five_hour', utilisation: 0.29, resetsAt: '2026-08-29T14:10:00.000Z' }],
     },
   });
-  expect(wrapper.find('.renew').text()).toBe('↻ 2h10m');
+  expect(wrapper.find('.renew').text()).toBe('2h10m');
   await vi.advanceTimersByTimeAsync(60_000);
-  expect(wrapper.find('.renew').text()).toBe('↻ 2h9m');
+  expect(wrapper.find('.renew').text()).toBe('2h9m');
   await vi.advanceTimersByTimeAsync(2 * 60 * 60_000);
-  expect(wrapper.find('.renew').text()).toBe('↻ 9m');
+  expect(wrapper.find('.renew').text()).toBe('9m');
   expect(vi.getTimerCount()).toBe(1);
   wrapper.unmount();
   expect(vi.getTimerCount()).toBe(0);

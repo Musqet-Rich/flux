@@ -22,7 +22,7 @@ const cancelTimer = (i: StoreInternals): void => {
   i.errorTimer = null;
 };
 
-// Everything goes: the box is back, pairing starts afresh, the operator tapped ×, or the store
+// Everything goes: the box is back, pairing starts afresh, the operator tapped close, or the store
 // stopped.
 const clear = (i: StoreInternals): void => {
   cancelTimer(i);

@@ -5,6 +5,7 @@ import { computed, onMounted, ref } from 'vue';
 import { conventionalCommit } from '../git/conventional-commit.ts';
 import type { Store } from '../store/create-store.ts';
 import { sessionPr } from '../store/session-pr.ts';
+import Icon from './Icon.vue';
 
 // Commit, push and open a PR from the changes screen (prd.md § P2). One action at a time; a
 // failure shows here and in the status bar; `done` tells the parent to refresh the file list.
@@ -137,9 +138,11 @@ onMounted(() => {
     />
     <div class="row">
       <button type="button" class="commit" :disabled="!canCommit" @click="commit">
-        {{ commitLabel }}
+        <Icon name="commit" /> {{ commitLabel }}
       </button>
-      <button type="button" class="push secondary" :disabled="!idle" @click="push">Push</button>
+      <button type="button" class="push secondary" :disabled="!idle" @click="push">
+        <Icon name="push" /> Push
+      </button>
     </div>
     <details class="pr">
       <summary>Open PR</summary>
@@ -167,7 +170,9 @@ onMounted(() => {
         <label class="draft"
           ><input v-model="draft" type="checkbox" :disabled="!idle" /> Draft</label
         >
-        <button type="button" class="open-pr" :disabled="!canPr" @click="openPr">Open PR</button>
+        <button type="button" class="open-pr" :disabled="!canPr" @click="openPr">
+          <Icon name="pullRequest" /> Open PR
+        </button>
       </div>
       <p v-if="prUrl !== null" class="url">
         <a :href="prUrl" target="_blank" rel="noopener noreferrer">{{ prUrl }}</a>

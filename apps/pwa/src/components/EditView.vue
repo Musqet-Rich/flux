@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, shallowRef } from 'vue';
 
 import type { CodeEditor } from '../editor/create-code-editor.ts';
 import type { Store } from '../store/create-store.ts';
+import Icon from './Icon.vue';
 
 // One worktree file in an editor (PRD P2). Save sends the hash the file was read with, so an
 // agent's write in the meantime comes back as a conflict instead of being overwritten; the
@@ -34,6 +35,7 @@ let saved = '';
 const editor = shallowRef<CodeEditor | null>(null);
 
 const draftKey = computed(() => `${props.session}\0${props.path}`);
+const backLabel = computed(() => (props.dir === null ? 'Back to changes' : 'Back to files'));
 const canSave = computed(
   () => dirty.value && !saving.value && !conflict.value && readOnly.value === null,
 );
@@ -141,14 +143,29 @@ onUnmounted(() => {
 <template>
   <section class="edit">
     <div class="toolbar">
-      <button type="button" class="secondary" @click="emit('back')">
-        ‹ {{ dir === null ? 'Changes' : 'Files' }}
+      <button
+        type="button"
+        class="secondary icon-only"
+        :aria-label="backLabel"
+        :title="backLabel"
+        @click="emit('back')"
+      >
+        <Icon name="back" />
       </button>
       <code class="path">{{ path }}</code>
-      <span v-if="dirty" class="dirty" title="Unsaved changes">●</span>
-      <button v-if="dirty" type="button" class="secondary discard" @click="discard">Discard</button>
+      <span v-if="dirty" class="dirty" title="Unsaved changes"><Icon name="dot" /></span>
+      <button
+        v-if="dirty"
+        type="button"
+        class="secondary icon-only discard"
+        aria-label="Discard"
+        title="Discard unsaved changes"
+        @click="discard"
+      >
+        <Icon name="discard" />
+      </button>
       <button type="button" class="save" :disabled="!canSave" @click="save(hash)">
-        {{ saving ? 'Saving…' : 'Save' }}
+        <Icon name="save" /> {{ saving ? 'Saving…' : 'Save' }}
       </button>
     </div>
     <p v-if="loading" class="notice">Loading…</p>
@@ -160,7 +177,7 @@ onUnmounted(() => {
     </p>
     <div v-if="conflict" class="banner conflict">
       <span>Changed on the box since you opened it.</span>
-      <button type="button" class="secondary" @click="load">Reload</button>
+      <button type="button" class="secondary" @click="load"><Icon name="refresh" /> Reload</button>
       <button type="button" class="overwrite" @click="save(null)">Overwrite</button>
     </div>
     <div ref="host" class="editor" :class="{ hidden: loading || failure !== null }" />
@@ -191,7 +208,9 @@ onUnmounted(() => {
 }
 
 .dirty {
+  display: inline-flex;
   color: var(--warn);
+  font-size: 0.6rem;
 }
 
 .notice {

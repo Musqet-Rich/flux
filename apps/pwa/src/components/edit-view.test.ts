@@ -234,7 +234,7 @@ test('a file opened from the browser labels its back button Files', async () => 
     attachTo: document.body,
   });
   await loaded(wrapper);
-  expect(wrapper.find('.toolbar button').text()).toBe('‹ Files');
+  expect(wrapper.find('.toolbar button').attributes('aria-label')).toBe('Back to files');
   await wrapper.find('.toolbar button').trigger('click');
   expect(wrapper.emitted('back')).toEqual([[]]);
   wrapper.unmount();

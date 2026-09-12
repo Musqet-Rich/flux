@@ -3,6 +3,7 @@ import type { Attachment } from '@flux/protocol';
 import { ref } from 'vue';
 
 import { formatBytes } from './format-bytes.ts';
+import Icon from './Icon.vue';
 
 // The files under a sent message (ADR 0020): a thumbnail where the store has fetched one,
 // otherwise the name and size. Tapping a thumbnail opens the image full-size in a plain
@@ -25,7 +26,7 @@ const open = ref<string | null>(null);
         <img :src="thumbs[a.id]" :alt="a.name" />
       </button>
       <span v-else class="plain">
-        <span class="icon" aria-hidden="true">📄</span>
+        <Icon name="file" />
         <span class="name">{{ a.name }}</span>
         <span class="size">{{ formatBytes(a.size) }}</span>
       </span>
@@ -33,8 +34,14 @@ const open = ref<string | null>(null);
   </ul>
   <div v-if="open !== null" class="overlay" role="dialog" aria-label="Image" @click="open = null">
     <img :src="open" alt="" />
-    <button type="button" class="secondary close" aria-label="Close" @click.stop="open = null">
-      ×
+    <button
+      type="button"
+      class="secondary icon-only close"
+      aria-label="Close"
+      title="Close"
+      @click.stop="open = null"
+    >
+      <Icon name="close" />
     </button>
   </div>
 </template>
@@ -98,6 +105,5 @@ const open = ref<string | null>(null);
   top: calc(0.5rem + env(safe-area-inset-top));
   right: 0.5rem;
   font-size: 1.2rem;
-  line-height: 1;
 }
 </style>

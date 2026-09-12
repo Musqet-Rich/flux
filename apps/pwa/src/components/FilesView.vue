@@ -3,6 +3,7 @@ import type { DirEntry } from '@flux/protocol';
 import { computed, onMounted, ref, watch } from 'vue';
 
 import type { Store } from '../store/create-store.ts';
+import Icon from './Icon.vue';
 
 // Walks the session's worktree so the operator can open any file, not only the changed ones
 // (`fs.list`). Dirs come before files, each alphabetical; tapping a dir descends, tapping a file
@@ -57,6 +58,7 @@ const tap = (entry: DirEntry): void => {
   if (entry.kind === 'dir') emit('enter', full);
   else emit('open', full);
 };
+const upLabel = computed(() => (props.path === '' ? 'Back to session' : 'Up one directory'));
 const up = (): void => {
   if (props.path === '') return emit('back');
   const cut = props.path.lastIndexOf('/');
@@ -77,8 +79,14 @@ watch(
 <template>
   <section class="files">
     <div class="toolbar">
-      <button type="button" class="secondary" @click="up">
-        ‹ {{ path === '' ? 'Session' : 'Up' }}
+      <button
+        type="button"
+        class="secondary icon-only"
+        :aria-label="upLabel"
+        :title="upLabel"
+        @click="up"
+      >
+        <Icon name="back" />
       </button>
       <nav class="crumbs">
         <button type="button" class="crumb" @click="emit('enter', '')">/</button>
@@ -87,7 +95,16 @@ watch(
           <button type="button" class="crumb" @click="emit('enter', c.path)">{{ c.name }}</button>
         </template>
       </nav>
-      <button type="button" class="secondary" :disabled="loading" @click="load">Refresh</button>
+      <button
+        type="button"
+        class="secondary icon-only"
+        aria-label="Refresh"
+        title="Refresh"
+        :disabled="loading"
+        @click="load"
+      >
+        <Icon name="refresh" />
+      </button>
     </div>
     <p v-if="loading" class="notice">Loading…</p>
     <p v-else-if="failure !== null" class="notice">{{ failure }}</p>
@@ -96,7 +113,7 @@ watch(
       <li v-for="e in sorted" :key="e.name" class="row">
         <button type="button" class="entry" :class="e.kind" @click="tap(e)">
           <span class="name">{{ e.name }}</span>
-          <span v-if="e.kind === 'dir'" class="chev">›</span>
+          <span v-if="e.kind === 'dir'" class="chev"><Icon name="forward" /></span>
         </button>
       </li>
     </ul>
@@ -193,6 +210,7 @@ watch(
 
 .chev {
   flex: none;
+  display: inline-flex;
   color: var(--muted);
 }
 </style>

@@ -6,13 +6,15 @@ import { fluxEvent } from '@flux/protocol';
 
 import type { Store } from '../store/create-store.ts';
 import { sessionPr } from '../store/session-pr.ts';
+import Icon from './Icon.vue';
 import SessionMenu from './SessionMenu.vue';
 
 // The strip above the timeline: the branch, a small chip naming what the agent is running as
 // `model:effort` from the log's latest `agent.spec` (ADR 0028; the harness alone until the agent
 // has said, and on the chip's title after), a link to the session's PR once the log has a
-// `pr.published`, Stop while the agent runs, Changes (with the latest changed-file count), and
-// the session menu.
+// `pr.published`, Stop while the agent runs, Files, Changes (with the latest changed-file count),
+// and the session menu. The buttons are icons with their names on `aria-label`/`title`: the row
+// has to fit a phone beside the branch (ADR 0029).
 
 const props = defineProps<{
   store: Store;
@@ -59,6 +61,7 @@ const pr = computed(() => sessionPr(props.events));
 const prLabel = computed(() =>
   pr.value?.identifier === '' ? 'PR' : `PR #${pr.value?.identifier}`,
 );
+const prNumber = computed(() => (pr.value?.identifier === '' ? '' : `#${pr.value?.identifier}`));
 // The count from the latest `files.changed` event, on the button so those events need not spam
 // the timeline. `ChangesView` reads the same last event when its fresher `git.status` has not run.
 const changedCount = computed(() => {
@@ -67,6 +70,7 @@ const changedCount = computed(() => {
     ? last.payload.files.length
     : 0;
 });
+const changesLabel = computed(() => `Changes (${changedCount.value})`);
 </script>
 
 <template>
@@ -75,13 +79,44 @@ const changedCount = computed(() => {
       <span class="branch">{{ branch }}</span>
       <span v-if="chip !== ''" class="spec-chip" :title="chipTitle">{{ chip }}</span>
     </span>
-    <a v-if="pr !== null" class="pr" :href="pr.url" target="_blank" rel="noopener noreferrer">{{
-      prLabel
-    }}</a>
-    <button v-if="busy" type="button" class="secondary" @click="$emit('interrupt')">Stop</button>
-    <button type="button" class="secondary" @click="$emit('files')">Files</button>
-    <button type="button" class="secondary" @click="$emit('changes')">
-      Changes ({{ changedCount }})
+    <a
+      v-if="pr !== null"
+      class="pr"
+      :href="pr.url"
+      target="_blank"
+      rel="noopener noreferrer"
+      :aria-label="prLabel"
+      :title="prLabel"
+    >
+      <Icon name="pullRequest" />{{ prNumber }}
+    </a>
+    <button
+      v-if="busy"
+      type="button"
+      class="secondary icon-only"
+      aria-label="Stop"
+      title="Stop the agent"
+      @click="$emit('interrupt')"
+    >
+      <Icon name="stop" />
+    </button>
+    <button
+      type="button"
+      class="secondary icon-only"
+      aria-label="Files"
+      title="Files"
+      @click="$emit('files')"
+    >
+      <Icon name="files" />
+    </button>
+    <button
+      type="button"
+      class="secondary icon-only"
+      :aria-label="changesLabel"
+      :title="changesLabel"
+      @click="$emit('changes')"
+    >
+      <Icon name="changes" /><span class="count">{{ changedCount }}</span>
     </button>
     <SessionMenu :store="store" :session="session" @closed="$emit('closed')" />
   </div>
@@ -139,10 +174,18 @@ const changedCount = computed(() => {
 
 .pr {
   flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
   color: var(--accent);
   font-size: 0.85rem;
   text-decoration: none;
   white-space: nowrap;
+}
+
+.count {
+  font-size: 0.8rem;
+  margin-left: 0.3rem;
 }
 
 .toolbar > .secondary {

@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import vue from '@vitejs/plugin-vue';
+import type { Plugin } from 'vite';
 import { defineConfig } from 'vite';
 
 // Two entries: the app (index.html) and the service worker (src/sw.ts), which must land at a
@@ -24,8 +25,34 @@ const readVersion = (): string => {
     : '0.0.0';
 };
 
+class IconShapeError extends Error {
+  constructor(id: string) {
+    super(`${id}: expected exactly one <path d="…"> (a Phosphor regular/fill icon)`);
+    this.name = 'IconShapeError';
+  }
+}
+
+// `<name>.svg?path` on a Phosphor icon (ADR 0029) resolves to its path data as a string, so an
+// icon costs its one `d` attribute and nothing of the package ships: no component per icon, no
+// barrel of 1,500 of them for the bundler to shake. `pre`, so Vite's asset plugin does not turn
+// the .svg into a URL first. Every regular icon, and all but eight fill icons, is a single path
+// on a 256 viewBox (src/components/Icon.vue draws it); anything else is refused at build time.
+const pathQuery = '?path';
+const iconPath = (): Plugin => ({
+  name: 'flux:icon-path',
+  enforce: 'pre',
+  load(id) {
+    if (!id.endsWith(`.svg${pathQuery}`)) return null;
+    const svg = readFileSync(id.slice(0, -pathQuery.length), 'utf8');
+    const paths = [...svg.matchAll(/<path d="([^"]+)"\/>/gu)];
+    const d = paths.length === 1 ? paths[0]?.[1] : undefined;
+    if (d === undefined) throw new IconShapeError(id);
+    return `export default ${JSON.stringify(d)};`;
+  },
+});
+
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [vue(), iconPath()],
   define: { FLUX_VERSION: JSON.stringify(readVersion()) },
   server: {
     proxy: {

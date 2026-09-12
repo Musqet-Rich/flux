@@ -4,6 +4,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 
 import type { Store } from '../store/create-store.ts';
 import { version as appVersion } from '../version.ts';
+import Icon from './Icon.vue';
 import SoundPicker from './SoundPicker.vue';
 
 // The box's runtime settings as a form, and the environment-only values as read-only rows.
@@ -56,7 +57,7 @@ interface CheckView {
 
 const availableLabel = (version: string, verified: boolean, reason: string | undefined): string =>
   verified
-    ? `Update available: ${version} · verified ✓`
+    ? `Update available: ${version} · verified`
     : `Update available: ${version} · cannot verify (${reason ?? 'unknown'})`;
 
 const checkView = computed((): CheckView | null => {
@@ -180,7 +181,7 @@ const save = async (): Promise<void> => {
         <SoundPicker :store="store" />
       </fieldset>
       <button type="submit" :disabled="!dirty || busy">
-        {{ dirty ? 'Save changes' : 'Saved' }}
+        <Icon name="save" /> {{ dirty ? 'Save changes' : 'Saved' }}
       </button>
     </template>
     <dl class="versions">
@@ -194,7 +195,7 @@ const save = async (): Promise<void> => {
         <p v-if="update.failed !== null" class="update-error">Update failed: {{ update.failed }}</p>
         <p v-else class="hint">Updating to {{ update.target }}… {{ phaseLabel }}</p>
         <button v-if="update.failed !== null" type="button" class="secondary" @click="retryUpdate">
-          Retry
+          <Icon name="retry" /> Retry
         </button>
       </template>
       <template v-else-if="checkView !== null">
@@ -205,7 +206,10 @@ const save = async (): Promise<void> => {
           {{ checkView.label }}
         </p>
         <template v-else>
-          <p class="update-status">{{ checkView.label }}</p>
+          <p class="update-status">
+            {{ checkView.label }}
+            <Icon v-if="checkView.verified" name="verified" />
+          </p>
           <button
             type="button"
             class="update-btn"

@@ -7,3 +7,9 @@ declare module '*.vue' {
   const component: DefineComponent<Record<string, never>, Record<string, never>, unknown>;
   export default component;
 }
+
+// A Phosphor icon's path data (vite.config.ts `iconPath`; src/icons/icons.ts is the one importer).
+declare module '*.svg?path' {
+  const d: string;
+  export default d;
+}
