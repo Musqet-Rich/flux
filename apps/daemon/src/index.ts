@@ -18,7 +18,9 @@ import { runUpdateCheck } from './update/run-update-check.ts';
 //   FLUX_DATA_DIR    state directory, default ~/.flux
 //   FLUX_REPOS_DIR   directory whose subdirectories are the repositories, default ~/repos
 //   FLUX_CLAUDE      the claude binary, default `claude` on PATH
-//   FLUX_CLAUDE_DIR  the agent's config directory (CLAUDE.md, settings.json), default ~/.claude
+//   FLUX_CLAUDE_DIR  the agent's config directory (CLAUDE.md, settings.json, transcripts),
+//                    default CLAUDE_CONFIG_DIR as the agent reads it, else ~/.claude; set it
+//                    only to where the agent itself looks, or the two stop agreeing
 //   FLUX_PI          the pi binary, default `pi` on PATH
 //   FLUX_PI_PROVIDER pi's --provider (e.g. anthropic); unset, pi's own settings decide
 //   FLUX_PI_MODEL    pi's --model; unset, pi's own settings decide
@@ -198,7 +200,7 @@ const daemon = await createDaemon({
   daemonName: `flux@${hostname()}`,
   pushSubject: env['FLUX_PUSH_SUBJECT'] ?? `https://${hostname()}`,
   ...(env['FLUX_CLAUDE'] === undefined ? {} : { claudeCommand: env['FLUX_CLAUDE'] }),
-  claudeDir: env['FLUX_CLAUDE_DIR'] ?? join(home, '.claude'),
+  claudeDir: env['FLUX_CLAUDE_DIR'] ?? env['CLAUDE_CONFIG_DIR'] ?? join(home, '.claude'),
   ...(env['FLUX_PI'] === undefined ? {} : { piCommand: env['FLUX_PI'] }),
   ...(env['FLUX_PI_PROVIDER'] === undefined ? {} : { piProvider: env['FLUX_PI_PROVIDER'] }),
   ...(env['FLUX_PI_MODEL'] === undefined ? {} : { piModel: env['FLUX_PI_MODEL'] }),

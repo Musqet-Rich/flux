@@ -102,6 +102,10 @@ const describeNote = (event: KnownEvent): View => {
       return note(`Turn ended${money(event.payload.costUsd)}`);
     case 'rate_limit':
       return note('Rate limit changed');
+    case 'agent.spec': {
+      const { model, effort } = event.payload;
+      return note(`Running ${effort === undefined ? model : `${model}:${effort}`}`);
+    }
     case 'ask':
       return note(`Asked: ${event.payload.question}`, 'warn');
     case 'ask.answered':

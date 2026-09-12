@@ -23,6 +23,9 @@ export interface EventLog {
   append: (session: string, input: EventInput) => FluxEvent;
   read: (session: string, since: number, limit?: number) => EventPage;
   lastSeq: (session: string) => number;
+  // The newest event of one type in a session's log, or null when it has none: what a
+  // supervisor needs to pick up where the last daemon left off without reading the log.
+  lastOfType: (session: string, type: string) => FluxEvent | null;
 }
 
 export interface EventLogOptions {
@@ -47,6 +50,16 @@ const rowToEvent = (session: string, row: Record<string, unknown>): FluxEvent =>
     throw new DaemonError('internal', `stored event ${String(row['seq'])} is invalid`);
   }
   return candidate;
+};
+
+const newestOfType = (db: DatabaseSync): EventLog['lastOfType'] => {
+  const newest = db.prepare(
+    'SELECT seq, ts, type, payload, parent FROM events WHERE session = ? AND type = ? ORDER BY seq DESC LIMIT 1',
+  );
+  return (session, type) => {
+    const row = newest.get(session, type);
+    return row === undefined ? null : rowToEvent(session, row);
+  };
 };
 
 export const createEventLog = (options: EventLogOptions): EventLog => {
@@ -96,5 +109,5 @@ export const createEventLog = (options: EventLogOptions): EventLog => {
     return { events, complete: rows.length <= limit };
   };
 
-  return { append, read, lastSeq };
+  return { append, read, lastSeq, lastOfType: newestOfType(db) };
 };

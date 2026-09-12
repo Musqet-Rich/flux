@@ -12,6 +12,13 @@ test('isString', () => {
   expect(isString(null)).toBe(false);
 });
 
+test('isFilledString wants at least one character', () => {
+  expect(guards.isFilledString('a')).toBe(true);
+  expect(guards.isFilledString('')).toBe(false);
+  expect(guards.isFilledString(1)).toBe(false);
+  expect(guards.isFilledString(null)).toBe(false);
+});
+
 test('isBoolean', () => {
   expect(isBoolean(true)).toBe(true);
   expect(isBoolean(false)).toBe(true);

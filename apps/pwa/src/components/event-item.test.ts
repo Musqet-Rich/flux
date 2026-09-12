@@ -267,3 +267,14 @@ test('a user message lists its attachments under the text, thumbnails where fetc
   const bare = mount(EventItem, { props: { event: ev('msg.user', { text: 'plain' }) } });
   expect(bare.find('.files').exists()).toBe(false);
 });
+
+test('an agent.spec row renders as a note naming what runs, should it ever be listed', () => {
+  const full = mount(EventItem, {
+    props: { event: ev('agent.spec', { model: 'claude-fable-5-1', effort: 'high' }) },
+  });
+  expect(full.text()).toBe('Running claude-fable-5-1:high');
+  const bare = mount(EventItem, {
+    props: { event: ev('agent.spec', { model: 'claude-fable-5' }) },
+  });
+  expect(bare.text()).toBe('Running claude-fable-5');
+});

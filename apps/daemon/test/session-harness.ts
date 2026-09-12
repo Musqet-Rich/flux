@@ -14,7 +14,7 @@ import type {
 } from '../src/create-session-supervisor.ts';
 import { createSessionSupervisor } from '../src/create-session-supervisor.ts';
 import type { EventLog } from '../src/create-event-log.ts';
-import type { SessionStore } from '../src/create-session-store.ts';
+import type { SessionRecord, SessionStore } from '../src/create-session-store.ts';
 import { openDatabase } from '../src/open-database.ts';
 import { tempWorktree } from './temp-worktree.ts';
 
@@ -51,9 +51,23 @@ export interface SessionHarness {
   // Every process spawned, for a test that must see one exit.
   agents: AgentProcess[];
   worktree: string;
+  // A scratch stand-in for the agent's `~/.claude` (never created), so the transcript read
+  // stays off the developer's own; a test plants a transcript under it to be found.
+  configDir: string;
   // A fresh supervisor over the stored record, the way the pool makes one after a close.
   reopen: () => SessionSupervisor;
 }
+
+const createRecord = (sessions: SessionStore, worktree: string): SessionRecord =>
+  sessions.create({
+    session: 's1',
+    title: 't',
+    repo: worktree,
+    worktree,
+    branch: 'b',
+    base: 'HEAD',
+    harness: 'claude',
+  });
 
 // `adapter` replaces the real Claude read side, for tests of what the supervisor does with a
 // mapping the fixtures cannot produce; `command` replaces the fixture-replaying fake.
@@ -63,18 +77,13 @@ export const sessionHarness = async (
   command = fake,
 ): Promise<SessionHarness> => {
   const worktree = await tempWorktree();
+  // A sibling of the worktree, never made: the transcript read finds nothing there unless a
+  // test plants a file, and nothing lands in the worktree's git status.
+  const configDir = `${worktree}-claude`;
   const db = openDatabase(':memory:');
   const log = createEventLog({ db });
   const sessions = createSessionStore({ db, lastSeq: log.lastSeq });
-  const record = sessions.create({
-    session: 's1',
-    title: 't',
-    repo: worktree,
-    worktree,
-    branch: 'b',
-    base: 'HEAD',
-    harness: 'claude',
-  });
+  const record = createRecord(sessions, worktree);
   const emitted: FluxEvent[] = [];
   const ephemeral: Ephemeral[] = [];
   const spawns: SpawnRequest[] = [];
@@ -85,7 +94,7 @@ export const sessionHarness = async (
       log,
       sessions,
       git: createGitService(),
-      adapter: adapter ?? claudeAdapter(worktree),
+      adapter: adapter ?? claudeAdapter(worktree, { configDir }),
       spawn: spawner({ spawns, agents }, command, extraEnv),
       emit: (event) => {
         emitted.push(event);
@@ -96,5 +105,16 @@ export const sessionHarness = async (
     });
   const supervisor = build(record);
   const reopen = (): SessionSupervisor => build(sessions.get(record.session));
-  return { supervisor, log, sessions, emitted, ephemeral, spawns, agents, worktree, reopen };
+  return {
+    supervisor,
+    log,
+    sessions,
+    emitted,
+    ephemeral,
+    spawns,
+    agents,
+    worktree,
+    configDir,
+    reopen,
+  };
 };

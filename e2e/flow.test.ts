@@ -98,7 +98,10 @@ const createSession = async (page: Page): Promise<void> => {
   await page.getByRole('button', { name: 'Start agent' }).click();
   await expect(page).toHaveURL(/\/s\/[0-9a-f-]{36}$/u);
   await expect(page.locator('.branch')).toHaveText('e2e/greeting');
-  await expect(page.locator('.spec-chip')).toHaveText('Claude Code · opus · high');
+  // The chip names what runs, not what was typed (ADR 0028): the fake agent's first call names
+  // `claude-fable-5` and no transcript exists for an effort, so `fable-5`, whole on the title.
+  await expect(page.locator('.spec-chip')).toHaveText('fable-5');
+  await expect(page.locator('.spec-chip')).toHaveAttribute('title', 'Claude Code · claude-fable-5');
 };
 
 const firstTurn = async (page: Page): Promise<void> => {
@@ -222,8 +225,9 @@ const wipeStorage = `indexedDB.databases().then((dbs) => Promise.all(dbs.map((db
   }))))`;
 
 // The timeline leaves these in the log unrendered (architecture.md, `SessionView`):
-// `files.changed` now rides the Changes button count instead of a timeline row.
-const hidden = new Set(['raw', 'rate_limit', 'files.changed']);
+// `files.changed` now rides the Changes button count instead of a timeline row, and
+// `agent.spec` the toolbar's chip.
+const hidden = new Set(['raw', 'rate_limit', 'files.changed', 'agent.spec']);
 
 // A wiped device: nothing cached, not even the pairing, so after the reload the timeline can
 // only come from events.sync, from seq 0, and must match what the log holds: one row per
@@ -246,7 +250,7 @@ const reloadCold = async (page: Page, stack: Stack): Promise<void> => {
   expect(rows.map((row) => row.seq)).toEqual(rows.map((_, index) => index + 1));
   expect(rows.filter((row) => !hidden.has(row.type))).toHaveLength(before.length);
   expect(rows.filter((row) => hidden.has(row.type)).map((row) => row.type)).toEqual(
-    expect.arrayContaining(['raw', 'rate_limit', 'files.changed']),
+    expect.arrayContaining(['raw', 'rate_limit', 'files.changed', 'agent.spec']),
   );
 };
 

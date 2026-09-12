@@ -25,6 +25,7 @@ interface Outcome {
   events: EventInput[];
   deltas: string[];
   contexts: { tokens: number; model: string }[];
+  specs: { model: string; effort?: string }[];
   running: number;
   turnsEnded: number;
   filesChanged: number;
@@ -35,6 +36,7 @@ const run = (name: string, state = pending()): Outcome => {
     events: [],
     deltas: [],
     contexts: [],
+    specs: [],
     running: 0,
     turnsEnded: 0,
     filesChanged: 0,
@@ -50,6 +52,7 @@ const run = (name: string, state = pending()): Outcome => {
     outcome.events.push(...mapped.events);
     if (mapped.delta !== undefined) outcome.deltas.push(mapped.delta);
     if (mapped.context !== undefined) outcome.contexts.push(mapped.context);
+    if (mapped.spec !== undefined) outcome.specs.push(mapped.spec);
     if (mapped.running === true) outcome.running += 1;
     if (mapped.turnEnded === true) outcome.turnsEnded += 1;
     if (mapped.filesChanged === true) outcome.filesChanged += 1;
@@ -58,13 +61,14 @@ const run = (name: string, state = pending()): Outcome => {
 };
 
 test('a text reply becomes one msg.assistant and one turn.ended with usage and cost', () => {
-  const { events, deltas, contexts, running, turnsEnded } = run('text-reply');
+  const { events, deltas, contexts, specs, running, turnsEnded } = run('text-reply');
   expect(running).toBe(1);
   expect(deltas.join('')).toBe('pong');
   expect(turnsEnded).toBe(1);
   // The message's input side is that call's prompt: the context in use, keyed by the model
-  // pi resolved the alias to.
+  // pi resolved the alias to, which is also the running spec (pi names no thinking level).
   expect(contexts).toEqual([{ tokens: 3415, model: 'claude-haiku-4-5-20251001' }]);
+  expect(specs).toEqual([{ model: 'claude-haiku-4-5-20251001' }]);
   expect(events).toEqual([
     { type: 'msg.assistant', payload: { text: 'pong' } },
     {

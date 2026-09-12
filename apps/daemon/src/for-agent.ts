@@ -97,5 +97,8 @@ export const forAgent = (
       adapter: opencodeAdapter(record.worktree),
     };
   }
-  return { spawn: claudeSpawn(options, record), adapter: claudeAdapter(record.worktree) };
+  return {
+    spawn: claudeSpawn(options, record),
+    adapter: claudeAdapter(record.worktree, { configDir: options.claudeDir }),
+  };
 };

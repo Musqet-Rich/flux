@@ -74,6 +74,7 @@ test('lists every event type from protocol.md § 5', () => {
       'hook.failed',
       'compact.boundary',
       'manager.acted',
+      'agent.spec',
       'raw',
     ].toSorted(),
   );

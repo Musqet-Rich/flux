@@ -82,3 +82,19 @@ test('keeps the parent of a subagent event and none for a top-level one', () => 
   expect(readChild?.parent).toBe('toolu_1');
   expect(readTop).not.toHaveProperty('parent');
 });
+
+test('lastOfType finds the newest event of a type in one session, or none', () => {
+  const log = setup();
+  expect(log.lastOfType('s1', 'agent.spec')).toBeNull();
+  log.append('s1', { type: 'agent.spec', payload: { model: 'a' } });
+  log.append('s1', { type: 'msg.user', payload: { text: 'hi' } });
+  log.append('s1', { type: 'agent.spec', payload: { model: 'b', effort: 'high' } });
+  log.append('s2', { type: 'agent.spec', payload: { model: 'c' } });
+  expect(log.lastOfType('s1', 'agent.spec')).toMatchObject({
+    seq: 3,
+    type: 'agent.spec',
+    payload: { model: 'b', effort: 'high' },
+  });
+  expect(log.lastOfType('s1', 'msg.assistant')).toBeNull();
+  expect(log.lastOfType('s2', 'agent.spec')?.payload).toEqual({ model: 'c' });
+});

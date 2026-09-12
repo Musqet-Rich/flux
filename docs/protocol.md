@@ -193,6 +193,7 @@ type FluxEvent =
       }
     >
   | Envelope<'rate_limit', { windows: RateWindow[] }> // emitted when the agent reports a change
+  | Envelope<'agent.spec', { model: string; effort?: string }> // what the agent reports it is running (ADR 0028); logged when it changes
 
   // operator interaction, owned by flux tools
   | Envelope<'ask', { askId: string; question: string; options?: string[]; timeoutAt: string }>
@@ -310,6 +311,7 @@ Rules:
 - `pr.published` is logged when the agent opens a pull request itself and when the operator opens one through `git.pr`, so a session's PR is always the latest `pr.published` in its log. `repo` and `identifier` are empty strings when the URL is not a GitHub pull request URL.
 - `hook.failed` is logged only for a hook whose outcome is not `success`; `stderr` is capped at 2 KiB by the adapter. `exitCode` is absent when the agent did not report one.
 - `manager.acted` is appended to the **target** session's log each time a manager agent (ADR 0025) successfully runs a mutating verb against another session: `open` (on the newly created session), `send`, `close` (archive) or `read`. `list` is read-only, has no single target and is not audited, so it is not an `action` value. `actor` is the manager's own session; `detail` is a short human-readable line. It is additive (§ 8): a daemon that predates it never emits it, and a device that predates it renders it as an opaque row.
+- `agent.spec` is what the agent reports it is running, as against the configured `model`/`effort` on `SessionSummary` (§ 7), which are what the session was asked for: `model` is the model id as the harness names it on its stream (Claude Code's `message_start` lines, the resolved id rather than the configured name on `init`; pi's assistant `message_end`; opencode names none), and `effort` is the level when the box can learn it — for Claude Code, from the newest assistant line of the transcript it writes under its projects directory, read at each turn's end, since its stream never says (ADR 0028); absent when unknown, which is not the same as none: a row without an effort never unsays the effort on record. The box logs a row only when the pair differs from the last one in the session's log (a model alone differing by its model only), so the latest `agent.spec` in a log is the current spec and a session's first turn typically logs one row at its first model call (model alone) and one at its end (model and effort, once the transcript has a line). The device shows it as a chip in the toolbar and keeps it out of the timeline. Additive (§ 8): a daemon that predates it never emits it, and a device that predates it renders it as an opaque row.
 - `compact.boundary` is logged once when Claude Code finishes compacting the conversation (a `/compact` turn, or an automatic compaction), carrying the before/after context sizes and how long it took. `result` is read from the `compact_result` on the separate status line Claude emits for the compaction (`success`, `failure`; an open set), defaulting to `success` when that line was not seen. The compaction is a black box with no incremental progress, so the device infers an indeterminate "Compacting…" indicator client-side — the session is `running`, the latest top-level `msg.user` is exactly `/compact`, and no `compact.boundary` has arrived since — and this event ends it. Additive (§ 8): a daemon that predates it never emits it, and a device that predates it renders it as an opaque row.
 
 ## 6. Ephemeral messages
@@ -412,7 +414,7 @@ interface SessionSummary {
   repo: string;
   branch: string;
   harness: 'claude' | 'pi' | 'opencode';
-  model?: string; // the configured model the session was spawned with (ADR 0023); absent on the box's default. Distinct from `agent.context.model`, the running model
+  model?: string; // the configured model the session was spawned with (ADR 0023); absent on the box's default. Distinct from the running model, the log's latest `agent.spec` (§ 5)
   effort?: string; // the configured effort the session was spawned with (ADR 0023); absent on the box's default
   state: 'idle' | 'running' | 'waiting_user' | 'ended';
   lastSeq: number;
