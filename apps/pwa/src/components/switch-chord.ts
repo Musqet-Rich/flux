@@ -1,5 +1,6 @@
 import type { SwitchKey } from '../store/store-state.ts';
 import { enterKey } from './enter-key.ts';
+import { inText } from './in-text.ts';
 
 // The keyboard's way between session tabs, under the device's choice (store/switch-key.ts):
 // the chosen chord with → or ↓ steps to the next tab, with ← or ↑ to the one before, wrapping
@@ -52,11 +53,6 @@ const direction = (key: string, vertical: boolean): -1 | 0 | 1 => {
   if (key === (vertical ? 'ArrowDown' : 'ArrowRight')) return 1;
   return key === (vertical ? 'ArrowUp' : 'ArrowLeft') ? -1 : 0;
 };
-
-const inText = (target: EventTarget | null): boolean =>
-  target instanceof HTMLTextAreaElement ||
-  target instanceof HTMLInputElement ||
-  (target instanceof HTMLElement && target.isContentEditable);
 
 const matches = (event: KeyboardEvent, keys: Held): boolean =>
   event.metaKey === keys.meta &&

@@ -44,3 +44,24 @@ test('Esc interrupts the running agent unless the key was consumed or the agent 
   expect(box.calls('agent.interrupt')).toHaveLength(2);
   store.stop();
 });
+
+// ⌃⌥M puts the caret in the composer from anywhere on the screen, and the box's title says so.
+test('the focus chord reaches the composer', async () => {
+  const { store } = await pairedStore([]);
+  const wrapper = mount(SessionView, { props: { store, session: 's1' }, attachTo: document.body });
+  await until(() => store.state.logs['s1'] !== undefined);
+  const box = wrapper.find('textarea').element;
+  expect(box.title).toMatch(/^Message the agent \((⌃⌥M|Ctrl\+Alt\+M)\)$/u);
+  const chord = new KeyboardEvent('keydown', {
+    key: 'm',
+    code: 'KeyM',
+    ctrlKey: true,
+    altKey: true,
+    cancelable: true,
+  });
+  window.dispatchEvent(chord);
+  expect(chord.defaultPrevented).toBe(true);
+  expect(document.activeElement).toBe(box);
+  box.blur();
+  wrapper.unmount();
+});

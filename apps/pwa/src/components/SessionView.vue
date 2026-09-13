@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
+import { useFocusChord } from '../composables/useFocusChord.ts';
 import { useSessionTimeline } from '../composables/useSessionTimeline.ts';
 import type { Store } from '../store/create-store.ts';
 import { pendingComments } from '../store/pending-comments.ts';
@@ -20,6 +21,12 @@ const props = defineProps<{ store: Store; session: string }>();
 defineEmits<{ changes: []; files: []; closed: [] }>();
 
 const list = ref<InstanceType<typeof SessionTimeline> | null>(null);
+const composer = ref<InstanceType<typeof Composer> | null>(null);
+// ⌃⌥M anywhere on the screen puts the caret in the composer, while main's chat has one.
+useFocusChord(
+  computed(() => composer.value?.box ?? null),
+  'Message the agent',
+);
 
 const log = computed(() => props.store.state.logs[props.session]);
 const events = computed(() => log.value?.events ?? []);
@@ -182,6 +189,7 @@ watch(
     />
     <Composer
       v-if="onMain"
+      ref="composer"
       :store="store"
       :session="session"
       :comments="comments"
