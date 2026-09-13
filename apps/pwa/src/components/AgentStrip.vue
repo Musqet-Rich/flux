@@ -108,7 +108,7 @@ const tone = (status: string): string => {
 
 .type {
   flex: none;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-code);
 }
 
 .description {

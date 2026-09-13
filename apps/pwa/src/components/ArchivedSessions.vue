@@ -129,7 +129,7 @@ summary {
 
 .branch {
   color: var(--muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-code);
   font-size: 0.8rem;
 }
 

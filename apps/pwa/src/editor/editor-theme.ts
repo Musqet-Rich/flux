@@ -39,7 +39,7 @@ const spec = {
     backgroundColor: 'var(--bg)',
     color: 'var(--fg)',
   },
-  '.cm-scroller': { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' },
+  '.cm-scroller': { fontFamily: 'var(--font-code)' },
   // Neither editor uses drawSelection(), so the caret and the selection are the browser's
   // own: caret-color and ::selection are what style them, not .cm-cursor or
   // .cm-selectionBackground.

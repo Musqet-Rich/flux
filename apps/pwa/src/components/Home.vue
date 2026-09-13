@@ -88,8 +88,6 @@ const onPair = (relayUrl: string, fragment: string): void => {
 </template>
 
 <style scoped>
-@import '../styles/fonts.css';
-
 .home {
   --flux-accent: oklch(0.85 0.19 145);
   --flux-sans: 'Space Grotesk', system-ui, sans-serif;

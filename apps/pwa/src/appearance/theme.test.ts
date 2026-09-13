@@ -22,9 +22,23 @@ test('a theme parses from its JSON and copies back out the same', () => {
 });
 
 test('a copied theme lays its keys out in token order, whatever order they came in', () => {
-  const parsed = themeOf(theme.parse('{"dark":{"warn":"#fff","bg":"#000"},"name":"x","light":{}}'));
-  expect(Object.keys(parsed)).toEqual(['name', 'light', 'dark']);
+  const parsed = themeOf(
+    theme.parse(
+      '{"fonts":{"code":"Nova Mono","text":"Sen"},"dark":{"warn":"#fff","bg":"#000"},"name":"x","light":{}}',
+    ),
+  );
+  expect(Object.keys(parsed)).toEqual(['name', 'light', 'dark', 'fonts']);
   expect(keysOf(parsed.dark)).toEqual(['bg', 'warn']);
+  expect(keysOf(parsed.fonts)).toEqual(['text', 'code']);
+  expect(parsed.fonts).toEqual({ text: 'Sen', code: 'Nova Mono' });
+});
+
+// The JSON may come from a device that ships a family this one does not.
+test('a family is any name, trimmed, shipped or not', () => {
+  expect(theme.fromValue({ name: 'x', fonts: { text: ' Comic Sans ' } })).toEqual({
+    ok: true,
+    theme: { name: 'x', fonts: { text: 'Comic Sans' } },
+  });
 });
 
 test('the default theme survives its own JSON', () => {
@@ -41,7 +55,28 @@ const refused: [string, string, string][] = [
   [
     'a key that is not part of a theme',
     '{"name":"x","dusk":{}}',
-    'dusk is not part of a theme: name, light, dark',
+    'dusk is not part of a theme: name, light, dark, fonts',
+  ],
+  [
+    'fonts that are not an object',
+    '{"name":"x","fonts":"Sen"}',
+    'fonts must be an object: {"text": ..., "code": ...}',
+  ],
+  [
+    'a part that is not one',
+    '{"name":"x","fonts":{"mono":"Sen"}}',
+    'fonts.mono is not a part: text, code',
+  ],
+  ['a blank family', '{"name":"x","fonts":{"code":" "}}', 'fonts.code must be a family name'],
+  [
+    'a family that is not a name',
+    '{"name":"x","fonts":{"text":7}}',
+    'fonts.text must be a family name',
+  ],
+  [
+    'a family nobody typed',
+    `{"name":"x","fonts":{"text":"${'x'.repeat(65)}"}}`,
+    'fonts.text must be a family name',
   ],
   [
     'a scheme that is not an object',
@@ -111,6 +146,21 @@ test('the properties a theme sets are a light-dark pair per token, the default f
   expect(css['--muted']).toBe('light-dark(#5c6472, #8b93a1)');
   expect(css['--ansi-1']).toBe('light-dark(#b3283c, #f7768e)');
   expect(css['--ansi-15']).toBe('light-dark(#1a1d24, #ffffff)');
+});
+
+const withFonts = { ...nord, fonts: { code: 'Kode Mono' } };
+
+test('a copy folds the fonts chosen into the theme, or no fonts key when none is', () => {
+  expect(theme.withFonts(nord, { code: 'Kode Mono' })).toEqual(withFonts);
+  expect(theme.withFonts(withFonts, { text: 'Sen' })).toEqual({ ...nord, fonts: { text: 'Sen' } });
+  expect(theme.withFonts(withFonts, {})).toEqual(nord);
+  // The theme given is left as it was.
+  expect(withFonts.fonts).toEqual({ code: 'Kode Mono' });
+});
+
+test('a paste keeps the colours as the theme, the fonts taken out', () => {
+  expect(theme.colours(withFonts)).toEqual(nord);
+  expect(Object.keys(theme.css(withFonts))).toHaveLength(27);
 });
 
 test('a theme with ANSI colours sets those in the pair', () => {

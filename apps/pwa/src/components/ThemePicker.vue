@@ -11,7 +11,9 @@ import { writeClipboard } from './write-clipboard.ts';
 // clipboard (the default included, which is the template a new theme starts from), and a
 // Paste, which takes one from the clipboard, applies it, or says what was wrong with it. A
 // pasted theme shows in the picker under its own name, marked so it is not mistaken for a
-// preset of the same name, until another is chosen.
+// preset of the same name, until another is chosen. The device's fonts (FontPicker) ride in
+// the JSON: Copy folds them in, and Paste takes them out and applies them, or takes them away
+// when the theme pasted names none, since a shared theme is always the whole thing.
 
 const props = defineProps<{ appearance: Appearance }>();
 
@@ -46,7 +48,8 @@ const pick = (event: Event): void => {
 };
 
 const copy = async (): Promise<void> => {
-  status.value = (await writeClipboard(text.value)) ? 'Copied' : 'Copy failed';
+  const shared = spec.withFonts(current.value ?? spec.default, props.appearance.choices.fonts);
+  status.value = (await writeClipboard(spec.stringify(shared))) ? 'Copied' : 'Copy failed';
 };
 
 // Missing off HTTPS, and refused until the operator allows it (a permission on Chrome, a
@@ -71,7 +74,8 @@ const paste = async (): Promise<void> => {
     status.value = `Not a theme: ${parsed.reason}`;
     return;
   }
-  props.appearance.setTheme(parsed.theme);
+  props.appearance.setTheme(spec.colours(parsed.theme));
+  props.appearance.setFonts(parsed.theme.fonts ?? {});
   status.value = `${parsed.theme.name} applied`;
 };
 </script>

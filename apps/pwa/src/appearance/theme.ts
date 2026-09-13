@@ -1,3 +1,6 @@
+import type { Fonts } from './fonts.ts';
+import { fonts } from './fonts.ts';
+
 // A theme (ADR 0030): one JSON object an operator copies out of Settings and pastes in on
 // another device. It names itself and gives a `light` and a `dark` set of the eleven colour
 // tokens in styles/base.css, each set optionally with the sixteen ANSI colours a command's
@@ -5,7 +8,10 @@
 // (`#rgb`, `#rrggbb`, `#rrggbbaa`): every palette in the wild is published that way, one
 // pattern checks it without a browser, and a value that is not a colour cannot ride into the
 // stylesheet. A theme that does not parse is refused whole, with a reason naming the key, not
-// repaired: the operator is looking at the JSON when it fails and can fix it.
+// repaired: the operator is looking at the JSON when it fails and can fix it. The JSON also
+// carries `fonts`, the family for text and for code, which on the device is a choice of its
+// own beside the theme (fonts.ts, appearance.ts): a theme's colours and its fonts are one
+// object for sharing and two controls in Settings.
 
 const tokens = [
   'bg',
@@ -34,6 +40,8 @@ export interface Theme {
   name: string;
   light?: SchemeColours;
   dark?: SchemeColours;
+  // Carried for sharing only: the choice in force is the device's own (appearance.ts).
+  fonts?: Fonts;
 }
 
 export interface Parsed {
@@ -174,14 +182,16 @@ const readColours = (at: string, value: unknown): { colours: SchemeColours } | R
   return { colours };
 };
 
+const keys = ['name', 'light', 'dark', 'fonts'];
+
 // A theme from a value already parsed from JSON: what the device stored, or a preset.
 const fromValue = (value: unknown): Parsed | Refused => {
   if (!isRecord(value)) {
     return refused('a theme is an object: {"name": ..., "light": {...}, "dark": {...}}');
   }
   for (const key of Object.keys(value)) {
-    if (key !== 'name' && key !== 'light' && key !== 'dark') {
-      return refused(`${shown(key)} is not part of a theme: name, light, dark`);
+    if (!keys.includes(key)) {
+      return refused(`${shown(key)} is not part of a theme: ${keys.join(', ')}`);
     }
   }
   const name = typeof value['name'] === 'string' ? value['name'].trim() : '';
@@ -192,6 +202,11 @@ const fromValue = (value: unknown): Parsed | Refused => {
     const read = readColours(scheme, value[scheme]);
     if ('reason' in read) return read;
     theme[scheme] = read.colours;
+  }
+  if ('fonts' in value) {
+    const read = fonts.read(value['fonts']);
+    if (!read.ok) return read;
+    theme.fonts = read.fonts;
   }
   return { ok: true, theme };
 };
@@ -211,9 +226,28 @@ const parse = (text: string): Parsed | Refused => {
 // two copies of one theme are the same text.
 const stringify = (theme: Theme): string => JSON.stringify(theme, null, 2);
 
+// The theme's colours alone, what a paste keeps as the theme once its fonts are taken out.
+const colours = (theme: Theme): Theme => {
+  const bare: Theme = { name: theme.name };
+  for (const scheme of schemes) {
+    const set = theme[scheme];
+    if (set !== undefined) bare[scheme] = set;
+  }
+  return bare;
+};
+
+// The theme with the device's fonts folded in, what a copy shares; no key at all when neither
+// family is chosen, so the JSON says only what was chosen.
+const withFonts = (theme: Theme, chosen: Fonts): Theme => {
+  const shared = colours(theme);
+  if (fonts.parts.some((part) => chosen[part] !== undefined)) shared.fonts = chosen;
+  return shared;
+};
+
 // The custom properties a theme sets on the root, each a `light-dark()` pair like the
 // stylesheet's own, with the default's value wherever the theme said nothing: a pair needs
-// both values, and a stylesheet cannot be asked for one side of its own.
+// both values, and a stylesheet cannot be asked for one side of its own. The fonts are the
+// device's own choice and set apart (fonts.ts).
 const css = (theme: Theme): Record<string, string> => {
   const light = theme.light ?? {};
   const dark = theme.dark ?? {};
@@ -235,5 +269,7 @@ export const theme: {
   fromValue: typeof fromValue;
   parse: typeof parse;
   stringify: typeof stringify;
+  withFonts: typeof withFonts;
+  colours: typeof colours;
   css: typeof css;
-} = { tokens, default: defaultTheme, fromValue, parse, stringify, css };
+} = { tokens, default: defaultTheme, fromValue, parse, stringify, withFonts, colours, css };
