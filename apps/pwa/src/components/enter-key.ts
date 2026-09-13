@@ -44,7 +44,8 @@ const newline = (box: HTMLTextAreaElement): void => {
 // the break has been judged or another key has gone down; an autocorrect committing under the
 // same keystroke, just before its break, leaves it be. One slot serves every message box
 // because a keydown and its `beforeinput` are back to back; a caller that swallows a keydown
-// before calling `keydown` (the slash list) also stops its break, so the slot is not consulted.
+// before calling `keydown` (the slash list, the history's arrows) also stops its break, so the
+// slot is not consulted, and the next keydown to reach `keydown` clears it.
 let pending: SendKey | 'none' | null = null;
 
 // A keydown in `box`: true when the caller should send. A ⌘, Ctrl or ⌥ Enter is consumed here,
