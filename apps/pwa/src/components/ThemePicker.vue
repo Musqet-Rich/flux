@@ -3,7 +3,6 @@ import { computed, ref } from 'vue';
 
 import type { Appearance } from '../appearance/appearance.ts';
 import { presets } from '../appearance/presets.ts';
-import type { Theme } from '../appearance/theme.ts';
 import { theme as spec } from '../appearance/theme.ts';
 import { writeClipboard } from './write-clipboard.ts';
 
@@ -12,9 +11,9 @@ import { writeClipboard } from './write-clipboard.ts';
 // clipboard (the default included, which is the template a new theme starts from), and a
 // Paste, which takes one from the clipboard, applies it, or says what was wrong with it. A
 // pasted theme shows in the picker under its own name, marked so it is not mistaken for a
-// preset of the same name, until another is chosen. The fonts are part of the theme JSON
-// but picked by FontPicker: a pick here keeps the fonts in force, so what this picker tells
-// apart is the colours, and Default with fonts chosen is a copy of the default with them.
+// preset of the same name, until another is chosen. The device's fonts (FontPicker) ride in
+// the JSON: Copy folds them in, and Paste takes them out and applies them, or takes them away
+// when the theme pasted names none, since a shared theme is always the whole thing.
 
 const props = defineProps<{ appearance: Appearance }>();
 
@@ -23,14 +22,12 @@ const pastedValue = 'pasted';
 
 const current = computed(() => props.appearance.choices.theme);
 const text = computed(() => spec.stringify(current.value ?? spec.default));
-// A preset chosen is stored as its own copy, so the one in force is found by its colours.
+// A preset chosen is stored as its own copy, so the one in force is found by its text.
 const all = Object.values(presets);
-const same = (a: Theme, b: Theme): boolean =>
-  spec.stringify(spec.colours(a)) === spec.stringify(spec.colours(b));
-const selected = computed(() => {
-  if (current.value === null || same(current.value, spec.default)) return defaultValue;
-  return all.find((p) => same(p, current.value ?? p))?.name ?? pastedValue;
-});
+const preset = computed(() => all.find((p) => spec.stringify(p) === text.value));
+const selected = computed(() =>
+  current.value === null ? defaultValue : (preset.value?.name ?? pastedValue),
+);
 const options = computed(() => [
   { value: defaultValue, label: 'Default' },
   ...all.map((p) => ({ value: p.name, label: p.name })),
@@ -46,18 +43,13 @@ const pick = (event: Event): void => {
   if (!(target instanceof HTMLSelectElement)) return;
   const { value } = target;
   if (value === pastedValue) return;
-  const fonts = current.value?.fonts;
-  const picked = all.find((p) => p.name === value);
-  if (picked === undefined) {
-    props.appearance.setTheme(fonts === undefined ? null : spec.withFonts(spec.default, fonts));
-  } else {
-    props.appearance.setTheme(spec.withFonts(picked, fonts));
-  }
+  props.appearance.setTheme(all.find((p) => p.name === value) ?? null);
   status.value = '';
 };
 
 const copy = async (): Promise<void> => {
-  status.value = (await writeClipboard(text.value)) ? 'Copied' : 'Copy failed';
+  const shared = spec.withFonts(current.value ?? spec.default, props.appearance.choices.fonts);
+  status.value = (await writeClipboard(spec.stringify(shared))) ? 'Copied' : 'Copy failed';
 };
 
 // Missing off HTTPS, and refused until the operator allows it (a permission on Chrome, a
@@ -82,7 +74,8 @@ const paste = async (): Promise<void> => {
     status.value = `Not a theme: ${parsed.reason}`;
     return;
   }
-  props.appearance.setTheme(parsed.theme);
+  props.appearance.setTheme(spec.colours(parsed.theme));
+  props.appearance.setFonts(parsed.theme.fonts ?? {});
   status.value = `${parsed.theme.name} applied`;
 };
 </script>

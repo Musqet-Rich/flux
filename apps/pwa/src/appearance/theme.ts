@@ -1,17 +1,17 @@
-import type { Fonts, Part } from './fonts.ts';
+import type { Fonts } from './fonts.ts';
 import { fonts } from './fonts.ts';
 
 // A theme (ADR 0030): one JSON object an operator copies out of Settings and pastes in on
 // another device. It names itself and gives a `light` and a `dark` set of the eleven colour
 // tokens in styles/base.css, each set optionally with the sixteen ANSI colours a command's
-// output may name, and `fonts`, the family for text and the family for code; whatever a
-// theme leaves out keeps the default's value. Colours are hex only (`#rgb`, `#rrggbb`,
-// `#rrggbbaa`): every palette in the wild is published that way, one pattern checks it without
-// a browser, and a value that is not a colour cannot ride into the stylesheet. A family is any
-// name, since the device the JSON came from may ship one this one does not (fonts.ts), and
-// only a family the app ships reaches the stylesheet. A theme that does not parse is refused
-// whole, with a reason naming the key, not repaired: the operator is looking at the JSON when
-// it fails and can fix it.
+// output may name; whatever a theme leaves out keeps the default's value. Colours are hex only
+// (`#rgb`, `#rrggbb`, `#rrggbbaa`): every palette in the wild is published that way, one
+// pattern checks it without a browser, and a value that is not a colour cannot ride into the
+// stylesheet. A theme that does not parse is refused whole, with a reason naming the key, not
+// repaired: the operator is looking at the JSON when it fails and can fix it. The JSON also
+// carries `fonts`, the family for text and for code, which on the device is a choice of its
+// own beside the theme (fonts.ts, appearance.ts): a theme's colours and its fonts are one
+// object for sharing and two controls in Settings.
 
 const tokens = [
   'bg',
@@ -40,6 +40,7 @@ export interface Theme {
   name: string;
   light?: SchemeColours;
   dark?: SchemeColours;
+  // Carried for sharing only: the choice in force is the device's own (appearance.ts).
   fonts?: Fonts;
 }
 
@@ -120,8 +121,7 @@ const defaultTheme: FullTheme = {
 };
 
 const schemes = ['light', 'dark'] as const;
-// A name is what the picker shows, a family what a font picker shows; a paste is the one place
-// a length nobody typed can come from.
+// A name is what the picker shows; a paste is the one place a length nobody typed can come from.
 const nameLength = 64;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -182,32 +182,6 @@ const readColours = (at: string, value: unknown): { colours: SchemeColours } | R
   return { colours };
 };
 
-// A word or two, trimmed: a theme's name, or a family's.
-const readWords = (value: unknown): string | undefined => {
-  const words = typeof value === 'string' ? value.trim() : '';
-  return words === '' || words.length > nameLength ? undefined : words;
-};
-
-const isPart = (key: string): key is Part => fonts.parts.some((part) => part === key);
-
-// The two families, in the fixed order text then code; any name, so long as it is one.
-const readFonts = (value: unknown): { fonts: Fonts } | Refused => {
-  if (!isRecord(value)) return refused('fonts must be an object: {"text": ..., "code": ...}');
-  const given: Fonts = {};
-  for (const [key, family] of Object.entries(value)) {
-    if (!isPart(key)) return refused(`fonts.${shown(key)} is not a part: text, code`);
-    const words = readWords(family);
-    if (words === undefined) return refused(`fonts.${key} must be a family name`);
-    given[key] = words;
-  }
-  const read: Fonts = {};
-  for (const part of fonts.parts) {
-    const family = given[part];
-    if (family !== undefined) read[part] = family;
-  }
-  return { fonts: read };
-};
-
 const keys = ['name', 'light', 'dark', 'fonts'];
 
 // A theme from a value already parsed from JSON: what the device stored, or a preset.
@@ -220,8 +194,8 @@ const fromValue = (value: unknown): Parsed | Refused => {
       return refused(`${shown(key)} is not part of a theme: ${keys.join(', ')}`);
     }
   }
-  const name = readWords(value['name']);
-  if (name === undefined) return refused('name must be a word or two');
+  const name = typeof value['name'] === 'string' ? value['name'].trim() : '';
+  if (name === '' || name.length > nameLength) return refused('name must be a word or two');
   const theme: Theme = { name };
   for (const scheme of schemes) {
     if (!(scheme in value)) continue;
@@ -230,8 +204,8 @@ const fromValue = (value: unknown): Parsed | Refused => {
     theme[scheme] = read.colours;
   }
   if ('fonts' in value) {
-    const read = readFonts(value['fonts']);
-    if ('reason' in read) return read;
+    const read = fonts.read(value['fonts']);
+    if (!read.ok) return read;
     theme.fonts = read.fonts;
   }
   return { ok: true, theme };
@@ -252,8 +226,7 @@ const parse = (text: string): Parsed | Refused => {
 // two copies of one theme are the same text.
 const stringify = (theme: Theme): string => JSON.stringify(theme, null, 2);
 
-// The theme's colours alone, the shape a preset has, so the one in force can be told to be a
-// preset whatever fonts it carries.
+// The theme's colours alone, what a paste keeps as the theme once its fonts are taken out.
 const colours = (theme: Theme): Theme => {
   const bare: Theme = { name: theme.name };
   for (const scheme of schemes) {
@@ -263,19 +236,18 @@ const colours = (theme: Theme): Theme => {
   return bare;
 };
 
-// The theme with these fonts in place of its own, or with none: the colours and the fonts
-// are one JSON for sharing but two controls in Settings, so a preset picked keeps the fonts
-// in force and a family picked keeps the colours.
-const withFonts = (theme: Theme, next?: Fonts): Theme => {
-  const bare = colours(theme);
-  if (next !== undefined) bare.fonts = next;
-  return bare;
+// The theme with the device's fonts folded in, what a copy shares; no key at all when neither
+// family is chosen, so the JSON says only what was chosen.
+const withFonts = (theme: Theme, chosen: Fonts): Theme => {
+  const shared = colours(theme);
+  if (fonts.parts.some((part) => chosen[part] !== undefined)) shared.fonts = chosen;
+  return shared;
 };
 
-// The custom properties a theme sets on the root: each colour a `light-dark()` pair like the
-// stylesheet's own, with the default's value wherever the theme said nothing (a pair needs
-// both values, and a stylesheet cannot be asked for one side of its own), and the two font
-// stacks, the platform's where the theme named no family or one the app does not ship.
+// The custom properties a theme sets on the root, each a `light-dark()` pair like the
+// stylesheet's own, with the default's value wherever the theme said nothing: a pair needs
+// both values, and a stylesheet cannot be asked for one side of its own. The fonts are the
+// device's own choice and set apart (fonts.ts).
 const css = (theme: Theme): Record<string, string> => {
   const light = theme.light ?? {};
   const dark = theme.dark ?? {};
@@ -287,9 +259,6 @@ const css = (theme: Theme): Record<string, string> => {
   }
   for (const [i, [l, d]] of defaultAnsi.entries()) {
     properties[`--ansi-${i}`] = `light-dark(${light.ansi?.[i] ?? l}, ${dark.ansi?.[i] ?? d})`;
-  }
-  for (const part of fonts.parts) {
-    properties[`--font-${part}`] = fonts.stack(part, theme.fonts?.[part]);
   }
   return properties;
 };

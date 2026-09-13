@@ -4,13 +4,14 @@
    wherever it is declared, and a browser downloads a face only when something on the page
    uses it, so declaring twenty families costs nothing until one is chosen.
 
-   The first two are the landing's (Home.vue); the rest are the families Settings offers for
-   text and for code (appearance/fonts.ts lists them, and .github/scripts/check-fonts.sh,
-   run by `pnpm run check`, refuses the two disagreeing). Each file is the Latin block Google
-   Fonts serves for the family, fetched once: one variable file where the family has a weight
-   axis, else the regular and the bold, upright only (a browser slants the upright for
-   italic). The unicode-range is the block's, so a character outside it falls to the platform
-   font without a download. */
+   The twenty are the families Settings offers for text and for code, appearance/fonts.ts
+   lists them, and .github/scripts/check-fonts.sh, run by `pnpm run check`, refuses the two
+   disagreeing; the landing (Home.vue) sets itself in the first two. Each file is the Latin
+   block Google Fonts serves for the family, fetched once: one variable file where the family
+   has a weight axis, else the regular and the bold, upright only (a browser slants the
+   upright for italic). The unicode-range is the block's, so a character outside it falls to
+   the platform font without a download; the block has no box drawing, so a table or a tree a
+   command draws is ruled in the platform's mono whatever family is chosen (ADR 0030). */
 
 @font-face {
   font-family: 'Space Grotesk';

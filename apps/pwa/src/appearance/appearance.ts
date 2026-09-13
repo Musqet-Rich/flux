@@ -1,11 +1,13 @@
 import type { ComputedRef } from 'vue';
 import { computed, reactive, readonly, ref } from 'vue';
 
+import type { Fonts } from './fonts.ts';
+import { fonts as families } from './fonts.ts';
 import type { Theme } from './theme.ts';
 import { theme as themes } from './theme.ts';
 
 // How the app looks on this device (ADR 0030): light or dark, or whichever the system is in,
-// the text size, and the theme, the colours each scheme paints in. All are the device's own,
+// the text size, the theme, the colours each scheme paints in, and the fonts. All are the device's own,
 // like its notification sound and send key, but unlike those they decide the first paint, so
 // they are not in the store: the store's storage is IndexedDB, read after the app is on
 // screen, and a light-scheme device would flash dark on every launch. They live in
@@ -21,6 +23,10 @@ export interface AppearanceChoices {
   fontSize: number;
   // `null` is the default theme: the stylesheet's own colours, nothing set on the root.
   theme: Theme | null;
+  // The family for text and for code, each the platform's own when not chosen. Beside the
+  // theme rather than in it: a preset picked keeps the fonts, a family picked keeps the
+  // colours, and only the JSON a copy shares carries both.
+  fonts: Fonts;
 }
 
 export interface Appearance {
@@ -30,6 +36,7 @@ export interface Appearance {
   setMode: (mode: Mode) => void;
   setFontSize: (px: number) => void;
   setTheme: (theme: Theme | null) => void;
+  setFonts: (fonts: Fonts) => void;
 }
 
 // The slice of `window.localStorage` used; tests hand in a map.
@@ -56,6 +63,7 @@ const defaults: Readonly<AppearanceChoices> = {
   mode: 'system',
   fontSize: fontSize.default,
   theme: null,
+  fonts: {},
 };
 
 const isMode = (value: unknown): value is Mode => modes.some((mode) => mode === value);
@@ -71,12 +79,18 @@ const isFontSize = (value: unknown): value is number =>
   value >= fontSize.min &&
   value <= fontSize.max;
 
-// The theme is the one key a stored value may lack: devices that chose a scheme before there
-// were themes stored none, and must not lose the choice to the upgrade.
+// The theme and the fonts are keys a stored value may lack: devices that chose a scheme before
+// there were themes stored neither, and must not lose the choice to the upgrade.
 const parseTheme = (value: Record<string, unknown>): Theme | null | undefined => {
   if (!('theme' in value) || value['theme'] === null) return null;
   const parsed = themes.fromValue(value['theme']);
   return parsed.ok ? parsed.theme : undefined;
+};
+
+const parseFonts = (value: Record<string, unknown>): Fonts | undefined => {
+  if (!('fonts' in value)) return {};
+  const read = families.read(value['fonts']);
+  return read.ok ? read.fonts : undefined;
 };
 
 // Anything stored that does not parse to the whole shape is ignored, not repaired: the
@@ -89,8 +103,11 @@ const parse = (text: string | null): AppearanceChoices => {
     if (!isRecord(value)) return { ...defaults };
     const { mode, fontSize: size } = value;
     const theme = parseTheme(value);
-    if (!isMode(mode) || !isFontSize(size) || theme === undefined) return { ...defaults };
-    return { mode, fontSize: size, theme };
+    const fonts = parseFonts(value);
+    if (!isMode(mode) || !isFontSize(size) || theme === undefined || fonts === undefined) {
+      return { ...defaults };
+    }
+    return { mode, fontSize: size, theme, fonts };
   } catch {
     return { ...defaults };
   }
@@ -103,13 +120,14 @@ const create = (storage: SyncStorage, system: SystemScheme): Appearance => {
   system.onChange((dark) => {
     systemDark.value = dark;
   });
-  // The default theme is stored as no key at all, the shape a device from before themes wrote.
+  // The default theme and the platform fonts are stored as no key at all, the shape a device
+  // from before themes wrote.
   const save = (): void => {
-    const { mode, fontSize: size, theme } = choices;
-    storage.setItem(
-      storageKey,
-      JSON.stringify(theme === null ? { mode, fontSize: size } : choices),
-    );
+    const { mode, fontSize: size, theme, fonts } = choices;
+    const stored: Record<string, unknown> = { mode, fontSize: size };
+    if (theme !== null) stored['theme'] = theme;
+    if (families.parts.some((part) => fonts[part] !== undefined)) stored['fonts'] = fonts;
+    storage.setItem(storageKey, JSON.stringify(stored));
   };
   return {
     choices: readonly(choices),
@@ -128,6 +146,10 @@ const create = (storage: SyncStorage, system: SystemScheme): Appearance => {
     },
     setTheme: (theme) => {
       choices.theme = theme;
+      save();
+    },
+    setFonts: (fonts) => {
+      choices.fonts = fonts;
       save();
     },
   };

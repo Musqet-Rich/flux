@@ -1,6 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, expect, test, vi } from 'vitest';
-import { nextTick } from 'vue';
 
 import { fakeAppearance } from '../../test/fake-appearance.ts';
 import { presets } from '../appearance/presets.ts';
@@ -56,26 +55,43 @@ test('a chosen preset is recognised as itself when the picker opens again', () =
 
 const fonts = { text: 'Sen', code: 'Kode Mono' };
 
-test('a theme is told apart by its colours, so fonts chosen leave it the preset it is', async () => {
+test('a pick leaves the fonts chosen as they are', async () => {
   const a = fakeAppearance();
-  a.setTheme({ ...nord, fonts });
+  a.setFonts(fonts);
   const wrapper = mount(ThemePicker, { props: { appearance: a } });
-  expect(wrapper.find<HTMLSelectElement>('#flux-theme').element.value).toBe('Nord');
-  a.setTheme({ ...theme.default, fonts });
-  await nextTick();
-  expect(wrapper.find<HTMLSelectElement>('#flux-theme').element.value).toBe('default');
+  await wrapper.find('#flux-theme').setValue('Solarized');
+  expect(a.choices.theme).toEqual(presets.solarized);
+  expect(a.choices.fonts).toEqual(fonts);
 });
 
-test('a pick keeps the fonts in force, the default becoming its own copy to carry them', async () => {
+test('Copy folds the fonts chosen into the JSON, so a shared theme carries them', async () => {
+  const { writeText } = clipboard('');
   const a = fakeAppearance();
-  a.setTheme({ ...nord, fonts });
+  a.setTheme(nord);
+  a.setFonts(fonts);
   const wrapper = mount(ThemePicker, { props: { appearance: a } });
-  const select = wrapper.find<HTMLSelectElement>('#flux-theme');
-  await select.setValue('Solarized');
-  expect(a.choices.theme).toEqual({ ...presets.solarized, fonts });
-  await select.setValue('default');
-  expect(a.choices.theme).toEqual({ ...theme.default, fonts });
-  expect(select.element.value).toBe('default');
+  await wrapper.get('button:nth-of-type(1)').trigger('click');
+  await flushPromises();
+  expect(writeText).toHaveBeenCalledWith(theme.stringify({ ...nord, fonts }));
+  expect(wrapper.find<HTMLSelectElement>('#flux-theme').element.value).toBe('Nord');
+});
+
+// A shared theme is the whole thing: what it names of fonts is what is chosen after.
+test('Paste takes the fonts out of the JSON and applies them, or takes them away', async () => {
+  clipboard(JSON.stringify({ ...custom, fonts: { code: 'Nova Mono' } }));
+  const a = fakeAppearance();
+  a.setFonts(fonts);
+  const wrapper = mount(ThemePicker, { props: { appearance: a } });
+  await wrapper.get('button:nth-of-type(2)').trigger('click');
+  await flushPromises();
+  expect(a.choices.theme).toEqual(custom);
+  expect(a.choices.fonts).toEqual({ code: 'Nova Mono' });
+  clipboard(JSON.stringify(nord));
+  await wrapper.get('button:nth-of-type(2)').trigger('click');
+  await flushPromises();
+  expect(a.choices.theme).toEqual(nord);
+  expect(a.choices.fonts).toEqual({});
+  expect(wrapper.find<HTMLSelectElement>('#flux-theme').element.value).toBe('Nord');
 });
 
 test('Copy puts the theme in force on the clipboard as JSON, the default included', async () => {

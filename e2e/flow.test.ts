@@ -70,7 +70,8 @@ const noSidewaysOverflow = async (page: Page): Promise<void> => {
   expect(await page.evaluate(sidewaysOverflow)).toEqual({ app: 0, timeline: 0 });
 };
 
-// Whether the family named has loaded: a woff2 the app serves, or not.
+// True only once the browser has the face, so a file the app fails to serve is caught here
+// rather than by eye.
 const interLoaded = `document.fonts.check('1em Inter')`;
 
 const pair = async (page: Page, stack: Stack): Promise<void> => {

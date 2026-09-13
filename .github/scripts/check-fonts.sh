@@ -1,10 +1,12 @@
 #!/bin/sh
-# The families Settings offers (apps/pwa/src/appearance/fonts.ts) must each have an @font-face
-# in apps/pwa/src/styles/fonts.css, every file the stylesheet names must exist under
-# apps/pwa/public/fonts with the family's OFL beside it, and the platform stacks in fonts.ts
-# must be the ones base.css paints with (ADR 0030): a family listed with no face falls silently
-# to the platform font, a missing file is a 404 only a browser sees, and a stack that differs
-# changes the font on every launch with nothing chosen. Run by `pnpm run check`.
+# The families Settings offers (apps/pwa/src/appearance/fonts.ts) must be exactly the ones
+# declared in apps/pwa/src/styles/fonts.css, every @font-face must name a file of its own
+# family under apps/pwa/public/fonts (the family in kebab case, then -var or a weight) with the
+# family's OFL beside it, and the platform stacks in fonts.ts must be the ones base.css paints
+# with (ADR 0030): a family listed with no face falls silently to the platform font, a face
+# pointed at another family's file by a slip between twenty alike blocks ships the wrong
+# letters, a missing file is a 404 only a browser sees, and a stack that differs changes the
+# font on every launch with nothing chosen. Run by `pnpm run check`.
 #
 #   check-fonts.sh                    the repo's files
 #   check-fonts.sh TS CSS BASE DIR    given files and a font directory (the test)
@@ -27,12 +29,15 @@ awk '
   on && /^\};/ { on = 0 }
   on && match($0, /^    \047[^\047]+\047,$/) { s = $0; sub(/^    \047/, "", s); sub(/\047,$/, "", s); print s }
 ' "$ts" | sort >"$tmp/listed"
-# The families fonts.css declares; the landing's two are declared too, so the stylesheet may
-# have more than the list, never fewer.
-awk 'match($0, /^  font-family: \047[^\047]+\047;$/) { s = $0; sub(/^  font-family: \047/, "", s); sub(/\047;$/, "", s); print s }' "$css" | sort -u >"$tmp/declared"
-if [ "$(comm -23 "$tmp/listed" "$tmp/declared")" != "" ]; then
-  echo "check-fonts: listed in fonts.ts with no @font-face in fonts.css:" >&2
-  comm -23 "$tmp/listed" "$tmp/declared" >&2
+# "family file" per @font-face in fonts.css.
+awk '
+  match($0, /^  font-family: \047[^\047]+\047;$/) { f = $0; sub(/^  font-family: \047/, "", f); sub(/\047;$/, "", f) }
+  match($0, /url\(\047\/fonts\/[^\047]+\047\)/) { print f "\t" substr($0, RSTART + 12, RLENGTH - 14) }
+' "$css" >"$tmp/faces"
+cut -f1 "$tmp/faces" | sort -u >"$tmp/declared"
+if [ "$(comm -3 "$tmp/listed" "$tmp/declared")" != "" ]; then
+  echo "check-fonts: the families fonts.ts lists and fonts.css declares differ (< listed, > declared):" >&2
+  comm -3 "$tmp/listed" "$tmp/declared" >&2
   fail=1
 fi
 if [ "$(wc -l <"$tmp/listed" | tr -d ' ')" -ne 20 ]; then
@@ -40,13 +45,17 @@ if [ "$(wc -l <"$tmp/listed" | tr -d ' ')" -ne 20 ]; then
   fail=1
 fi
 
-# Every file named exists, and its family's licence with it (the file's name up to the last
-# `-`, then -OFL.txt).
-for file in $(awk 'match($0, /url\(\047\/fonts\/[^\047]+\047\)/) { s = substr($0, RSTART + 12, RLENGTH - 14); print s }' "$css"); do
+# Every face names a file of its own family, the file exists, and the family's licence is
+# beside it.
+while IFS="$(printf '\t')" read -r family file; do
+  slug=$(printf '%s' "$family" | tr 'A-Z ' 'a-z-')
+  case $file in
+    "$slug-var.woff2" | "$slug-"[1-9]00.woff2) ;;
+    *) echo "check-fonts: the face for $family names $file, not a file of its own" >&2; fail=1 ;;
+  esac
   if [ ! -f "$dir/$file" ]; then echo "check-fonts: fonts.css names $file, not in public/fonts" >&2; fail=1; fi
-  licence="${file%-*}-OFL.txt"
-  if [ ! -f "$dir/$licence" ]; then echo "check-fonts: $file has no $licence beside it" >&2; fail=1; fi
-done
+  if [ ! -f "$dir/$slug-OFL.txt" ]; then echo "check-fonts: $family has no $slug-OFL.txt beside its file" >&2; fail=1; fi
+done <"$tmp/faces"
 
 # The platform stacks, verbatim in both.
 for part in text code; do

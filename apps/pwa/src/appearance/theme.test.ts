@@ -140,7 +140,7 @@ test('the name is trimmed', () => {
 
 test('the properties a theme sets are a light-dark pair per token, the default filling in', () => {
   const css = theme.css(nord);
-  expect(Object.keys(css)).toHaveLength(29);
+  expect(Object.keys(css)).toHaveLength(27);
   expect(css['--bg']).toBe('light-dark(#f5f6f8, #2e3440)');
   expect(css['--accent-fg']).toBe('light-dark(#ffffff, #2e3440)');
   expect(css['--muted']).toBe('light-dark(#5c6472, #8b93a1)');
@@ -148,24 +148,19 @@ test('the properties a theme sets are a light-dark pair per token, the default f
   expect(css['--ansi-15']).toBe('light-dark(#1a1d24, #ffffff)');
 });
 
-test('the font properties are the platform stacks unless a shipped family is named', () => {
-  const platform = theme.css(nord);
-  expect(platform['--font-text']).toBe("system-ui, -apple-system, 'Segoe UI', sans-serif");
-  expect(platform['--font-code']).toBe('ui-monospace, SFMono-Regular, Menlo, monospace');
-  const css = theme.css({ name: 'x', fonts: { text: 'Inter', code: 'Comic Sans' } });
-  expect(css['--font-text']).toBe("'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif");
-  expect(css['--font-code']).toBe('ui-monospace, SFMono-Regular, Menlo, monospace');
-});
-
 const withFonts = { ...nord, fonts: { code: 'Kode Mono' } };
 
-test('the colours of a theme are the theme without its fonts, and fonts can be put in or taken out', () => {
-  expect(theme.colours(withFonts)).toEqual(nord);
+test('a copy folds the fonts chosen into the theme, or no fonts key when none is', () => {
   expect(theme.withFonts(nord, { code: 'Kode Mono' })).toEqual(withFonts);
-  expect(theme.withFonts(withFonts)).toEqual(nord);
   expect(theme.withFonts(withFonts, { text: 'Sen' })).toEqual({ ...nord, fonts: { text: 'Sen' } });
+  expect(theme.withFonts(withFonts, {})).toEqual(nord);
   // The theme given is left as it was.
   expect(withFonts.fonts).toEqual({ code: 'Kode Mono' });
+});
+
+test('a paste keeps the colours as the theme, the fonts taken out', () => {
+  expect(theme.colours(withFonts)).toEqual(nord);
+  expect(Object.keys(theme.css(withFonts))).toHaveLength(27);
 });
 
 test('a theme with ANSI colours sets those in the pair', () => {
