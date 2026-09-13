@@ -32,6 +32,19 @@ export type PushState = 'unavailable' | 'off' | 'on';
 // The Enter that sends a message on this device (send-key.ts): alone, or with ⌘/Ctrl, ⌥ or ⇧.
 export type SendKey = 'enter' | 'meta' | 'alt' | 'shift';
 
+// The chord that moves between session tabs on this device (switch-key.ts), or none. Named by
+// the modifiers held with ← and →, or ↑ and ↓ for `altUpDown`; `meta` is ⌘ on a Mac and Ctrl
+// elsewhere, as for SendKey.
+export type SwitchKey =
+  | 'ctrlAlt'
+  | 'altUpDown'
+  | 'metaShift'
+  | 'alt'
+  | 'metaAlt'
+  | 'meta'
+  | 'shift'
+  | 'off';
+
 // The agent is inside a thinking block; the count is Claude's running estimate once reported.
 export interface Thinking {
   estimatedTokens: number | null;
@@ -148,6 +161,8 @@ export interface StoreState {
   sound: SoundName;
   // Which Enter sends a message on this device (send-key.ts); `meta` until the operator picks.
   sendKey: SendKey;
+  // The chord that switches session tabs on this device (switch-key.ts); ⌃⌥ until the operator picks.
+  switchKey: SwitchKey;
   sessions: SessionSummary[];
   // Harnesses the box can run, from `hello`; a daemon that predates the field has claude only.
   agents: HarnessKind[];
@@ -227,6 +242,7 @@ export const storeState = (): StoreState =>
     push: 'unavailable',
     sound: 'none',
     sendKey: 'meta',
+    switchKey: 'ctrlAlt',
     sessions: [],
     agents: ['claude'],
     rateWindows: [],

@@ -49,6 +49,8 @@ export const manual: ManualSection[] = [
       'worktree',
       'branch',
       'tab',
+      'keyboard',
+      'shortcut',
       'delete',
       'unarchive',
       'reopen',
@@ -65,7 +67,8 @@ export const manual: ManualSection[] = [
       'back with them, the conversation resuming. Leave both as they are for a plain restart. On',
       'Claude Code, `/effort <level>` typed in the composer changes the effort mid-flight too, and',
       'a level the `--effort` flag takes (low to max) sticks through restarts. Rename sets the',
-      'tab’s title.',
+      'tab’s title. On a keyboard, Ctrl+Alt+← and → (⌃⌥ on a Mac) move between the tabs,',
+      'wrapping at the ends; Settings › This device offers other chords, or none.',
     ].join(' '),
   },
   {
