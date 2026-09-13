@@ -2,28 +2,32 @@
 import { computed } from 'vue';
 
 import type { Store } from '../store/create-store.ts';
-import { switchKey as choice } from '../store/switch-key.ts';
-import { switchKey } from './switch-key.ts';
+import { switchKey } from '../store/switch-key.ts';
+import { switchChord } from './switch-chord.ts';
 
 // This device's "Switch tabs with" choice (store/switch-key.ts): a select that applies on
 // change, there being nothing to save to the box. Options are named in the device's keyboard's
 // terms, and each chord's cost elsewhere (a text box's caret, the browser's own shortcut) is
-// the hint under it, since every arrow chord has one but the default.
+// the hint under it, since every arrow chord has one but the default. On a PC ⌘⌥ and ⌃⌥ are
+// the same keys, so a ⌘⌥ choice made on a Mac shows as the ⌃⌥ row there.
 
 const props = defineProps<{ store: Store }>();
 
-const current = computed(() => props.store.state.switchKey);
-const options = switchKey.offered(switchKey.apple).map((name) => ({
+const { apple } = switchChord;
+const current = computed(() =>
+  props.store.state.switchKey === 'metaAlt' && !apple ? 'ctrlAlt' : props.store.state.switchKey,
+);
+const options = switchChord.offered(apple).map((name) => ({
   name,
-  label: switchKey.label(name, switchKey.apple),
+  label: switchChord.label(name, apple),
 }));
-const hint = computed(() => switchKey.hint(current.value, switchKey.apple));
+const hint = computed(() => switchChord.hint(current.value, apple));
 
 const pick = (event: Event): void => {
   const { target } = event;
   if (!(target instanceof HTMLSelectElement)) return;
   const { value } = target;
-  if (choice.isName(value)) void props.store.setSwitchKey(value);
+  if (switchKey.isName(value)) void props.store.setSwitchKey(value);
 };
 </script>
 

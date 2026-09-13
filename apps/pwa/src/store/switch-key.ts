@@ -1,6 +1,6 @@
 import type { StoreInternals, SwitchKey } from './store-state.ts';
 
-// Which chord moves between session tabs on this device; components/switch-key.ts reads the
+// Which chord moves between session tabs on this device; components/switch-chord.ts reads the
 // keys against it. Every arrow chord has a job somewhere, in the browser (⌘← is Back, ⌘⌥← the
 // tab before) or in a text box (⌥← a word back, ⇧← a character selected), so the choice is
 // the device's, kept in its own storage under `storageKey` like the send key and never sent

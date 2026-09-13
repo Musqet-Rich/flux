@@ -2,6 +2,7 @@ import type { SessionSummary } from '@flux/protocol';
 import { flushPromises, mount } from '@vue/test-utils';
 import { expect, test } from 'vitest';
 
+import { escapeStack } from './escape-stack.ts';
 import SessionTabs from './SessionTabs.vue';
 
 const s = (
@@ -133,6 +134,9 @@ test('a new session is appended and scrolls into view once selected', async () =
   wrapper.unmount();
 });
 
+// Stands in for a modal or sheet open on top of the screen.
+const onTop = (): void => {};
+
 const press = (key: string, init: KeyboardEventInit = {}): KeyboardEvent =>
   new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init });
 
@@ -162,7 +166,7 @@ test('the switch chord steps along the tabs, wrapping, and lands on an end from 
   expect(after.defaultPrevented).toBe(false);
 });
 
-test('a lone tab, a wrong chord and Off select nothing', async () => {
+test('a lone tab, a wrong chord, something open on top and Off select nothing', async () => {
   const sessions = [s('a', '2026-01-01T00:00:00Z', 'idle')];
   const wrapper = mount(SessionTabs, {
     props: { sessions, active: 'a', chord: 'ctrlAlt' },
@@ -170,7 +174,14 @@ test('a lone tab, a wrong chord and Off select nothing', async () => {
   });
   const lone = press('ArrowRight', { ctrlKey: true, altKey: true });
   window.dispatchEvent(lone);
-  expect(lone.defaultPrevented).toBe(true);
+  expect(lone.defaultPrevented).toBe(false);
+  await wrapper.setProps({ sessions: [...sessions, s('b', '2026-01-02T00:00:00Z', 'idle')] });
+  escapeStack.register(onTop);
+  const under = press('ArrowRight', { ctrlKey: true, altKey: true });
+  window.dispatchEvent(under);
+  escapeStack.unregister(onTop);
+  expect(under.defaultPrevented).toBe(false);
+  await wrapper.setProps({ sessions });
   const wrong = press('ArrowRight', { altKey: true });
   window.dispatchEvent(wrong);
   expect(wrong.defaultPrevented).toBe(false);

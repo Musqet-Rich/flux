@@ -2,16 +2,20 @@
 import type { SessionSummary } from '@flux/protocol';
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 
+import { escapeStack } from './escape-stack.ts';
 import type { SwitchKey } from '../store/store-state.ts';
 import Icon from './Icon.vue';
-import { switchKey } from './switch-key.ts';
+import { switchChord } from './switch-chord.ts';
 
 // One tab per session in creation order, plus the way to a new one. The order never follows
 // activity: with two agents working, sorting by last event made the tabs swap under the thumb.
 // Activity is shown instead: the state dot, and a count of events since the tab was last active.
 // The strip is on every paired screen, so its keyboard is too: the device's switch chord
-// (switch-key.ts) steps along the tabs in this order, wrapping, and from a screen with no
-// session (the list, New, Settings) → lands on the first tab and ← on the last.
+// (switch-chord.ts) steps along the tabs in this order, wrapping, and from a screen with no
+// session (the list, New, Settings) → lands on the first tab and ← on the last. Not while
+// something is open on top (the help modal, a rename sheet, a menu: escape-stack.ts), which
+// would be left standing over a screen it does not belong to; and the key is taken only when
+// a switch happens, so with one tab ⌘← is still the browser's Back.
 
 const props = defineProps<{
   sessions: SessionSummary[];
@@ -50,15 +54,15 @@ watch(
 const unread = (s: SessionSummary): number => Math.max(0, s.lastSeq - (seen.get(s.session) ?? 0));
 
 const onKey = (event: KeyboardEvent): void => {
-  const step = switchKey.step(props.chord, event, switchKey.apple);
-  if (step === 0) return;
-  event.preventDefault();
+  const step = switchChord.step(props.chord, event, switchChord.apple);
+  if (step === 0 || escapeStack.open()) return;
   const list = ordered.value;
-  if (list.length === 0) return;
   const at = list.findIndex((s) => s.session === props.active);
   const to = at < 0 ? (step > 0 ? 0 : list.length - 1) : (at + step + list.length) % list.length;
   const target = list[to];
-  if (target !== undefined && target.session !== props.active) emit('select', target.session);
+  if (target === undefined || target.session === props.active) return;
+  event.preventDefault();
+  emit('select', target.session);
 };
 onMounted(() => {
   window.addEventListener('keydown', onKey);

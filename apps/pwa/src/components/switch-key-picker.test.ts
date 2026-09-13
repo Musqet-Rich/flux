@@ -23,7 +23,11 @@ test('offers the chords in the keyboard terms of the device, with the cost of th
   await select.setValue('alt');
   await flushPromises();
   expect(box.store.state.switchKey).toBe('alt');
-  expect(wrapper.find('.hint').text()).toContain('moves by word');
+  expect(wrapper.find('.hint').text()).toContain('Back and Forward');
   expect(select.attributes('aria-describedby')).toBe(wrapper.find('.hint').attributes('id'));
+  // A ⌘⌥ choice made on a Mac is the same keys as ⌃⌥ here, and shows as that row.
+  await box.store.setSwitchKey('metaAlt');
+  await flushPromises();
+  expect(select.element.value).toBe('ctrlAlt');
   box.store.stop();
 });
