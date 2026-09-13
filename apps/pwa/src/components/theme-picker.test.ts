@@ -38,7 +38,7 @@ test('offers the default and the presets, a pick applied at once and the default
   const wrapper = mount(ThemePicker, { props: { appearance: a } });
   const select = wrapper.find<HTMLSelectElement>('#flux-theme');
   expect(select.element.value).toBe('default');
-  expect(optionsOf(wrapper)).toEqual(['Default', 'Nord', 'Solarized']);
+  expect(optionsOf(wrapper)).toEqual(['Default', 'Candlelight', 'Nord', 'Solarized']);
   expect(select.attributes('aria-describedby')).toBe(wrapper.find('.hint').attributes('id'));
   await select.setValue('Nord');
   expect(a.choices.theme).toEqual(nord);
@@ -116,11 +116,17 @@ test('Paste applies a theme from the clipboard, listed under its name as pasted'
   await flushPromises();
   expect(a.choices.theme).toEqual(custom);
   expect(wrapper.find('[role="status"]').text()).toBe('Nord applied');
-  expect(optionsOf(wrapper)).toEqual(['Default', 'Nord', 'Solarized', 'Nord (pasted)']);
+  expect(optionsOf(wrapper)).toEqual([
+    'Default',
+    'Candlelight',
+    'Nord',
+    'Solarized',
+    'Nord (pasted)',
+  ]);
   expect(wrapper.find<HTMLSelectElement>('#flux-theme').element.value).toBe('pasted');
   // Choosing a preset over it takes the pasted entry away.
   await wrapper.find('#flux-theme').setValue('Solarized');
-  expect(optionsOf(wrapper)).toEqual(['Default', 'Nord', 'Solarized']);
+  expect(optionsOf(wrapper)).toEqual(['Default', 'Candlelight', 'Nord', 'Solarized']);
   expect(wrapper.find('[role="status"]').text()).toBe('');
 });
 

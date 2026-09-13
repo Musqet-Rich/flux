@@ -1,15 +1,103 @@
 import type { Theme } from './theme.ts';
 
-// The themes Settings offers besides the default (ADR 0030): two well-known palettes, each with
-// a light and a dark side, as much to show what the JSON looks like as to be chosen. The dark
-// sides are the palettes as published, contrast included (Nord's red on its background is
-// 3:1; Solarized is famously low), except a colour that would vanish outright: Solarized's
-// bright black is its own page, and stands in as its next grey. The light sides are derived:
-// both palettes were drawn for a dark terminal, and their colours do not read on a light
-// page, so each is darkened in its own hue until it holds 4.5:1 against the page, Solarized's
-// whites, which are its light page, becoming its darks. Where a palette has no colour for a
-// token (Nord has no mid grey for muted text, Solarized no third background) the nearest mix
-// in its own hues stands in.
+// The themes Settings offers besides the default (ADR 0030): two well-known palettes and one
+// drawn here, each with a light and a dark side, as much to show what the JSON looks like as
+// to be chosen.
+//
+// Nord's and Solarized's dark sides are the palettes as published, contrast included (Nord's
+// red on its background is 3:1; Solarized is famously low), except a colour that would vanish
+// outright: Solarized's bright black is its own page, and stands in as its next grey. Their
+// light sides are derived: both palettes were drawn for a dark terminal, and their colours do
+// not read on a light page, so each is darkened in its own hue until it holds 4.5:1 against
+// the page, Solarized's whites, which are its light page, becoming its darks. Where a palette
+// has no colour for a token (Nord has no mid grey for muted text, Solarized no third
+// background) the nearest mix in its own hues stands in.
+//
+// Candlelight is for the eyes: by day a warm paper with no white on it anywhere, and by night
+// no blue at all, since blue light is what most delays sleep. Its dark side keeps the blue
+// byte of every colour at zero, which is stricter than a night-shift filter and leaves only
+// the third of the wheel that has no blue, red through amber to green: the text is amber, as
+// on an amber terminal, since any paler "warm white" carries blue; the accent orange, danger
+// red-orange, warn yellow and ok lime; and the greys become dark ambers. The sixteen ANSI
+// colours a command may name are spread along that arc, from red through orange (for blue),
+// yellow, yellow-green (for magenta) and chartreuse (for cyan) to green, a normal and its
+// bright the same hue or a few degrees off, the bright the lighter; red alone lightens by
+// hue, since near the 4.5:1 floor on this page already it has no lighter to go, so its bright
+// is a step toward orange. Danger is a red between the two reds and the accent an orange between the
+// two oranges, so the app's own colours are not quite a command's. Twelve colours on a third
+// of the wheel sit closer than a full palette's: bright red beside orange, and the
+// chartreuses beside the greens, are the closest neighbours. Both sides hold the rule
+// base.css states for its light side, here on both: text, muted, accent, danger, ok and warn
+// at 4.5:1 against the page and both panels, with the accent's own text on it added, and
+// every ANSI colour on the page but the two blacks, which on the dark side sit near it by
+// design (presets.test.ts holds all of it). The presets are in alphabetical order, which is
+// the picker's.
+
+const candlelight: Theme = {
+  name: 'Candlelight',
+  light: {
+    bg: '#f3ead9',
+    fg: '#3a2e1c',
+    muted: '#6b5636',
+    panel: '#f7f0e0',
+    'panel-2': '#e7ddc6',
+    border: '#d3c5a8',
+    accent: '#96460c',
+    'accent-fg': '#f7f0e0',
+    danger: '#ad2a1a',
+    ok: '#3d6a12',
+    warn: '#6e5d00',
+    ansi: [
+      '#3a2e1c',
+      '#ad2a1a',
+      '#3d6a12',
+      '#6e5d00',
+      '#3c5f9a',
+      '#8a4a7a',
+      '#1f7473',
+      '#6b5636',
+      '#726248',
+      '#b03a22',
+      '#4d7222',
+      '#725c10',
+      '#52629a',
+      '#84547f',
+      '#2f6d70',
+      '#2a2115',
+    ],
+  },
+  dark: {
+    bg: '#110b00',
+    fg: '#ffb000',
+    muted: '#b87c00',
+    panel: '#1c1300',
+    'panel-2': '#281c00',
+    border: '#3f2d00',
+    accent: '#ff6c00',
+    'accent-fg': '#1c1300',
+    danger: '#ff3800',
+    ok: '#8fd000',
+    warn: '#ffe000',
+    ansi: [
+      '#3a2800',
+      '#ff2000',
+      '#33b300',
+      '#e6cc00',
+      '#e05a00',
+      '#a8c800',
+      '#6bc400',
+      '#d99800',
+      '#6b4d00',
+      '#ff4000',
+      '#45d600',
+      '#fff000',
+      '#ff8000',
+      '#c4f000',
+      '#80ec00',
+      '#ffb000',
+    ],
+  },
+};
 
 const nord: Theme = {
   name: 'Nord',
@@ -143,4 +231,8 @@ const solarized: Theme = {
   },
 };
 
-export const presets: Readonly<Record<'nord' | 'solarized', Theme>> = { nord, solarized };
+export const presets: Readonly<Record<'candlelight' | 'nord' | 'solarized', Theme>> = {
+  candlelight,
+  nord,
+  solarized,
+};
