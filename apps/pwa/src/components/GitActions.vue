@@ -229,10 +229,6 @@ onMounted(() => {
   align-items: center;
 }
 
-.draft input {
-  width: auto;
-}
-
 .hint {
   margin: 0;
   color: var(--muted);
