@@ -5,6 +5,7 @@ import { computed, onMounted, ref } from 'vue';
 import type { Store } from '../store/create-store.ts';
 import { defaultBranch } from './default-branch.ts';
 import Icon from './Icon.vue';
+import { specHints } from './spec-hints.ts';
 
 // Start an agent: pick a repo (and a harness, when the box has more than one), an optional model
 // and effort, name the branch (a new one is created from the repo's HEAD, an existing one is
@@ -12,11 +13,6 @@ import Icon from './Icon.vue';
 
 const props = defineProps<{ store: Store }>();
 const emit = defineEmits<{ created: [session: string] }>();
-
-// Free-text model and effort with these as hints (ADR 0023 § 6): the vocabularies move every
-// release, so a launch never forces a PWA release. Empty means unset (the box's own default).
-const modelHints = ['opus', 'sonnet', 'fable'];
-const effortHints = ['low', 'medium', 'high', 'xhigh', 'max'];
 
 const repos = ref<Repo[]>([]);
 const repo = ref('');
@@ -149,7 +145,7 @@ onMounted(() => {
       :disabled="busy"
     />
     <datalist id="new-model-hints">
-      <option v-for="m in modelHints" :key="m" :value="m" />
+      <option v-for="m in specHints.model" :key="m" :value="m" />
     </datalist>
     <label for="new-effort">Effort (optional)</label>
     <input
@@ -162,7 +158,7 @@ onMounted(() => {
       :disabled="busy"
     />
     <datalist id="new-effort-hints">
-      <option v-for="e in effortHints" :key="e" :value="e" />
+      <option v-for="e in specHints.effort" :key="e" :value="e" />
     </datalist>
     <label for="new-branch">Branch</label>
     <input id="new-branch" v-model="branch" type="text" autocomplete="off" :disabled="busy" />

@@ -16,9 +16,9 @@ export interface SessionSummary {
   repo: string;
   branch: string;
   harness: HarnessKind;
-  // The configured model and effort the session was spawned with (ADR 0023 § 3), distinct from
-  // the running ones, the log's latest `agent.spec` (ADR 0028). Absent when the box spawned on
-  // its defaults.
+  // The configured model and effort the session spawns with: set at create (ADR 0023 § 3), by
+  // a restart since (ADR 0032) or, the effort, in-band (ADR 0031); distinct from the running
+  // ones, the log's latest `agent.spec` (ADR 0028). Absent when the box spawns on its defaults.
   model?: string;
   effort?: string;
   state: SessionState;
@@ -151,7 +151,15 @@ export interface RpcMethods {
   'sessions.unarchive': { params: { session: string }; result: Record<string, never> };
   // Drops the agent's context, keeps the worktree and the log: the next send starts fresh.
   'sessions.clear': { params: { session: string }; result: Record<string, never> };
-  'sessions.restart': { params: { session: string }; result: Record<string, never> };
+  // Settles the agent's open asks as aborted and closes it; the next `agent.send` respawns it,
+  // resuming its context. `model`/`effort` (ADR 0032) replace the session's configured ones for
+  // that and every later spawn: a string sets one, `null` clears it back to the box's default,
+  // absent keeps it. The same loose free-text as `sessions.create`, trimmed, `bad_params` on a
+  // blank one.
+  'sessions.restart': {
+    params: { session: string; model?: string | null; effort?: string | null };
+    result: Record<string, never>;
+  };
   // Gives the session a new title, logged as `session.renamed`; `bad_params` on a blank one.
   'sessions.rename': { params: { session: string; title: string }; result: Record<string, never> };
   // `attachments` are ids from `attach.end`, each complete and belonging to the session.
@@ -323,6 +331,9 @@ const withSession = (v: unknown): v is Record<string, unknown> & { session: stri
 // of an enum, since the two harnesses' vocabularies differ and both move every release.
 const isFilledString = (v: unknown): v is string => isString(v) && v.length > 0;
 
+// A restart's model/effort: a value to set, or `null` to clear.
+const isSetting = (v: unknown): v is string | null => v === null || isFilledString(v);
+
 export const rpcMethods: ParamGuards = {
   hello: (v): v is RpcMethods['hello']['params'] => isRecord(v) && isInteger(v['protocol'], 1),
   'events.sync': (v): v is RpcMethods['events.sync']['params'] =>
@@ -348,7 +359,8 @@ export const rpcMethods: ParamGuards = {
     isOptional(v['discard'], isBoolean),
   'sessions.unarchive': withSession,
   'sessions.clear': withSession,
-  'sessions.restart': withSession,
+  'sessions.restart': (v): v is RpcMethods['sessions.restart']['params'] =>
+    withSession(v) && isOptional(v['model'], isSetting) && isOptional(v['effort'], isSetting),
   'sessions.rename': (v): v is RpcMethods['sessions.rename']['params'] =>
     withSession(v) && isString(v['title']),
   'agent.send': (v): v is RpcMethods['agent.send']['params'] =>

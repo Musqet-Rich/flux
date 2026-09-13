@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, expect, test } from 'vitest';
 
@@ -42,10 +43,10 @@ const setup = async () => {
   });
   await daemon.start();
   await relay.host();
-  return { repo };
+  return { root, repo };
 };
 
-const { device, call, pair } = daemonDevice({
+const { device, call, pair, untilEvent } = daemonDevice({
   daemon: () => daemon,
   relay: () => relay,
   frames: () => frames,
@@ -115,4 +116,45 @@ test('sessions.create resolves the repo under reposDir in the handler, still ref
   await expect(
     call(d, 'sessions.create', { repo: '../outside', branch: 'flux/y', harness: 'claude' }),
   ).rejects.toThrow('bad_params');
+});
+
+// The fake agent writes its argv to FLUX_FAKE_ARGS_FILE at each start.
+const flagsOf = async (file: string): Promise<string[]> => {
+  const args: unknown = JSON.parse(await readFile(file, 'utf8'));
+  return Array.isArray(args) ? args.filter((a) => typeof a === 'string') : [];
+};
+
+const valueOf = (args: string[], flag: string): string | undefined =>
+  args.includes(flag) ? args[args.indexOf(flag) + 1] : undefined;
+
+test('a restart with a model and effort respawns with the flags; null clears one (ADR 0032)', async () => {
+  const { root, repo } = await setup();
+  const argsFile = join(root, 'args.json');
+  process.env['FLUX_FAKE_ARGS_FILE'] = argsFile;
+  const d = await device();
+  await pair(d);
+  const { session } = (await call(d, 'sessions.create', {
+    repo,
+    branch: 'flux/r1',
+    harness: 'claude',
+    model: 'opus',
+  })) as { session: string };
+  await call(d, 'agent.send', { session, text: 'go' });
+  await untilEvent(d, 'turn.ended');
+  let args = await flagsOf(argsFile);
+  expect([valueOf(args, '--model'), valueOf(args, '--effort')]).toEqual(['opus', undefined]);
+  await call(d, 'sessions.restart', { session, model: 'sonnet', effort: 'low' });
+  await call(d, 'agent.send', { session, text: 'again' });
+  await untilEvent(d, 'turn.ended');
+  args = await flagsOf(argsFile);
+  expect([valueOf(args, '--model'), valueOf(args, '--effort')]).toEqual(['sonnet', 'low']);
+  await call(d, 'sessions.restart', { session, model: null });
+  await call(d, 'agent.send', { session, text: 'once more' });
+  await untilEvent(d, 'turn.ended');
+  args = await flagsOf(argsFile);
+  expect([valueOf(args, '--model'), valueOf(args, '--effort')]).toEqual([undefined, 'low']);
+  const listed = (await call(d, 'sessions.list', {})) as { session: string; model?: string }[];
+  expect(listed.find((s) => s.session === session)).not.toHaveProperty('model');
+  expect(listed.find((s) => s.session === session)).toMatchObject({ effort: 'low' });
+  delete process.env['FLUX_FAKE_ARGS_FILE'];
 });

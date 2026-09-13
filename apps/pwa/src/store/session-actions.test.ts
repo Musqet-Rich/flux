@@ -38,6 +38,20 @@ test('archive and reopen refresh the session list; clear does not', async () => 
   store.stop();
 });
 
+test('restart sends only what changed and refreshes the list, which carries the new spec', async () => {
+  const { store, calls } = await pairedStore([], {
+    'sessions.restart': () => ({}),
+    'sessions.list': () => [{ ...listed, archived: false, model: 'sonnet' }],
+  });
+  expect(await store.restartSession('s1', { model: 'sonnet', effort: null })).toBe(true);
+  expect(calls('sessions.restart')).toEqual([{ session: 's1', model: 'sonnet', effort: null }]);
+  await until(() => store.state.sessions[0]?.model === 'sonnet');
+  expect(await store.restartSession('s1', {})).toBe(true);
+  expect(calls('sessions.restart')[1]).toEqual({ session: 's1' });
+  expect(calls('sessions.list')).toHaveLength(2);
+  store.stop();
+});
+
 const options = { removeWorktree: true, deleteBranch: false, discard: false };
 
 // A box that refuses every delete with `code`.

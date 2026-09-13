@@ -131,6 +131,61 @@ test('clear settles a pending ask through the registry, an orphan in the log, th
   ]);
 });
 
+test('restart closes the agent then sets the model and effort, clears one on null, keeps on absent', async () => {
+  const { worktreesDir, ctx, sessions, closed, create } = await setup();
+  await create('s5', join(worktreesDir, 's5'));
+  sessions.setModel('s5', 'opus');
+  sessions.setEffort('s5', 'high');
+  await sessionLifecycle.restart(ctx, { session: 's5' });
+  expect(closed).toEqual(['s5']);
+  expect(sessions.get('s5')).toMatchObject({ model: 'opus', effort: 'high' });
+  await sessionLifecycle.restart(ctx, { session: 's5', model: ' sonnet ', effort: null });
+  expect(closed).toEqual(['s5', 's5']);
+  expect(sessions.get('s5')).toMatchObject({ model: 'sonnet' });
+  expect(sessions.get('s5')).not.toHaveProperty('effort');
+  await expect(
+    sessionLifecycle.restart(ctx, { session: 's5', effort: '  ' }),
+  ).rejects.toMatchObject({ code: 'bad_params' });
+  expect(sessions.get('s5')).toMatchObject({ model: 'sonnet' });
+  await expect(sessionLifecycle.restart(ctx, { session: 'nope' })).rejects.toMatchObject({
+    code: 'not_found',
+  });
+  expect(closed).toHaveLength(2);
+});
+
+// A send not queued behind the restart (a manager's, over the control socket) must already
+// see the new spec, so the row is written before the agent closes as well as after.
+test('restart writes the spec before the close too', async () => {
+  const { worktreesDir, ctx, sessions, create } = await setup();
+  await create('s6', join(worktreesDir, 's6'));
+  const seen: (string | undefined)[] = [];
+  const closing = {
+    ...ctx,
+    closeSupervisor: (session: string) => {
+      seen.push(sessions.get(session).model);
+      return Promise.resolve();
+    },
+  };
+  await sessionLifecycle.restart(closing, { session: 's6', model: 'opus' });
+  expect(seen).toEqual(['opus']);
+});
+
+// A Claude draining a `/effort` during the close confirms it after the first write (ADR 0031),
+// so the row is written again after the close and the restart's word stands.
+test('restart writes the spec after the close too, over an effort the closing agent confirmed', async () => {
+  const { worktreesDir, ctx, sessions, create } = await setup();
+  await create('s7', join(worktreesDir, 's7'));
+  const confirming = {
+    ...ctx,
+    closeSupervisor: (session: string) => {
+      sessions.setEffort(session, 'ultracode');
+      return Promise.resolve();
+    },
+  };
+  await sessionLifecycle.restart(confirming, { session: 's7', effort: 'medium' });
+  expect(sessions.get('s7').effort).toBe('medium');
+});
+
 test('rename trims the title, stores it and logs it; a blank or oversized title is refused untouched', async () => {
   const { worktreesDir, ctx, sessions, log, create } = await setup();
   await create('s4', join(worktreesDir, 's4'));
