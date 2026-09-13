@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { SessionSummary } from '@flux/protocol';
 
+import type { SwitchKey } from '../store/store-state.ts';
 import Icon from './Icon.vue';
 import SessionTabs from './SessionTabs.vue';
 
@@ -8,7 +9,12 @@ import SessionTabs from './SessionTabs.vue';
 // buttons. Its own component so Shell keeps its dependency budget; `screen` is the route name,
 // so the runner and settings buttons can show which of them is open.
 
-defineProps<{ sessions: SessionSummary[]; active: string | null; screen: string }>();
+defineProps<{
+  sessions: SessionSummary[];
+  active: string | null;
+  chord: SwitchKey;
+  screen: string;
+}>();
 defineEmits<{ select: [session: string]; create: []; runner: []; help: []; settings: [] }>();
 </script>
 
@@ -17,6 +23,7 @@ defineEmits<{ select: [session: string]; create: []; runner: []; help: []; setti
     <SessionTabs
       :sessions="sessions"
       :active="active"
+      :chord="chord"
       @select="$emit('select', $event)"
       @create="$emit('create')"
     />

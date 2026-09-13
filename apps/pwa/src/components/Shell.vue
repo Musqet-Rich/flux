@@ -52,6 +52,7 @@ const enablePush = (): void => {
   <AppHeader
     :sessions="state.sessions"
     :active="active"
+    :chord="state.switchKey"
     :screen="route.name"
     @select="openSession"
     @create="go({ name: 'new' })"

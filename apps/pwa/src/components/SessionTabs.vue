@@ -1,15 +1,24 @@
 <script setup lang="ts">
 import type { SessionSummary } from '@flux/protocol';
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 
+import type { SwitchKey } from '../store/store-state.ts';
 import Icon from './Icon.vue';
+import { switchKey } from './switch-key.ts';
 
 // One tab per session in creation order, plus the way to a new one. The order never follows
 // activity: with two agents working, sorting by last event made the tabs swap under the thumb.
 // Activity is shown instead: the state dot, and a count of events since the tab was last active.
+// The strip is on every paired screen, so its keyboard is too: the device's switch chord
+// (switch-key.ts) steps along the tabs in this order, wrapping, and from a screen with no
+// session (the list, New, Settings) → lands on the first tab and ← on the last.
 
-const props = defineProps<{ sessions: SessionSummary[]; active: string | null }>();
-defineEmits<{ select: [session: string]; create: [] }>();
+const props = defineProps<{
+  sessions: SessionSummary[];
+  active: string | null;
+  chord: SwitchKey;
+}>();
+const emit = defineEmits<{ select: [session: string]; create: [] }>();
 
 // `createdAt` is absent from a daemon older than the field; the id alone still keeps the tabs put.
 const byCreation = (a: SessionSummary, b: SessionSummary): number =>
@@ -39,6 +48,24 @@ watch(
 );
 
 const unread = (s: SessionSummary): number => Math.max(0, s.lastSeq - (seen.get(s.session) ?? 0));
+
+const onKey = (event: KeyboardEvent): void => {
+  const step = switchKey.step(props.chord, event, switchKey.apple);
+  if (step === 0) return;
+  event.preventDefault();
+  const list = ordered.value;
+  if (list.length === 0) return;
+  const at = list.findIndex((s) => s.session === props.active);
+  const to = at < 0 ? (step > 0 ? 0 : list.length - 1) : (at + step + list.length) % list.length;
+  const target = list[to];
+  if (target !== undefined && target.session !== props.active) emit('select', target.session);
+};
+onMounted(() => {
+  window.addEventListener('keydown', onKey);
+});
+onUnmounted(() => {
+  window.removeEventListener('keydown', onKey);
+});
 
 const tabs = ref<HTMLElement[]>([]);
 
