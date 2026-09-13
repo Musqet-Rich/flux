@@ -192,12 +192,9 @@ const commentOnDiff = async (page: Page): Promise<void> => {
   await expect(page.locator('.comment .text')).toHaveText('Say hello instead');
 };
 
-// Which Enter sends, the light scheme and the theme are choices kept on this device, made in
-// Settings and applied at once; the session tab brings the operator back to the composer.
-const chooseEnterToSend = async (page: Page): Promise<void> => {
-  await page.getByRole('button', { name: 'Settings' }).click();
-  // A fresh box has one Agent, the seeded Help; a new row's Manager tick is tick-sized, and
-  // the row is deleted again, leaving nothing to save.
+// In Settings, a fresh box has one Agent, the seeded Help; a new row's Manager tick is
+// tick-sized, and the row is deleted again, leaving nothing to save.
+const addAndDeleteAgent = async (page: Page): Promise<void> => {
   await expect(page.locator('.agent-row')).toHaveCount(1);
   await page.getByRole('button', { name: 'Add agent' }).click();
   await expect(page.locator('.agent-row')).toHaveCount(2);
@@ -207,6 +204,13 @@ const chooseEnterToSend = async (page: Page): Promise<void> => {
   await expect(
     page.locator('.agents-editor').getByRole('button', { name: 'Saved' }),
   ).toBeDisabled();
+};
+
+// Which Enter sends, the light scheme and the theme are choices kept on this device, made in
+// Settings and applied at once; the session tab brings the operator back to the composer.
+const chooseEnterToSend = async (page: Page): Promise<void> => {
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await addAndDeleteAgent(page);
   await page.getByLabel('Send with').selectOption('enter');
   await page.getByLabel('Light or dark').selectOption('light');
   await expect(page.locator('html')).toHaveAttribute('data-scheme', 'light');
