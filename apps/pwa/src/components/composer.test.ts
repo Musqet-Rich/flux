@@ -4,6 +4,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { expect, test } from 'vitest';
 
 import { fakeResizeObserver } from '../../test/fake-resize-observer.ts';
+import { ClientError } from '../client/client-error.ts';
 import { pairedStore } from '../../test/paired-store.ts';
 import { until } from '../../test/until.ts';
 import Composer from './Composer.vue';
@@ -325,4 +326,84 @@ test('the box starts at one line and grows with the draft, on typing and on a se
   wrapper.unmount();
   expect(fakeResizeObserver.disconnected()).toBe(1);
   fakeResizeObserver.uninstall();
+});
+
+// The arrows recall the session's sent messages from the log the store holds (useCommandHistory);
+// a recalled slash command does not open the skill list over the box.
+const up = 'ArrowUp';
+const down = 'ArrowDown';
+const escape = 'Escape';
+test("Up in the box recalls the session's messages, a slash command among them list-free", async () => {
+  const box = await pairedStore([], {
+    'skills.list': () => ({ skills: [{ name: 'review', body: '' }] }),
+  });
+  await box.store.open('s1');
+  const wrapper = mount(Composer, {
+    props: { store: box.store, session: 's1', comments: [], reply: null },
+    attachTo: document.body,
+  });
+  await until(() => box.store.state.skills !== null);
+  await box.relay.emit(box.event(1, 'msg.user', { text: 'first' }));
+  await box.relay.emit(box.event(2, 'msg.user', { text: '/review' }));
+  await until(() => box.store.state.logs['s1']?.events.length === 2);
+  const area = wrapper.find('textarea');
+  await area.trigger('keydown', { key: up });
+  await wrapper.vm.$nextTick();
+  expect(area.element.value).toBe('/review');
+  expect(wrapper.find('.slash-suggest').exists()).toBe(false);
+  await area.trigger('keydown', { key: up });
+  await wrapper.vm.$nextTick();
+  expect(area.element.value).toBe('first');
+  expect(box.store.composer('s1').text).toBe('first');
+  // Typed by hand, the same command opens the list as ever, even after being recalled.
+  await area.setValue('/rev');
+  expect(wrapper.find('.slash-suggest').exists()).toBe(true);
+  await area.trigger('keydown', { key: escape });
+  await area.setValue('');
+  await area.trigger('keydown', { key: up });
+  await area.setValue('/review ');
+  await area.setValue('/review');
+  expect(wrapper.find('.slash-suggest').exists()).toBe(true);
+  // A dismissed list stays dismissed when a Down past the newest puts its draft back.
+  await area.setValue('/re');
+  await area.trigger('keydown', { key: escape });
+  expect(wrapper.find('.slash-suggest').exists()).toBe(false);
+  await area.trigger('keydown', { key: up });
+  await wrapper.vm.$nextTick();
+  expect(area.element.value).toBe('/review');
+  await area.trigger('keydown', { key: down });
+  await wrapper.vm.$nextTick();
+  expect(area.element.value).toBe('/re');
+  expect(wrapper.find('.slash-suggest').exists()).toBe(false);
+  wrapper.unmount();
+  box.store.stop();
+});
+
+// A recalled message the box refused stays as the draft, as any refused message does, rather
+// than giving way to what was typed before the recall.
+test('a recalled message that failed to send is still the draft after leaving', async () => {
+  const box = await pairedStore([], {
+    'agent.send': () => {
+      throw new ClientError('busy', 'the agent is busy');
+    },
+  });
+  await box.store.open('s1');
+  const wrapper = mount(Composer, {
+    props: { store: box.store, session: 's1', comments: [], reply: null },
+    attachTo: document.body,
+  });
+  await box.relay.emit(box.event(1, 'msg.user', { text: 'first' }));
+  await until(() => box.store.state.logs['s1']?.events.length === 1);
+  const area = wrapper.find('textarea');
+  await area.setValue('half typed');
+  await area.trigger('keydown', { key: up });
+  await wrapper.vm.$nextTick();
+  expect(area.element.value).toBe('first');
+  await wrapper.find('form.row').trigger('submit');
+  await until(() => box.calls('agent.send').length === 1);
+  await flushPromises();
+  expect(box.store.composer('s1').text).toBe('first');
+  wrapper.unmount();
+  expect(box.store.composer('s1').text).toBe('first');
+  box.store.stop();
 });

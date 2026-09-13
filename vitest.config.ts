@@ -25,6 +25,7 @@ const pwaDom = [
   // attributes.
   'src/appearance/apply-appearance.test.ts',
   'src/composables/useAutoGrow.test.ts',
+  'src/composables/useCommandHistory.test.ts',
   'src/composables/useDismiss.test.ts',
   'src/composables/useEscape.test.ts',
   'src/composables/useFileDrop.test.ts',

@@ -3,22 +3,22 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
 import type { ReplyTarget } from '../composables/useMessageReply.ts';
 import { useAutoGrow } from '../composables/useAutoGrow.ts';
+import { useCommandHistory } from '../composables/useCommandHistory.ts';
 import { useFileDrop } from '../composables/useFileDrop.ts';
 import type { Store } from '../store/create-store.ts';
 import type { PendingComment } from '../store/pending-comments.ts';
-import AttachmentChips from './AttachmentChips.vue';
-import CommentTray from './CommentTray.vue';
+import ComposerTrays from './ComposerTrays.vue';
 import { enterKey } from './enter-key.ts';
 import Icon from './Icon.vue';
 
-// The message box at the foot of the session screen, with the comments waiting to go with the
-// next message (the parent derives them from the log it owns), the files attached to it (a +
-// button, a drop on the bottom bar, or a paste) and, when the operator picked Reply on a
-// bubble, the message being answered. The draft, text and files, lives in the store so leaving
-// the session keeps it. Sends through the store, which reports failures; a failed send keeps
-// the draft and the reply. Says when it `resized`: the box growing a line, a reply row, the
-// tray, chips or the skill list all take their room from the timeline above, which the screen
-// then keeps at its tail.
+// The message box at the foot of the session screen, with what goes with the next message in
+// the rows above it (ComposerTrays): the comments waiting for it (the parent derives them from
+// the log it owns), the files attached to it (a + button, a drop on the bottom bar, or a paste)
+// and, when the operator picked Reply on a bubble, the message being answered. The draft, text
+// and files, lives in the store so leaving the session keeps it. Sends through the store, which
+// reports failures; a failed send keeps the draft and the reply. Says when it `resized`: the
+// box growing a line, a reply row, the tray, chips or the skill list all take their room from
+// the timeline above, which the screen then keeps at its tail.
 
 const props = defineProps<{
   store: Store;
@@ -33,10 +33,6 @@ const sending = ref(false);
 const box = ref<HTMLTextAreaElement | null>(null);
 const root = ref<HTMLElement | null>(null);
 const picker = ref<HTMLInputElement | null>(null);
-const replyLine = computed(
-  () => props.reply?.text.split('\n').find((line) => line.trim() !== '') ?? '',
-);
-const replyWho = computed(() => (props.reply?.from === 'user' ? 'you' : 'the agent'));
 // Every file must be on the box before the message that names them goes.
 const uploading = computed(() => draft.value.attachments.some((a) => a.status !== 'ready'));
 const blank = computed(() => draft.value.text.trim() === '');
@@ -83,6 +79,7 @@ watch(
 const send = async (): Promise<void> => {
   const text = draft.value.text.trim();
   if (text === '' || sending.value || uploading.value) return;
+  recall.done();
   sending.value = true;
   emit('sent');
   const ok = await props.store.send(props.session, text, props.reply?.seq);
@@ -122,8 +119,16 @@ const suggestions = computed((): string[] => {
 
 const suggestOpen = computed(() => suggestions.value.length > 0 && !dismissed.value);
 
+// A recalled message that is itself a slash command keeps the list closed, or the next Up would
+// move its highlight instead of going on back, and an Enter pick it: the text the history has
+// put in the box, noted as each arrow lands and cleared at the next change of the query, so the
+// same command typed by hand later is a query like any other. A Down past the newest puts the
+// draft back, and a list that draft had was dismissed (or the Up would have gone to it), so it
+// stays that way.
+let recalled: string | null = null;
 watch(query, () => {
-  dismissed.value = false;
+  dismissed.value = draft.value.text === recalled;
+  recalled = null;
   active.value = 0;
 });
 
@@ -150,10 +155,22 @@ const nav = (event: KeyboardEvent): boolean => {
   return true;
 };
 
+// Up and Down at the edge of the text recall the session's past messages (useCommandHistory),
+// after the slash list has had the arrows and before the send key has the Enter.
+const recall = useCommandHistory(
+  () => props.store.state.logs[props.session]?.events ?? [],
+  () => draft.value,
+  box,
+);
+
 // Which Enter sends is the device's choice (enter-key.ts); the rest break the line.
 const ready = computed(() => !blank.value && !sending.value && !uploading.value);
 const key = (event: KeyboardEvent): void => {
   if (nav(event)) return;
+  if (recall.key(event)) {
+    recalled = recall.shown() ?? draft.value.text;
+    return;
+  }
   if (enterKey.keydown(props.store.state.sendKey, ready.value, event, box.value)) void send();
 };
 const lineBreak = (event: InputEvent): void => {
@@ -166,24 +183,14 @@ const sendHint = computed(
 
 <template>
   <div ref="root" class="composer" :class="{ over: drop.over.value }">
-    <CommentTray :comments="comments" @remove="remove" />
-    <div v-if="reply !== null" class="reply">
-      <span class="who">Replying to {{ replyWho }}</span>
-      <span class="line">{{ replyLine }}</span>
-      <button
-        type="button"
-        class="secondary icon-only"
-        aria-label="Cancel reply"
-        title="Cancel reply"
-        @click="$emit('unreply')"
-      >
-        <Icon name="close" />
-      </button>
-    </div>
-    <AttachmentChips
+    <ComposerTrays
+      :comments="comments"
+      :reply="reply"
       :attachments="draft.attachments"
-      @remove="store.removeAttachment(session, $event)"
-      @retry="store.retryAttachment(session, $event)"
+      @remove-comment="remove"
+      @unreply="$emit('unreply')"
+      @remove-attachment="store.removeAttachment(session, $event)"
+      @retry-attachment="store.retryAttachment(session, $event)"
     />
     <ul v-if="suggestOpen" class="slash-suggest" role="listbox">
       <li
@@ -262,35 +269,6 @@ const sendHint = computed(
 .send {
   flex: none;
   padding: 0.55rem 0.7rem;
-}
-
-.reply {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.3rem 0.5rem;
-  border-left: 2px solid var(--accent);
-  background: var(--panel-2);
-  border-radius: var(--radius);
-  font-size: 0.8rem;
-}
-
-.who {
-  flex: none;
-  color: var(--muted);
-}
-
-.line {
-  flex: 1;
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.reply button {
-  padding: 0.15rem 0.4rem;
-  font-size: 0.9rem;
 }
 
 .slash-suggest {
