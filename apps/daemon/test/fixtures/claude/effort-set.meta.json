@@ -1,0 +1,26 @@
+{
+  "code": 0,
+  "signal": null,
+  "args": [
+    "-p",
+    "--input-format",
+    "stream-json",
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--include-partial-messages",
+    "--dangerously-skip-permissions"
+  ],
+  "agent": "Claude Code",
+  "version": "2.1.270",
+  "capturedAt": "2026-09-13",
+  "input": [
+    { "type": "user", "message": { "role": "user", "content": "Reply with the single word ok." } },
+    { "type": "user", "message": { "role": "user", "content": "/effort medium" } },
+    { "type": "user", "message": { "role": "user", "content": "/effort auto" } },
+    { "type": "user", "message": { "role": "user", "content": "/effort ultracode" } },
+    { "type": "user", "message": { "role": "user", "content": "/effort bogus" } },
+    { "type": "user", "message": { "role": "user", "content": "Reply with the single word ok." } }
+  ],
+  "source": "Raw stdout of one `claude -p` process spawned with the daemon's base flags (spawn-claude.ts, without its system prompt and MCP config, and with no model or effort flag; the box's settings.json had effortLevel high) and fed six stream-json user messages: a one-word turn, the operator's `/effort` with a level, `auto`, `ultracode` and an unknown word, then another one-word turn. Each `/effort` is answered without a model call by an `init` line, a synthetic assistant line (model `<synthetic>`) and a `result` with `num_turns` 0; no `message_start` accompanies it. The transcript Claude wrote alongside, read by hand and not kept, carried `effort: high` on the first turn's assistant line and `xhigh` on the last (ultracode's own level). Nothing edited."
+}

@@ -396,3 +396,57 @@ test('a compact_boundary with no metadata or a non-integer count stays other', (
   };
   expect(parseStreamLine(JSON.stringify(bad))?.kind).toBe('other');
 });
+
+// The operator's `/effort <level>` is answered without a model call (fixtures/claude/effort-set:
+// a turn, four commands, a turn): a level set is its own kind, carrying the level and the text,
+// `auto` in its own words too; a level refused stays an assistant line, marked synthetic, the
+// reply shown and nothing taken from it. No `message_start` comes with a command, so nothing
+// names `<synthetic>` as the model.
+const isReply = (line: ReturnType<typeof parseStreamLine>): boolean =>
+  line?.kind === 'effort_set' || line?.kind === 'assistant';
+
+test('an effort set by the operator is its own kind, auto too; a refusal stays assistant', () => {
+  const captured = new URL('../../test/fixtures/claude/effort-set.jsonl', import.meta.url);
+  const parsed = readFileSync(captured, 'utf8')
+    .split('\n')
+    .filter((l) => l.trim() !== '')
+    .map((l) => parseStreamLine(l));
+  const kinds = parsed.map((p) => p?.kind);
+  expect(kinds.filter((k) => k === 'context')).toHaveLength(2);
+  const replies = parsed.filter((p) => isReply(p));
+  expect(replies.map((p) => p?.kind)).toEqual([
+    'assistant',
+    'effort_set',
+    'effort_set',
+    'effort_set',
+    'assistant',
+    'assistant',
+  ]);
+  expect(replies[1]).toEqual({
+    kind: 'effort_set',
+    effort: 'medium',
+    text: 'Set effort level to medium (this session only): Balanced approach with standard implementation and testing',
+  });
+  expect(replies[3]).toMatchObject({ kind: 'effort_set', effort: 'ultracode' });
+  expect(replies[2]).toEqual({
+    kind: 'effort_set',
+    effort: 'auto',
+    text: 'Effort level set to auto (this session only)',
+  });
+  expect(replies[4]).toMatchObject({
+    kind: 'assistant',
+    synthetic: true,
+    blocks: [{ type: 'text', text: expect.stringMatching(/^Invalid argument: bogus/u) }],
+  });
+  // The model's own replies are not marked.
+  expect(replies[0]).toEqual({ kind: 'assistant', blocks: [{ type: 'text', text: 'ok' }] });
+  // The model's own words are never a level set, however they read.
+  const spoken = {
+    type: 'assistant',
+    message: {
+      model: 'claude-fable-5-1',
+      content: [{ type: 'text', text: 'Set effort level to low (this session only)' }],
+    },
+  };
+  expect(parseStreamLine(JSON.stringify(spoken))?.kind).toBe('assistant');
+});

@@ -26,6 +26,9 @@ export interface SpawnRequest {
   cwd: string;
   session: string;
   resume?: string;
+  // The effort to ask for: the session's configured one (ADR 0023 § 3) until the operator sets
+  // another in-band (ADR 0031), kept on the record so every later spawn asks for it too.
+  effort?: string;
 }
 
 // What one agent line means to the supervisor, whichever agent produced it.
@@ -45,6 +48,9 @@ export interface Mapped {
   // What the agent says it is running, whenever it says so (protocol.md § 5 `agent.spec`); the
   // supervisor logs it when it differs from the last one logged, so the mappers need no memory.
   spec?: RunningSpec;
+  // An effort the operator set in-band and the agent confirmed (ADR 0031): the supervisor keeps
+  // it on the record, so the next spawn, whatever its cause, asks for it.
+  chosen?: { effort: string };
 }
 
 export interface RunningSpec {
@@ -106,6 +112,8 @@ interface Context extends SupervisorOptions {
   // The last `agent.spec` in the log, so a repeat from the agent (every `message_start` names
   // the model) is not a row, across daemon restarts too. Null until the agent first says.
   spec: RunningSpec | null;
+  // The effort the next spawn asks for: the record's, updated as the operator chooses.
+  effort: string | undefined;
   agent: AgentProcess | null;
   closing: boolean;
   // Lines are handled strictly in order even though some handlers await git.
@@ -177,6 +185,10 @@ const handleLine = async (ctx: Context, line: string): Promise<void> => {
     });
   }
   for (const event of mapped.events) append(ctx, event);
+  if (mapped.chosen !== undefined && mapped.chosen.effort !== ctx.effort) {
+    ctx.effort = mapped.chosen.effort;
+    ctx.sessions.setEffort(ctx.session, ctx.effort);
+  }
   if (mapped.spec !== undefined && !restates(mapped.spec, ctx.spec)) {
     ctx.spec = mapped.spec;
     append(ctx, { type: 'agent.spec', payload: mapped.spec });
@@ -202,7 +214,8 @@ const handleExit = (ctx: Context, code: number | null, stderr: string): Promise<
 const ensureAgent = (ctx: Context): AgentProcess => {
   if (ctx.agent !== null) return ctx.agent;
   const resume = ctx.agentSessionId === null ? {} : { resume: ctx.agentSessionId };
-  const agent = ctx.spawn({ cwd: ctx.worktree, session: ctx.session, ...resume });
+  const effort = ctx.effort === undefined ? {} : { effort: ctx.effort };
+  const agent = ctx.spawn({ cwd: ctx.worktree, session: ctx.session, ...resume, ...effort });
   agent.onLine((line) => {
     ctx.queue = ctx.queue.then(() => handleLine(ctx, line));
   });
@@ -263,6 +276,7 @@ export const createSessionSupervisor = (options: SupervisorOptions): SessionSupe
     state: options.record.state,
     agentSessionId: options.record.agentSessionId,
     spec: lastSpec(options.log, options.record.session),
+    effort: options.record.effort,
     agent: null,
     closing: false,
     queue: Promise.resolve(),

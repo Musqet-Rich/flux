@@ -173,3 +173,14 @@ test('reads a stored tool policy that no longer parses as none, not a failure', 
   );
   expect('tools' in store.get('bad')).toBe(false);
 });
+
+test('the effort set in-band replaces the configured one and is refused for no session', () => {
+  const { store } = setup();
+  store.create({ ...input, session: 'e1', effort: 'high' });
+  store.setEffort('e1', 'medium');
+  expect(store.get('e1').effort).toBe('medium');
+  expect(store.list().find((s) => s.session === 'e1')?.effort).toBe('medium');
+  expect(() => {
+    store.setEffort('nope', 'low');
+  }).toThrow('no session nope');
+});

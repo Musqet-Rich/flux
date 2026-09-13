@@ -472,3 +472,16 @@ test('message_start carries the model as the running spec; init, the configured 
     context: { tokens: 5, model: '' },
   });
 });
+
+// The level is the adapter's business (claude-adapter.ts); the mapper shows the reply.
+test('an effort set is the reply on the timeline, nothing more', () => {
+  const pending: Pending = { tools: new Map(), thinking: null, agents: new Map() };
+  const mapped = mapClaudeLine(
+    { kind: 'effort_set', effort: 'medium', text: 'Set effort level to medium' },
+    pending,
+    '/w',
+  );
+  expect(mapped).toEqual({
+    events: [{ type: 'msg.assistant', payload: { text: 'Set effort level to medium' } }],
+  });
+});
