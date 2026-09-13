@@ -6,9 +6,17 @@ import { pendingComments } from './pending-comments.ts';
 import type { StoreInternals } from './store-state.ts';
 
 // Talking to a session, ending it and coming back (protocol.md § 7): send, clear the agent's
-// context, archive, reopen, delete, rename. The lifecycle ones refresh the session list, since
-// `archived` and `worktreeExists` come from the box. Deleting resolves to an outcome because a
+// context, restart it with a model and effort, archive, reopen, delete, rename. The lifecycle
+// ones refresh the session list, since `archived`, `worktreeExists`, `model` and `effort` come
+// from the box. Deleting resolves to an outcome because a
 // `dirty` refusal is the view's to handle (it asks whether to discard), not the status bar's.
+
+// What a restart asks for (ADR 0032): a string sets the field, null clears it to the box's
+// default, absent keeps it; both absent is a plain restart.
+export interface Spec {
+  model?: string | null;
+  effort?: string | null;
+}
 
 export interface DeleteOptions {
   removeWorktree: boolean;
@@ -26,6 +34,8 @@ export interface SessionActions extends AttachmentActions {
   // the box has the message.
   send: (session: string, text: string, replyTo?: number) => Promise<boolean>;
   clearSession: (session: string) => Promise<boolean>;
+  // Closes the agent; the next send resumes it with the spec, which the summary then carries.
+  restartSession: (session: string, spec: Spec) => Promise<boolean>;
   // The new title reaches the tab through `session.renamed`, so no refresh is needed.
   renameSession: (session: string, title: string) => Promise<boolean>;
   archiveSession: (session: string) => Promise<boolean>;
@@ -60,6 +70,11 @@ const archive = async (i: StoreInternals, session: string): Promise<void> => {
   await boxLink.refreshSessions(i);
 };
 
+const restart = async (i: StoreInternals, session: string, spec: Spec): Promise<void> => {
+  await boxLink.call(i, 'sessions.restart', { session, ...spec });
+  await boxLink.refreshSessions(i);
+};
+
 const unarchive = async (i: StoreInternals, session: string): Promise<void> => {
   await boxLink.call(i, 'sessions.unarchive', { session });
   await boxLink.refreshSessions(i);
@@ -91,6 +106,7 @@ export const sessionActions = (i: StoreInternals): SessionActions => {
     send: (session, text, replyTo) => send(i, files, session, text, replyTo),
     clearSession: (session) =>
       boxLink.attempt(i, () => boxLink.call(i, 'sessions.clear', { session })),
+    restartSession: (session, spec) => boxLink.attempt(i, () => restart(i, session, spec)),
     renameSession: (session, title) =>
       boxLink.attempt(i, () => boxLink.call(i, 'sessions.rename', { session, title })),
     archiveSession: (session) => boxLink.attempt(i, () => archive(i, session)),

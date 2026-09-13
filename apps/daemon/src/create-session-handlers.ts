@@ -123,11 +123,7 @@ export const createSessionHandlers = (ctx: HandlerContext): SessionHandlers => (
   'sessions.archive': (p) => sessionLifecycle.archive(ctx, p),
   'sessions.unarchive': (p) => sessionLifecycle.unarchive(ctx, p.session),
   'sessions.clear': (p) => sessionLifecycle.clear(ctx, p.session),
-  'sessions.restart': async (p) => {
-    ctx.sessions.get(p.session);
-    await ctx.closeSupervisor(p.session);
-    return {};
-  },
+  'sessions.restart': (p) => sessionLifecycle.restart(ctx, p),
   'sessions.rename': (p) => Promise.resolve(sessionLifecycle.rename(ctx, p.session, p.title)),
   'agent.send': (p) => sendMessage(ctx, p),
   'agent.answer': (p) => {

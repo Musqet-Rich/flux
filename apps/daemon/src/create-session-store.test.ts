@@ -184,3 +184,18 @@ test('the effort set in-band replaces the configured one and is refused for no s
     store.setEffort('nope', 'low');
   }).toThrow('no session nope');
 });
+
+test('a restart sets the model and effort for every later spawn, or clears one to the default', () => {
+  const { store } = setup();
+  store.create({ ...input, session: 'r1', model: 'opus', effort: 'high' });
+  store.setModel('r1', 'sonnet');
+  store.setEffort('r1', null);
+  expect(store.get('r1')).toMatchObject({ model: 'sonnet' });
+  expect(store.get('r1')).not.toHaveProperty('effort');
+  expect(store.list().find((s) => s.session === 'r1')).not.toHaveProperty('effort');
+  store.setModel('r1', null);
+  expect(store.get('r1')).not.toHaveProperty('model');
+  expect(() => {
+    store.setModel('nope', 'opus');
+  }).toThrow('no session nope');
+});
