@@ -17,6 +17,8 @@
    the page, where a command's output sits; bright green and yellow sit close to their normal
    ones for it. */
 
+@import './fonts.css';
+
 :root {
   --bg: light-dark(#f5f6f8, #0f1115);
   --fg: light-dark(#1a1d24, #e8eaf0);
@@ -47,12 +49,12 @@
   --ansi-14: light-dark(#127a92, #a0e0ff);
   --ansi-15: light-dark(#1a1d24, #ffffff);
   --radius: 10px;
+  /* The platform's own stacks; a theme sets a chosen family ahead of them
+     (appearance/fonts.ts repeats these, and must agree). */
+  --font-text: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-code: ui-monospace, SFMono-Regular, Menlo, monospace;
   color-scheme: dark;
-  font-family:
-    system-ui,
-    -apple-system,
-    'Segoe UI',
-    sans-serif;
+  font-family: var(--font-text);
   font-size: 15px;
   line-height: 1.4;
 }
@@ -163,7 +165,7 @@ textarea {
 
 pre,
 code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-code);
   font-size: 0.85em;
 }
 

@@ -12,10 +12,12 @@ test('offers the three modes and the size slider, each applied at once', async (
   expect(mode.findAll('option').map((o) => o.text())).toEqual(['System', 'Light', 'Dark']);
   expect(mode.attributes('aria-describedby')).toBe('flux-mode-hint');
   expect(wrapper.find('#flux-mode-hint').exists()).toBe(true);
-  // The theme picker sits between the scheme and the size.
+  // The theme and font pickers sit between the scheme and the size.
   expect(wrapper.findAll('select, input').map((el) => el.attributes('id'))).toEqual([
     'flux-mode',
     'flux-theme',
+    'flux-font-text',
+    'flux-font-code',
     'flux-font-size',
   ]);
   await mode.setValue('light');

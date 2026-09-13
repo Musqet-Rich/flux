@@ -310,7 +310,7 @@ const sendHint = computed(
 .slash-option {
   padding: 0.35rem 0.5rem;
   border-radius: var(--radius);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-code);
   font-size: 0.85rem;
   cursor: pointer;
 }

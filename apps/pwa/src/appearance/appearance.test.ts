@@ -38,7 +38,7 @@ const systemOf = (dark: boolean): SystemScheme & { flip: (dark: boolean) => void
 test('nothing stored is the system scheme at the default size, and it follows the system', () => {
   const system = systemOf(true);
   const a = appearance.create(storageOf(null), system);
-  expect(a.choices).toEqual({ mode: 'system', fontSize: 15, theme: null });
+  expect(a.choices).toEqual({ mode: 'system', fontSize: 15, theme: null, fonts: {} });
   expect(a.scheme.value).toBe('dark');
   system.flip(false);
   expect(a.scheme.value).toBe('light');
@@ -60,8 +60,55 @@ test('a chosen scheme ignores the system, and is kept', () => {
 
 test('a stored choice is read back', () => {
   const a = appearance.create(storageOf('{"mode":"light","fontSize":18}'), systemOf(true));
-  expect(a.choices).toEqual({ mode: 'light', fontSize: 18, theme: null });
+  expect(a.choices).toEqual({ mode: 'light', fontSize: 18, theme: null, fonts: {} });
   expect(a.scheme.value).toBe('light');
+});
+
+// The platform's own fonts are stored as no `fonts` at all, like the default theme.
+test('the fonts chosen are kept beside the theme, none as no key', () => {
+  const storage = storageOf(null);
+  const a = appearance.create(storage, systemOf(true));
+  a.setFonts({ code: 'Nova Mono' });
+  expect(a.choices.fonts).toEqual({ code: 'Nova Mono' });
+  expect(storage.parsed()).toEqual({ mode: 'system', fontSize: 15, fonts: { code: 'Nova Mono' } });
+  const again = appearance.create(storage, systemOf(true));
+  expect(again.choices.fonts).toEqual({ code: 'Nova Mono' });
+  again.setFonts({});
+  expect(storage.parsed()).toEqual({ mode: 'system', fontSize: 15 });
+  // A `null` written by hand reads the same as no key, like a theme's.
+  const byHand = appearance.create(
+    storageOf('{"mode":"dark","fontSize":15,"fonts":null}'),
+    systemOf(true),
+  );
+  expect(byHand.choices.fonts).toEqual({});
+});
+
+test('a theme and fonts are stored together, and a theme carrying fonts of its own is read whole', () => {
+  const storage = storageOf(null);
+  const a = appearance.create(storage, systemOf(true));
+  a.setTheme(nord);
+  a.setFonts({ text: 'Sen' });
+  expect(storage.parsed()).toEqual({
+    mode: 'system',
+    fontSize: 15,
+    theme: nord,
+    fonts: { text: 'Sen' },
+  });
+  const again = appearance.create(storage, systemOf(true));
+  expect(again.choices).toEqual({
+    mode: 'system',
+    fontSize: 15,
+    theme: nord,
+    fonts: { text: 'Sen' },
+  });
+  // The JSON format carries `fonts` for sharing; stored inside a theme it is kept as stored
+  // and is not the choice, which is the device's own key.
+  const inside = appearance.create(
+    storageOf('{"mode":"dark","fontSize":15,"theme":{"name":"x","fonts":{"code":"Nova Mono"}}}'),
+    systemOf(true),
+  );
+  expect(inside.choices.theme).toEqual({ name: 'x', fonts: { code: 'Nova Mono' } });
+  expect(inside.choices.fonts).toEqual({});
 });
 
 // Default is stored as no `theme` at all, which is also what a device that chose a scheme
@@ -81,7 +128,7 @@ test('a theme is kept, and the default is kept as no theme', () => {
     storageOf('{"mode":"dark","fontSize":15,"theme":null}'),
     systemOf(true),
   );
-  expect(byHand.choices).toEqual({ mode: 'dark', fontSize: 15, theme: null });
+  expect(byHand.choices).toEqual({ mode: 'dark', fontSize: 15, theme: null, fonts: {} });
 });
 
 test('a size is kept only within the slider range, and in whole pixels', () => {
@@ -110,11 +157,13 @@ const stale: [string, string][] = [
     'a theme with a bad colour',
     '{"mode":"dark","fontSize":15,"theme":{"name":"x","dark":{"bg":"red"}}}',
   ],
+  ['fonts that are not an object', '{"mode":"dark","fontSize":15,"fonts":"Inter"}'],
+  ['a font part that is not one', '{"mode":"dark","fontSize":15,"fonts":{"mono":"Inter"}}'],
 ];
 
 test.each(stale)('stored %s falls back to the defaults whole', (_name, stored) => {
   const a = appearance.create(storageOf(stored), systemOf(true));
-  expect(a.choices).toEqual({ mode: 'system', fontSize: 15, theme: null });
+  expect(a.choices).toEqual({ mode: 'system', fontSize: 15, theme: null, fonts: {} });
 });
 
 // The reactive state writes through to the object it wraps, so the defaults must be handed
@@ -124,6 +173,7 @@ test('a fresh instance starts from the defaults whatever another chose', () => {
   first.setMode('dark');
   first.setFontSize(22);
   first.setTheme(nord);
+  first.setFonts({ text: 'Sen' });
   const second = appearance.create(storageOf(null), systemOf(true));
-  expect(second.choices).toEqual({ mode: 'system', fontSize: 15, theme: null });
+  expect(second.choices).toEqual({ mode: 'system', fontSize: 15, theme: null, fonts: {} });
 });

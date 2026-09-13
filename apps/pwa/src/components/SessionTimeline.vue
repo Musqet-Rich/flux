@@ -199,7 +199,7 @@ defineExpose({ jump: tail.jump, reset: tail.reset, keep });
   cursor: pointer;
   padding: 0.15rem 0;
   color: var(--muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-code);
   font-size: 0.8rem;
 }
 

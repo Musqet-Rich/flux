@@ -53,6 +53,47 @@ test('a chosen preset is recognised as itself when the picker opens again', () =
   expect(wrapper.find<HTMLSelectElement>('#flux-theme').element.value).toBe('Nord');
 });
 
+const fonts = { text: 'Sen', code: 'Kode Mono' };
+
+test('a pick leaves the fonts chosen as they are', async () => {
+  const a = fakeAppearance();
+  a.setFonts(fonts);
+  const wrapper = mount(ThemePicker, { props: { appearance: a } });
+  await wrapper.find('#flux-theme').setValue('Solarized');
+  expect(a.choices.theme).toEqual(presets.solarized);
+  expect(a.choices.fonts).toEqual(fonts);
+});
+
+test('Copy folds the fonts chosen into the JSON, so a shared theme carries them', async () => {
+  const { writeText } = clipboard('');
+  const a = fakeAppearance();
+  a.setTheme(nord);
+  a.setFonts(fonts);
+  const wrapper = mount(ThemePicker, { props: { appearance: a } });
+  await wrapper.get('button:nth-of-type(1)').trigger('click');
+  await flushPromises();
+  expect(writeText).toHaveBeenCalledWith(theme.stringify({ ...nord, fonts }));
+  expect(wrapper.find<HTMLSelectElement>('#flux-theme').element.value).toBe('Nord');
+});
+
+// A shared theme is the whole thing: what it names of fonts is what is chosen after.
+test('Paste takes the fonts out of the JSON and applies them, or takes them away', async () => {
+  clipboard(JSON.stringify({ ...custom, fonts: { code: 'Nova Mono' } }));
+  const a = fakeAppearance();
+  a.setFonts(fonts);
+  const wrapper = mount(ThemePicker, { props: { appearance: a } });
+  await wrapper.get('button:nth-of-type(2)').trigger('click');
+  await flushPromises();
+  expect(a.choices.theme).toEqual(custom);
+  expect(a.choices.fonts).toEqual({ code: 'Nova Mono' });
+  clipboard(JSON.stringify(nord));
+  await wrapper.get('button:nth-of-type(2)').trigger('click');
+  await flushPromises();
+  expect(a.choices.theme).toEqual(nord);
+  expect(a.choices.fonts).toEqual({});
+  expect(wrapper.find<HTMLSelectElement>('#flux-theme').element.value).toBe('Nord');
+});
+
 test('Copy puts the theme in force on the clipboard as JSON, the default included', async () => {
   const { writeText } = clipboard('');
   const a = fakeAppearance();

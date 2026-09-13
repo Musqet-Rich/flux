@@ -21,7 +21,7 @@ const Ansi = (): VNode => renderAnsi(props.text);
   padding: 0.5rem 0.6rem;
   background: var(--bg);
   border-radius: var(--radius);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-code);
   font-size: 0.8rem;
   line-height: 1.35;
   white-space: pre-wrap;

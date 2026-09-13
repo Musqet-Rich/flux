@@ -209,7 +209,7 @@ const quoteLine = computed(
   color: var(--muted);
   padding: 0.15rem 0;
   text-align: left;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-code);
   font-size: 0.8rem;
   width: 100%;
 }

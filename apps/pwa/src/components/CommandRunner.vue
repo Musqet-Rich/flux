@@ -193,7 +193,7 @@ h1 {
 }
 
 .command {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-code);
   font-size: 0.85rem;
   color: var(--fg);
   word-break: break-word;
@@ -242,7 +242,7 @@ h1 {
 .input {
   flex: 1;
   min-width: 0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-code);
   font-size: 0.9rem;
 }
 

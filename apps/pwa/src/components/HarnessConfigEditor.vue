@@ -165,7 +165,7 @@ label {
 }
 
 textarea {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-code);
   font-size: 0.85rem;
   /* Wrap long lines to the box width rather than scrolling off-screen; `anywhere` breaks
      unbroken tokens (paths, URLs) too so they never force a horizontal scrollbar. */
