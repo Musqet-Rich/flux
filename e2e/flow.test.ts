@@ -81,6 +81,14 @@ const noSidewaysOverflow = async (page: Page): Promise<void> => {
 // rather than by eye.
 const interLoaded = `document.fonts.check('1em Inter')`;
 
+// A fetch of the path by name, as a client that never reads the shell's icon link makes it,
+// gets an icon and not the shell the single-page fallback serves for any other unknown path.
+const faviconServed = async (page: Page, stack: Stack): Promise<void> => {
+  const favicon = await page.request.get(`${stack.pwaUrl}/favicon.ico`);
+  expect(favicon.headers()['content-type']).toBe('image/x-icon');
+  expect((await favicon.body()).subarray(0, 4)).toEqual(Buffer.from([0, 0, 1, 0]));
+};
+
 const pair = async (page: Page, stack: Stack): Promise<void> => {
   await page.goto(stack.pwaUrl);
   await page.getByLabel('Or paste the link').fill(stack.pairingUrl);
@@ -382,6 +390,7 @@ const archiveAndReopen = async (page: Page): Promise<void> => {
 };
 
 test('pair, run an agent, comment on its diff, send, reload', async ({ page, stack }) => {
+  await test.step('/favicon.ico is the app icon, not the shell', () => faviconServed(page, stack));
   await test.step('pair by pasting the link flux pair printed', () => pair(page, stack));
   const other = await test.step('a second tab connects as the same device', () =>
     openSecondTab(page, stack));
