@@ -60,7 +60,8 @@ const modes: readonly Mode[] = ['system', 'light', 'dark'];
 const fontSize = { min: 12, max: 22, step: 1, default: 15 } as const;
 
 // Always a fresh object: the result becomes the reactive state, and a proxy writes through to
-// what it wraps, so one shared default would be every instance's.
+// what it wraps, so one shared default would be every instance's. Nothing writes into the
+// fonts object today (a pick replaces it), so this is a guard rather than a fix.
 const defaults = (): AppearanceChoices => ({
   mode: 'system',
   fontSize: fontSize.default,

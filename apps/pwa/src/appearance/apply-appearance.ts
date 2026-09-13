@@ -28,7 +28,7 @@ export const applyAppearance = (doc: Document, appearance: Appearance): (() => v
     },
     { immediate: true },
   );
-  const stopTheme = watch(
+  const stopPaint = watch(
     () => ({
       scheme: appearance.scheme.value,
       theme: appearance.choices.theme,
@@ -54,6 +54,6 @@ export const applyAppearance = (doc: Document, appearance: Appearance): (() => v
   );
   return () => {
     stopSize();
-    stopTheme();
+    stopPaint();
   };
 };
