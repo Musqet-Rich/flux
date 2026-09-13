@@ -17,7 +17,7 @@ test('shows the settings, enables Save once edited, sends the form and shows env
       return current;
     },
   });
-  const wrapper = mount(FluxSettingsForm, { props: { store: box.store } });
+  const wrapper = mount(FluxSettingsForm, { props: { store: box.store, visible: null } });
   expect(wrapper.find('.hint').text()).toBe('Loading…');
   await box.store.refreshSettings();
   await flushPromises();
@@ -66,7 +66,7 @@ test('offers a verified update from the box check, then shows progress and a fai
     'daemon.update': () => ({}),
   });
   await box.store.refreshSettings();
-  const wrapper = mount(FluxSettingsForm, { props: { store: box.store } });
+  const wrapper = mount(FluxSettingsForm, { props: { store: box.store, visible: null } });
   await until(() => box.store.state.updateCheck !== null);
   await flushPromises();
   expect(wrapper.find('.update-status').text()).toContain('Update available: 1.2.0 · verified');
@@ -99,7 +99,7 @@ test('shows up to date when the box has nothing newer', async () => {
     }),
   });
   await box.store.refreshSettings();
-  const wrapper = mount(FluxSettingsForm, { props: { store: box.store } });
+  const wrapper = mount(FluxSettingsForm, { props: { store: box.store, visible: null } });
   await until(() => box.store.state.updateCheck !== null);
   await flushPromises();
   expect(wrapper.find('.update-current').text()).toBe('Up to date (1.2.0)');
@@ -119,7 +119,7 @@ test('shows an available release but disables the button when the box could not 
     }),
   });
   await box.store.refreshSettings();
-  const wrapper = mount(FluxSettingsForm, { props: { store: box.store } });
+  const wrapper = mount(FluxSettingsForm, { props: { store: box.store, visible: null } });
   await until(() => box.store.state.updateCheck !== null);
   await flushPromises();
   expect(wrapper.find('.update-status').text()).toContain('cannot verify (bad_signature)');
@@ -130,7 +130,7 @@ test('shows an available release but disables the button when the box could not 
 test('degrades to a quiet notice when the daemon is too old to check', async () => {
   const box = await pairedStore([], { 'settings.get': () => settingsFixture() });
   await box.store.refreshSettings();
-  const wrapper = mount(FluxSettingsForm, { props: { store: box.store } });
+  const wrapper = mount(FluxSettingsForm, { props: { store: box.store, visible: null } });
   await until(() => box.store.state.updateCheck !== null);
   await flushPromises();
   expect(wrapper.find('.update-unavailable').text()).toBe("Couldn't check for updates.");
@@ -148,7 +148,7 @@ test('an unsaved edit survives the other section saving', async () => {
       }),
   });
   await box.store.refreshSettings();
-  const wrapper = mount(FluxSettingsForm, { props: { store: box.store } });
+  const wrapper = mount(FluxSettingsForm, { props: { store: box.store, visible: null } });
   await wrapper.find('#flux-repos').setValue('/typing');
   await box.store.saveSettings({ harnessConfig: { claudeMd: 'new' } });
   await flushPromises();

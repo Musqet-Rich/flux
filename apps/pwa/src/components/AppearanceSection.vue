@@ -4,14 +4,19 @@ import { computed } from 'vue';
 import type { Appearance, Mode } from '../appearance/appearance.ts';
 import { appearance as spec } from '../appearance/appearance.ts';
 import FontPicker from './FontPicker.vue';
+import { settingsIndex } from './settings-index.ts';
 import ThemePicker from './ThemePicker.vue';
 
 // How the app looks on this device (ADR 0030): light, dark or the system's, the theme, the
 // fonts, and the text size. Each applies as it is changed and is kept on the device, so there
 // is no Save and nothing goes to the box. A slider for the size rather than a field: on a
 // phone the operator is judging the result by eye, and a thumb on a slider does that.
+// `visible` is the settings search's answer (SettingsView): each field shows while its
+// control's id is in it.
 
-const props = defineProps<{ appearance: Appearance }>();
+const props = defineProps<{ appearance: Appearance; visible: ReadonlySet<string> | null }>();
+
+const show = (id: string): boolean => settingsIndex.isShown(props.visible, id);
 
 const mode = computed(() => props.appearance.choices.mode);
 const fontSize = computed(() => props.appearance.choices.fontSize);
@@ -37,17 +42,27 @@ const pickSize = (event: Event): void => {
 <template>
   <section class="appearance">
     <h2>Appearance</h2>
-    <div class="field">
+    <div v-show="show('flux-mode')" data-setting="flux-mode" class="field">
       <label for="flux-mode">Light or dark</label>
       <select id="flux-mode" :value="mode" aria-describedby="flux-mode-hint" @change="pickMode">
         <option v-for="m in modes" :key="m.name" :value="m.name">{{ m.label }}</option>
       </select>
       <p id="flux-mode-hint" class="hint">System follows this device's light or dark setting.</p>
     </div>
-    <ThemePicker :appearance="appearance" />
-    <FontPicker :appearance="appearance" part="text" />
-    <FontPicker :appearance="appearance" part="code" />
-    <div class="field">
+    <ThemePicker v-show="show('flux-theme')" data-setting="flux-theme" :appearance="appearance" />
+    <FontPicker
+      v-show="show('flux-font-text')"
+      data-setting="flux-font-text"
+      :appearance="appearance"
+      part="text"
+    />
+    <FontPicker
+      v-show="show('flux-font-code')"
+      data-setting="flux-font-code"
+      :appearance="appearance"
+      part="code"
+    />
+    <div v-show="show('flux-font-size')" data-setting="flux-font-size" class="field">
       <label for="flux-font-size">Text size</label>
       <div class="size">
         <input
