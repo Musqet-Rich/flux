@@ -166,6 +166,9 @@ export interface StoreState {
   sendKey: SendKey;
   // The chord that switches session tabs on this device (switch-key.ts); ⌃⌥ until the operator picks.
   switchKey: SwitchKey;
+  // The chat's share of a wide screen while a side pane is open (split-at.ts, ADR 0033); half
+  // until the divider is dragged.
+  splitAt: number;
   sessions: SessionSummary[];
   // Harnesses the box can run, from `hello`; a daemon that predates the field has claude only.
   agents: HarnessKind[];
@@ -247,6 +250,7 @@ export const storeState = (): StoreState =>
     sound: 'none',
     sendKey: 'meta',
     switchKey: 'ctrlAlt',
+    splitAt: 0.5,
     sessions: [],
     agents: ['claude'],
     rateWindows: [],

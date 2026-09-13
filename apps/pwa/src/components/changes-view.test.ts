@@ -96,3 +96,13 @@ test('falls back to the last files.changed event when git.status is unavailable'
   expect(wrapper.find('.status').classes()).toContain('A');
   box.store.stop();
 });
+
+// Beside the chat on a wide screen (ADR 0033) there is nothing for a Back to the chat to do.
+test('paned, the list has no Back to session', async () => {
+  const box = await pairedStore([], { 'git.status': () => ({ files: [] }) });
+  const wrapper = mount(ChangesView, { props: { store: box.store, session: 's1', paned: true } });
+  await until(() => box.calls('git.status').length === 1);
+  expect(wrapper.find('[aria-label="Back to session"]').exists()).toBe(false);
+  expect(wrapper.find('[aria-label="Refresh"]').exists()).toBe(true);
+  box.store.stop();
+});

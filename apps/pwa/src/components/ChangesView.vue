@@ -11,7 +11,8 @@ import Icon from './Icon.vue';
 // refreshes it, since that event only follows an agent write. A rename opens with its old
 // path too, which is the one the base revision knows. Ticked files narrow a commit to them.
 
-const props = defineProps<{ store: Store; session: string }>();
+// `paned`: beside the chat on a wide screen (ADR 0033), where a Back to it has nothing to do.
+const props = defineProps<{ store: Store; session: string; paned?: boolean }>();
 const emit = defineEmits<{
   open: [path: string, from: string | null];
   edit: [path: string];
@@ -72,6 +73,7 @@ watch(
   <section class="changes">
     <div class="toolbar">
       <button
+        v-if="!paned"
         type="button"
         class="secondary icon-only"
         aria-label="Back to session"

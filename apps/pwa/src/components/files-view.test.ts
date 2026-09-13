@@ -158,3 +158,19 @@ test('a listing that resolves after a newer navigation does not overwrite the ne
   wrapper.unmount();
   box.store.stop();
 });
+
+// Beside the chat on a wide screen (ADR 0033) the root has no Back to the chat to offer; a
+// directory below it still has Up.
+test('paned, the root has no Back to session while a subdirectory keeps Up', async () => {
+  const box = await pairedStore([], { 'fs.list': () => ({ entries: mixed }) });
+  const root = mount(FilesView, {
+    props: { store: box.store, session: 's1', path: '', paned: true },
+  });
+  await listed(root);
+  expect(root.find('[aria-label="Back to session"]').exists()).toBe(false);
+  await root.setProps({ path: 'src' });
+  await listed(root);
+  expect(root.find('[aria-label="Up one directory"]').exists()).toBe(true);
+  root.unmount();
+  box.store.stop();
+});
