@@ -175,7 +175,6 @@ watch(
 
 .pick {
   flex: none;
-  width: auto;
   margin: 0 0 0 0.75rem;
 }
 

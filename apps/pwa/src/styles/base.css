@@ -150,6 +150,12 @@ select {
   box-sizing: border-box;
 }
 
+/* A checkbox is a tick beside its label, not a field: the full width above fills the label's
+   row and pushes the text to its far edge (Safari: past it). Its box keeps the native size. */
+input[type='checkbox'] {
+  width: auto;
+}
+
 textarea {
   resize: vertical;
   min-height: 3.2rem;

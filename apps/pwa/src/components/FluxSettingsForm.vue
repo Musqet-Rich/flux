@@ -260,10 +260,6 @@ h2 {
   align-items: center;
 }
 
-.trigger input {
-  width: auto;
-}
-
 .env,
 .versions {
   display: grid;
