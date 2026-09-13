@@ -52,10 +52,10 @@ test('on a PC, ⌥ is free in a text box and ⌘⇧ still yields', () => {
   expect(switchChord.step('metaShift', key('ArrowLeft', on), false)).toBe(-1);
 });
 
-test('Off, a consumed key, a composing one and a repeat take nothing', () => {
+test('Off, a consumed key and a composing one take nothing; a repeat still matches', () => {
   const on = { ctrlKey: true, altKey: true };
   expect(switchChord.step('off', key('ArrowRight', on), true)).toBe(0);
-  expect(switchChord.step('ctrlAlt', key('ArrowRight', { ...on, repeat: true }), true)).toBe(0);
+  expect(switchChord.step('ctrlAlt', key('ArrowRight', { ...on, repeat: true }), true)).toBe(1);
   const taken = key('ArrowRight', on);
   taken.preventDefault();
   expect(switchChord.step('ctrlAlt', taken, true)).toBe(0);
@@ -70,7 +70,14 @@ test('labels and hints are in the keyboard’s terms, and a PC is offered one Ct
   expect(switchChord.label('altUpDown', true)).toBe('⌥ ↑ ↓');
   expect(switchChord.offered(true)).toContain('metaAlt');
   expect(switchChord.offered(false)).not.toContain('metaAlt');
-  expect(switchChord.hint('ctrlAlt', true)).toBe('');
+  expect(switchChord.hint('ctrlAlt', true)).toContain('VoiceOver');
+  expect(switchChord.hint('ctrlAlt', false)).toContain('workspaces');
+  expect(switchChord.label('metaAlt', true)).toBe('⌘⌥ ← →');
+  expect(switchChord.label('shift', false)).toBe('Shift+← →');
+  expect(switchChord.label('off', true)).toBe('Off');
+  expect(switchChord.hint('altUpDown', true)).toContain('paragraph');
+  expect(switchChord.hint('shift', true)).toContain('character');
+  expect(switchChord.hint('off', false)).toContain('No keyboard shortcut');
   expect(switchChord.hint('metaAlt', true)).toContain('browser tabs');
   expect(switchChord.hint('meta', true)).toContain('Back');
   expect(switchChord.hint('meta', false)).toContain('word');

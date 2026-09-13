@@ -8,8 +8,9 @@ import { enterKey } from './enter-key.ts';
 // which have one depends on the keyboard: on a Mac ⌥← is a word back, ⇧← a character
 // selected, ⌘← the line's start, ⌘⇧← the line selected to its start and ⌥↑ the paragraph's,
 // so from the composer only ⌃⌥ and ⌘⌥ switch; on a PC words are Ctrl's, so ⌥ (Alt) is free
-// there too. A held key is one step, not a step a repeat: each switch pushes a history entry
-// and syncs a log. An IME's key, or one something else consumed, is left.
+// there too. A held key is one step, not a step a repeat (SessionTabs, which keeps the repeats
+// from the browser too): each switch pushes a history entry and syncs a log. An IME's key, or
+// one something else consumed, is left.
 
 type Held = Readonly<{ meta: boolean; ctrl: boolean; alt: boolean; shift: boolean }>;
 
@@ -53,10 +54,9 @@ const direction = (key: string, vertical: boolean): -1 | 0 | 1 => {
 };
 
 const inText = (target: EventTarget | null): boolean =>
-  target instanceof HTMLElement &&
-  (target instanceof HTMLTextAreaElement ||
-    target instanceof HTMLInputElement ||
-    target.isContentEditable);
+  target instanceof HTMLTextAreaElement ||
+  target instanceof HTMLInputElement ||
+  (target instanceof HTMLElement && target.isContentEditable);
 
 const matches = (event: KeyboardEvent, keys: Held): boolean =>
   event.metaKey === keys.meta &&
@@ -67,7 +67,7 @@ const matches = (event: KeyboardEvent, keys: Held): boolean =>
 // The step a keydown asks for under `name`: 1 for the next tab, -1 for the one before, 0 for
 // a key that is not the chord or not the app's to take.
 const step = (name: SwitchKey, event: KeyboardEvent, mac: boolean): -1 | 0 | 1 => {
-  if (name === 'off' || event.defaultPrevented || event.isComposing || event.repeat) return 0;
+  if (name === 'off' || event.defaultPrevented || event.isComposing) return 0;
   const chord = chords[name];
   const to = direction(event.key, chord.vertical);
   if (to === 0 || !matches(event, chord.held(mac))) return 0;
@@ -102,12 +102,14 @@ const composers = (job: string): string =>
   `In the composer this ${job}, so there it stays the composer’s.`;
 const hint = (name: SwitchKey, mac: boolean): string => {
   const hints: Record<SwitchKey, string> = {
-    ctrlAlt: '',
+    ctrlAlt: mac
+      ? 'VoiceOver uses ⌃⌥ as its own key; with VoiceOver on, pick another chord.'
+      : 'Some desktops use Ctrl+Alt+← → for workspaces or screen rotation, and take it first.',
     altUpDown: mac ? composers('moves by paragraph') : '',
     metaShift: composers(mac ? 'selects to the line’s start or end' : 'selects by word'),
     alt: mac ? composers('moves by word') : 'The browser’s Back and Forward give way.',
     metaAlt: mac
-      ? 'Safari and Chrome switch browser tabs with this; the app takes it while it has the focus, where the browser lets it.'
+      ? 'Safari and Chrome switch browser tabs with this; the app asks for it first, but the browser may keep it.'
       : '',
     meta: mac
       ? `${composers('moves to the line’s start or end')} Elsewhere the browser’s Back gives way.`

@@ -166,7 +166,7 @@ test('the switch chord steps along the tabs, wrapping, and lands on an end from 
   expect(after.defaultPrevented).toBe(false);
 });
 
-test('a lone tab, a wrong chord, something open on top and Off select nothing', async () => {
+test('a lone tab, a wrong chord, something open on top, a repeat and Off select nothing', async () => {
   const sessions = [s('a', '2026-01-01T00:00:00Z', 'idle')];
   const wrapper = mount(SessionTabs, {
     props: { sessions, active: 'a', chord: 'ctrlAlt' },
@@ -181,6 +181,10 @@ test('a lone tab, a wrong chord, something open on top and Off select nothing', 
   window.dispatchEvent(under);
   escapeStack.unregister(onTop);
   expect(under.defaultPrevented).toBe(false);
+  // A held key's repeats are kept from the browser, which would walk Back, but switch nothing.
+  const repeat = press('ArrowRight', { ctrlKey: true, altKey: true, repeat: true });
+  window.dispatchEvent(repeat);
+  expect(repeat.defaultPrevented).toBe(true);
   await wrapper.setProps({ sessions });
   const wrong = press('ArrowRight', { altKey: true });
   window.dispatchEvent(wrong);

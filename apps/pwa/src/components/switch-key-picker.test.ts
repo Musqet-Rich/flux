@@ -19,7 +19,7 @@ test('offers the chords in the keyboard terms of the device, with the cost of th
     'Shift+← →',
     'Off',
   ]);
-  expect(wrapper.find('.hint').text()).toBe('Steps along the session tabs, wrapping at the ends.');
+  expect(wrapper.find('.hint').text()).toContain('workspaces');
   await select.setValue('alt');
   await flushPromises();
   expect(box.store.state.switchKey).toBe('alt');
@@ -29,5 +29,27 @@ test('offers the chords in the keyboard terms of the device, with the cost of th
   await box.store.setSwitchKey('metaAlt');
   await flushPromises();
   expect(select.element.value).toBe('ctrlAlt');
+  box.store.stop();
+});
+
+test('on a Mac the rows are in ⌘ and ⌥ terms, ⌘⌥ among them, with its own hint', async () => {
+  const box = await pairedStore();
+  const wrapper = mount(SwitchKeyPicker, { props: { store: box.store, apple: true } });
+  expect(wrapper.findAll('option').map((o) => o.text())).toEqual([
+    '⌃⌥ ← →',
+    '⌥ ↑ ↓',
+    '⌘⇧ ← →',
+    '⌥ ← →',
+    '⌘⌥ ← →',
+    '⌘ ← →',
+    '⇧ ← →',
+    'Off',
+  ]);
+  expect(wrapper.find('.hint').text()).toContain('VoiceOver');
+  await wrapper.find<HTMLSelectElement>('#flux-switch-key').setValue('metaAlt');
+  await flushPromises();
+  expect(box.store.state.switchKey).toBe('metaAlt');
+  expect(wrapper.find<HTMLSelectElement>('#flux-switch-key').element.value).toBe('metaAlt');
+  expect(wrapper.find('.hint').text()).toContain('browser tabs');
   box.store.stop();
 });

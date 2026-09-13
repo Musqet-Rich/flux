@@ -12,10 +12,13 @@ import { switchChord } from './switch-chord.ts';
 // Activity is shown instead: the state dot, and a count of events since the tab was last active.
 // The strip is on every paired screen, so its keyboard is too: the device's switch chord
 // (switch-chord.ts) steps along the tabs in this order, wrapping, and from a screen with no
-// session (the list, New, Settings) → lands on the first tab and ← on the last. Not while
-// something is open on top (the help modal, a rename sheet, a menu: escape-stack.ts), which
-// would be left standing over a screen it does not belong to; and the key is taken only when
-// a switch happens, so with one tab ⌘← is still the browser's Back.
+// tab of its own (the list, New, Settings, an archived session) → lands on the first tab and
+// ← on the last. Not while something is open on top (the help modal, a rename sheet, a menu:
+// escape-stack.ts), which would be left standing over a screen it does not belong to; the
+// composer's slash list is not on that register, and switching under it only closes it. The
+// key is taken only when a switch would happen, so with one tab ⌘← is still the browser's
+// Back; a held key's repeats are taken too, or the browser would walk Back after the first
+// step, but they switch nothing: each switch pushes a history entry and syncs a log.
 
 const props = defineProps<{
   sessions: SessionSummary[];
@@ -62,7 +65,7 @@ const onKey = (event: KeyboardEvent): void => {
   const target = list[to];
   if (target === undefined || target.session === props.active) return;
   event.preventDefault();
-  emit('select', target.session);
+  if (!event.repeat) emit('select', target.session);
 };
 onMounted(() => {
   window.addEventListener('keydown', onKey);

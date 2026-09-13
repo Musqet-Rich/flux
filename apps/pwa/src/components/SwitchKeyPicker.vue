@@ -11,9 +11,12 @@ import { switchChord } from './switch-chord.ts';
 // the hint under it, since every arrow chord has one but the default. On a PC ⌘⌥ and ⌃⌥ are
 // the same keys, so a ⌘⌥ choice made on a Mac shows as the ⌃⌥ row there.
 
-const props = defineProps<{ store: Store }>();
+// `apple` is the device's unless a test says otherwise, so both keyboards' rows can be seen.
+const props = withDefaults(defineProps<{ store: Store; apple?: boolean }>(), {
+  apple: switchChord.apple,
+});
 
-const { apple } = switchChord;
+const { apple } = props;
 const current = computed(() =>
   props.store.state.switchKey === 'metaAlt' && !apple ? 'ctrlAlt' : props.store.state.switchKey,
 );
