@@ -17,7 +17,7 @@ export interface AttachedControl extends ControlSocket {
 
 export interface AttachControlOptions extends Omit<
   ControlHandlerOptions,
-  'openSession' | 'archiveSession' | 'getAgents'
+  'openSession' | 'archiveSession' | 'clearSession' | 'getAgents'
 > {
   dataDir: string;
   ctx: () => HandlerContext;

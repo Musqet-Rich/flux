@@ -171,7 +171,9 @@ export interface RpcMethods {
   };
   // Gives the session a new title, logged as `session.renamed`; `bad_params` on a blank one.
   'sessions.rename': { params: { session: string; title: string }; result: Record<string, never> };
-  // `attachments` are ids from `attach.end`, each complete and belonging to the session.
+  // `attachments` are ids from `attach.end`, each complete and belonging to the session. A `text`
+  // that is `/clear` alone is `sessions.clear` (ADR 0034): no `msg.user`, `seq` the marker's,
+  // `commentIds` left pending, and `bad_params` with a `replyTo` or `attachments`.
   'agent.send': {
     params: {
       session: string;

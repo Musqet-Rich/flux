@@ -17,6 +17,7 @@ import { openDatabase } from './open-database.ts';
 // a start on the same data dir finds.
 
 const fake = join(import.meta.dirname, '../test/fake-claude.ts');
+const fixture = join(import.meta.dirname, '../test/fixtures/claude/session-two-turns.jsonl');
 let relay: FakeRelay;
 let frames: FrameRouter;
 let daemon: Daemon;
@@ -24,6 +25,8 @@ let daemon: Daemon;
 afterEach(async () => {
   await daemon.stop();
   await relay.close();
+  // Set by the one test that needs the fake to speak; the others rely on it staying silent.
+  delete process.env['FLUX_FAKE_FIXTURE'];
 });
 
 const setup = async () => {
@@ -113,6 +116,44 @@ test('clear answers an ask in flight as aborted, logged before the marker', asyn
     ['session.state', { state: 'idle', reason: 'agent closed' }],
     ['session.cleared', {}],
   ]);
+});
+
+// A bare `/clear` typed as a message is the same clear (ADR 0034): the agent closed, no
+// `msg.user` for it, the marker's seq in the answer, the pending comment a device names on
+// every send left pending, and refused when a reply or a file would have to ride along.
+test('a bare /clear sent as a message is the clear, answered with the marker', async () => {
+  // The fake replays a turn for `go`; the other tests here leave it silent.
+  process.env['FLUX_FAKE_FIXTURE'] = fixture;
+  const { repo, dataDir } = await setup();
+  const d = await device();
+  await pair(d);
+  await call(d, 'hello', { protocol: 1 });
+  const created = (await call(d, 'sessions.create', { repo, branch: 'b', harness: 'claude' })) as {
+    session: string;
+  };
+  const { session } = created;
+  await call(d, 'agent.send', { session, text: 'go' });
+  await untilEvent(d, 'turn.ended');
+  const ref = { path: 'README.md', rev: 'worktree', range: { startLine: 1, endLine: 1 } };
+  const added = (await call(d, 'comments.add', { session, ref, text: 'why' })) as {
+    commentId: string;
+  };
+  const commentIds = [added.commentId];
+  const typed = (await call(d, 'agent.send', { session, text: ' /clear ', commentIds })) as {
+    seq: number;
+  };
+  await expect(call(d, 'agent.send', { session, text: '/clear', replyTo: 1 })).rejects.toThrow(
+    'bad_params: /clear takes no reply or attachments',
+  );
+  await daemon.stop();
+  const log = createEventLog({ db: openDatabase(join(dataDir, 'flux.sqlite')) });
+  const { events } = log.read(session, 0);
+  // The marker is the last row, and what the send answered with (that the clear closed the
+  // agent and forgot its id is session-lifecycle.test's).
+  expect(events.at(-1)).toMatchObject({ seq: typed.seq, type: 'session.cleared', payload: {} });
+  const sent = events.filter((e) => e.type === 'msg.user').map((e) => e.payload);
+  expect(sent).toEqual([{ text: 'go' }]);
+  expect(events.map((e) => e.type)).not.toContain('comment.sent');
 });
 
 // A shutdown that cannot wait for stop(): the lock goes at once, so the next daemon on this

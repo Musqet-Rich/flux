@@ -109,16 +109,22 @@ const unarchive = async (ctx: Ctx, session: string): Promise<Record<string, neve
 
 // The `/clear` of a terminal session: the agent and its context go, the worktree and the log
 // stay. The id is forgotten before the close, so a send racing it already starts fresh, and
-// again after, in case the closing agent reported one while it drained.
-const clear = async (ctx: Ctx, session: string): Promise<Record<string, never>> => {
+// again after, in case the closing agent reported one while it drained. Resolves to the marker,
+// for a send that was the clear (below) and answers with its seq.
+const clear = async (ctx: Ctx, session: string): Promise<{ seq: number }> => {
   ctx.sessions.get(session);
   ctx.sessions.setAgentSessionId(session, null);
   await closeAgent(ctx, session);
   ctx.sessions.setAgentSessionId(session, null);
   ctx.forgetAgentSession(session);
-  ctx.log.append(session, { type: 'session.cleared', payload: {} });
-  return {};
+  const marker = ctx.log.append(session, { type: 'session.cleared', payload: {} });
+  return { seq: marker.seq };
 };
+
+// A bare `/clear` sent as a message is this clear, not the agent's (ADR 0034): the operator
+// types it out of habit, and the agent's own, where it has one, leaves the box knowing nothing.
+// Bare, so `/clear this up` is a message like any other, as `/compact <focus>` is.
+const isClearCommand = (text: string): boolean => text.trim() === '/clear';
 
 // A restart's model or effort (ADR 0032): a string sets it, null clears it to the box's default,
 // absent keeps it. Trimmed, since the value becomes a flag; blank is refused rather than spawning
@@ -170,6 +176,7 @@ export const sessionLifecycle: {
   archive: typeof archive;
   unarchive: typeof unarchive;
   clear: typeof clear;
+  isClearCommand: typeof isClearCommand;
   restart: typeof restart;
   rename: typeof rename;
-} = { archive, unarchive, clear, restart, rename };
+} = { archive, unarchive, clear, isClearCommand, restart, rename };

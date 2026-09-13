@@ -59,8 +59,9 @@ export const manual: ManualSection[] = [
     body: [
       'A session is one agent process working in one git worktree, with its own chat and timeline.',
       'Create one from the New screen: pick a repository, a branch and a harness (optionally an',
-      'Agent). Each session gets its own tab. Clear context starts a fresh agent in the same worktree',
-      '(the code stays, the conversation resets). Archive hides a session and can remove its worktree',
+      'Agent). Each session gets its own tab. Clear context, or `/clear` typed in the composer, starts',
+      'a fresh agent in the same worktree (the code stays; the chat opens at the Context cleared line,',
+      'with Show earlier reaching back). Archive hides a session and can remove its worktree',
       '(refused while it holds uncommitted or unpushed work unless you discard); Reopen brings it back',
       'while the worktree exists. Delete removes it permanently — the one destructive verb, always',
       'yours, never an agent’s. Model & effort (in the session menu) sets either for this session,',

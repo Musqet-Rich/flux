@@ -88,6 +88,16 @@ const sendMessage = async (
   params: RpcMethods['agent.send']['params'],
 ): Promise<{ seq: number }> => {
   const record = ctx.sessions.get(params.session);
+  // A bare `/clear` is the clear (session-lifecycle.ts), answered with the marker's seq. The
+  // pending comments a device names on every send are about the code and go with the next
+  // message (ADR 0018), so they stay pending, unmarked; a reply or a file has no message to
+  // ride on and is refused rather than lost.
+  if (sessionLifecycle.isClearCommand(params.text)) {
+    if (params.replyTo !== undefined || (params.attachments?.length ?? 0) > 0) {
+      throw new DaemonError('bad_params', '/clear takes no reply or attachments');
+    }
+    return sessionLifecycle.clear(ctx, params.session);
+  }
   const commentIds = params.commentIds ?? [];
   const comments = ctx.comments.get(params.session, commentIds);
   const refs: CodeRef[] = comments.map((c) => c.ref);
@@ -123,7 +133,10 @@ export const createSessionHandlers = (ctx: HandlerContext): SessionHandlers => (
   'sessions.createHelp': (p) => sessionCreateOps.help(ctx, p),
   'sessions.archive': (p) => sessionLifecycle.archive(ctx, p),
   'sessions.unarchive': (p) => sessionLifecycle.unarchive(ctx, p.session),
-  'sessions.clear': (p) => sessionLifecycle.clear(ctx, p.session),
+  'sessions.clear': async (p) => {
+    await sessionLifecycle.clear(ctx, p.session);
+    return {};
+  },
   'sessions.restart': (p) => sessionLifecycle.restart(ctx, p),
   'sessions.rename': (p) => Promise.resolve(sessionLifecycle.rename(ctx, p.session, p.title)),
   'agent.send': (p) => sendMessage(ctx, p),
