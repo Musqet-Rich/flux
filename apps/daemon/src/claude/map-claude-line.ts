@@ -224,6 +224,10 @@ const mapBody = (line: ClaudeLine, pending: Pending, cwd: string): Mapped => {
   if (line.kind === 'status') return { events: [], running: line.status === 'requesting' };
   if (line.kind === 'delta') return { events: [], delta: line.text };
   if (line.kind === 'assistant') return assistant(line, pending, cwd);
+  // The level itself is the adapter's to act on (claude-adapter.ts); the timeline shows the reply.
+  if (line.kind === 'effort_set') {
+    return { events: [{ type: 'msg.assistant', payload: { text: line.text } }] };
+  }
   if (line.kind === 'tool_result') return toolResult(line, pending);
   if (line.kind === 'result') return result(line);
   if (line.kind === 'rate_limit') {

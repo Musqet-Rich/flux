@@ -1,4 +1,4 @@
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, expect, test } from 'vitest';
@@ -36,6 +36,26 @@ const messageStart = (model: string): string =>
 
 // A config dir with no transcripts under it, so the default reader finds nothing.
 const nowhere = '/nonexistent/claude';
+const captured = new URL('../../test/fixtures/claude/effort-set.jsonl', import.meta.url);
+const captureSession = '4ac9415b-8e19-48a8-b7ab-d92d52545e4e';
+// Every spec the adapter gives across the capture; `beforeLast` runs before its final line.
+const replay = (
+  adapter: ReturnType<typeof claudeAdapter>,
+  beforeLast: () => void,
+): { specs: unknown[]; chosen: unknown[] } => {
+  const lines = readFileSync(captured, 'utf8')
+    .split('\n')
+    .filter((l) => l.trim() !== '');
+  const specs: unknown[] = [];
+  const chosen: unknown[] = [];
+  for (const [i, line] of lines.entries()) {
+    if (i === lines.length - 1) beforeLast();
+    const mapped = adapter.mapLine(line);
+    if (mapped?.spec !== undefined) specs.push(mapped.spec);
+    if (mapped?.chosen !== undefined) chosen.push(mapped.chosen);
+  }
+  return { specs, chosen };
+};
 
 const withClock = (): { adapter: ReturnType<typeof claudeAdapter>; clock: { now: number } } => {
   const clock = { now: 1000 };
@@ -228,4 +248,154 @@ test('by default the effort is read from the transcript under the config dir', (
     model: 'claude-fable-5',
   });
   expect(adapter.mapLine(result)?.spec).toEqual({ model: 'claude-fable-5', effort: 'high' });
+});
+
+// The operator's `/effort <level>` (ADR 0031): Claude confirms it on a synthetic assistant line
+// and writes no assistant line to the transcript, so the level is taken from the confirmation,
+// its own turn's end reads nothing, and the next real turn's end reads as ever.
+const effortSet = (level: string, parent?: string): string =>
+  JSON.stringify({
+    type: 'assistant',
+    ...(parent === undefined ? {} : { parent_tool_use_id: parent }),
+    message: {
+      model: '<synthetic>',
+      content: [{ type: 'text', text: `Set effort level to ${level} (this session only): …` }],
+    },
+  });
+
+const spoke = JSON.stringify({
+  type: 'assistant',
+  message: { model: 'claude-fable-5', content: [{ type: 'text', text: 'ok' }] },
+});
+const failed = JSON.stringify({ type: 'result', subtype: 'error', is_error: true });
+// A local command's reply that sets no level (`/effort` alone, `/status`): no line written.
+const usage = JSON.stringify({
+  type: 'assistant',
+  message: { model: '<synthetic>', content: [{ type: 'text', text: 'Usage: /effort <level>' }] },
+});
+
+test('an effort the operator set is the spec at once, kept, and not re-read at its turn end', () => {
+  const levels: Record<string, string | undefined> = { 'sid-1': 'high' };
+  const { adapter, asked } = withLevels(levels);
+  adapter.mapLine(init());
+  adapter.mapLine(messageStart('claude-fable-5'));
+  adapter.mapLine(result);
+  expect(adapter.mapLine(effortSet('medium'))).toEqual({
+    events: [{ type: 'msg.assistant', payload: { text: expect.stringContaining('medium') } }],
+    chosen: { effort: 'medium' },
+    spec: { model: 'claude-fable-5', effort: 'medium' },
+  });
+  // The command's own turn ends without a read: the transcript still says high.
+  expect(adapter.mapLine(result)?.spec).toEqual({ model: 'claude-fable-5', effort: 'medium' });
+  expect(asked).toEqual(['/private/tmp/w:sid-1']);
+  // The next real turn's end reads, and the transcript has caught up.
+  levels['sid-1'] = 'medium';
+  adapter.mapLine(messageStart('claude-fable-5'));
+  adapter.mapLine(spoke);
+  expect(adapter.mapLine(result)?.spec).toEqual({ model: 'claude-fable-5', effort: 'medium' });
+  expect(asked).toEqual(['/private/tmp/w:sid-1', '/private/tmp/w:sid-1']);
+});
+
+test('a level the --effort flag refuses runs here but is not kept; before a model, no spec', () => {
+  const { adapter } = withLevels({ 'sid-1': 'high' });
+  // The first message of a fresh process: nothing has named the model yet.
+  expect(adapter.mapLine(effortSet('medium'))).toEqual({
+    events: [{ type: 'msg.assistant', payload: { text: expect.stringContaining('medium') } }],
+    chosen: { effort: 'medium' },
+  });
+  adapter.mapLine(result);
+  adapter.mapLine(init());
+  expect(adapter.mapLine(messageStart('claude-fable-5'))?.spec).toEqual({
+    model: 'claude-fable-5',
+    effort: 'medium',
+  });
+  const ultra = adapter.mapLine(effortSet('ultracode'));
+  expect(ultra?.spec).toEqual({ model: 'claude-fable-5', effort: 'ultracode' });
+  expect(ultra?.chosen).toBeUndefined();
+});
+
+test('the word stands through local commands and cut calls, until a message is written', () => {
+  const levels: Record<string, string | undefined> = { 'sid-1': 'high' };
+  const { adapter, asked } = withLevels(levels);
+  adapter.mapLine(init());
+  adapter.mapLine(effortSet('medium'));
+  adapter.mapLine(result);
+  // Another local command (`/effort` alone, `/status`, `/compact`): a turn end with no line.
+  expect(adapter.mapLine(usage)?.spec).toBeUndefined();
+  adapter.mapLine(result);
+  // A call that fails or is stopped before a message: no line either.
+  expect(adapter.mapLine(messageStart('claude-fable-5'))?.spec).toEqual({
+    model: 'claude-fable-5',
+    effort: 'medium',
+  });
+  expect(adapter.mapLine(failed)?.spec).toEqual({ model: 'claude-fable-5', effort: 'medium' });
+  expect(asked).toEqual([]);
+  // A message completed is the line written; its turn end reads.
+  levels['sid-1'] = 'medium';
+  adapter.mapLine(messageStart('claude-fable-5'));
+  adapter.mapLine(spoke);
+  expect(adapter.mapLine(result)?.spec).toEqual({ model: 'claude-fable-5', effort: 'medium' });
+  expect(asked).toEqual(['/private/tmp/w:sid-1']);
+  // Gone with the process, like the rest.
+  adapter.mapLine(effortSet('low'));
+  adapter.reset();
+  adapter.mapLine(init());
+  adapter.mapLine(messageStart('claude-fable-5'));
+  expect(adapter.mapLine(result)?.spec).toEqual({ model: 'claude-fable-5', effort: 'medium' });
+});
+
+// The captured session (fixtures/claude/effort-set): a turn, `/effort` medium, auto, ultracode
+// and a refused word, a turn. The stub transcript says what the real one did: high after the
+// first turn, xhigh (ultracode's own level) after the last. Only medium is kept.
+test('the captured sequence: the chip says each word set, the record keeps the one kept', () => {
+  const levels: Record<string, string | undefined> = { [captureSession]: 'high' };
+  const { adapter, asked } = withLevels(levels);
+  const { specs, chosen } = replay(adapter, () => {
+    levels[captureSession] = 'xhigh';
+  });
+  expect(chosen).toEqual([{ effort: 'medium' }]);
+  const model = 'claude-fable-5-1';
+  expect(specs).toEqual([
+    { model },
+    { model, effort: 'high' },
+    { model, effort: 'medium' },
+    { model, effort: 'medium' },
+    { model, effort: 'auto' },
+    { model, effort: 'auto' },
+    { model, effort: 'ultracode' },
+    { model, effort: 'ultracode' },
+    { model, effort: 'ultracode' },
+    { model, effort: 'ultracode' },
+    { model, effort: 'xhigh' },
+  ]);
+  expect(asked).toHaveLength(2);
+});
+
+test('a model change after the word drops it, and the next turn end reads', () => {
+  const levels: Record<string, string | undefined> = { 'sid-1': 'high' };
+  const { adapter, asked } = withLevels(levels);
+  adapter.mapLine(init());
+  adapter.mapLine(messageStart('claude-fable-5'));
+  adapter.mapLine(result);
+  adapter.mapLine(effortSet('medium'));
+  // `/model opus` before the command's own turn ended: the level was the old model's.
+  expect(adapter.mapLine(messageStart('claude-opus-5'))?.spec).toEqual({ model: 'claude-opus-5' });
+  levels['sid-1'] = 'low';
+  expect(adapter.mapLine(result)?.spec).toEqual({ model: 'claude-opus-5', effort: 'low' });
+  expect(asked).toHaveLength(2);
+  // The word after the change is that model's.
+  expect(adapter.mapLine(effortSet('xhigh'))?.spec).toEqual({
+    model: 'claude-opus-5',
+    effort: 'xhigh',
+  });
+});
+
+test('a subagent printing the line is not the operator', () => {
+  const { adapter } = withLevels({ 'sid-1': 'high' });
+  adapter.mapLine(init());
+  adapter.mapLine(messageStart('claude-fable-5'));
+  const parented = adapter.mapLine(effortSet('medium', 'tu-1'));
+  expect(parented?.chosen).toBeUndefined();
+  expect(parented?.spec).toBeUndefined();
+  expect(parented?.events[0]).toMatchObject({ type: 'msg.assistant', parent: 'tu-1' });
 });

@@ -36,3 +36,4 @@ Format: Context, Decision, Consequences. Keep each under a page.
 | 0028 | Running model and effort as a logged `agent.spec`; Claude's effort read from its transcript | accepted |
 | 0029 | Phosphor icons, one path string each, through an in-house `Icon` component                  | accepted |
 | 0030 | Theming: eleven tokens per scheme, light and dark, themes as JSON, self-hosted fonts        | accepted |
+| 0031 | An effort the operator sets in-band sticks: kept on the session, shown at once              | accepted |
