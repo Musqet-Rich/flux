@@ -181,8 +181,8 @@ const commentOnDiff = async (page: Page): Promise<void> => {
   await expect(page.locator('.comment .text')).toHaveText('Say hello instead');
 };
 
-// Which Enter sends and the light scheme are choices kept on this device, made in Settings and
-// applied at once; the session tab brings the operator back to the composer.
+// Which Enter sends, the light scheme and the theme are choices kept on this device, made in
+// Settings and applied at once; the session tab brings the operator back to the composer.
 const chooseEnterToSend = async (page: Page): Promise<void> => {
   await page.getByRole('button', { name: 'Settings' }).click();
   await page.getByLabel('Send with').selectOption('enter');
@@ -193,10 +193,23 @@ const chooseEnterToSend = async (page: Page): Promise<void> => {
     'content',
     'rgb(245, 246, 248)',
   );
-  // Kept in this device's storage, so both are still there after a reload, the scheme from
-  // the first paint.
+  // A theme re-colours the page, the status bar with it: Nord's light background.
+  await page.getByLabel('Theme').selectOption('Nord');
+  await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(236, 239, 244)');
+  await expect(page.locator('meta[name="theme-color"]').first()).toHaveAttribute(
+    'content',
+    'rgb(236, 239, 244)',
+  );
+  // Kept in this device's storage, so all three are still there after a reload, the scheme
+  // from the first paint.
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-scheme', 'light');
+  await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(236, 239, 244)');
+  await expect(page.locator('meta[name="theme-color"]').first()).toHaveAttribute(
+    'content',
+    'rgb(236, 239, 244)',
+  );
+  await expect(page.getByLabel('Theme')).toHaveValue('Nord');
   await expect(page.getByLabel('Send with')).toHaveValue('enter');
   await page
     .getByRole('navigation', { name: 'Sessions' })
