@@ -125,6 +125,22 @@ test('scrolled up into the run, it stays flat with its open detail until the tai
   expect(el.scrollTop).toBe(1000);
 });
 
+// A clear landing while scrolled up takes the operator to it (ADR 0034): the parent's window
+// opens at the marker, so the rows' top moves forward; that is a jump, not a "new" pill, and
+// the hold lifts with it.
+test('a clear landing while scrolled up jumps to the marker with no pill', async () => {
+  const rows = trailing();
+  const wrapper = mountTimeline(rows);
+  const el = fakeScroller.pin(wrapper.find<HTMLElement>('.timeline').element);
+  await fakeScroller.scrollTo(el, 0);
+  await wrapper.setProps({ rows: [ev('session.cleared', {}), landed()] });
+  await flushPromises();
+  expect(wrapper.find('.new-activity').exists()).toBe(false);
+  expect(wrapper.emitted('trim')).toBeUndefined();
+  expect(el.scrollTop).toBe(1000);
+  expect(wrapper.findAll('.item').length).toBeGreaterThan(0);
+});
+
 test('an open fold stays open, and the same element, across a trim and Show earlier', async () => {
   const rows = [...trailing(), landed(), ...call(true), ...call(true), landed()];
   const wrapper = mountTimeline(rows);

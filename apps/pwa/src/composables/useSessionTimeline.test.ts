@@ -81,3 +81,47 @@ test('the window holds its top edge until trimmed, widened by a page or to a row
   events.push(event(901, 'msg.assistant', { text: 'sub' }, 'call-1'));
   expect(seqs()).toEqual([1, 901]);
 });
+
+// A cleared context is where main's window opens (ADR 0034): the marker is its first row, a
+// clear landing moves the edge down to it, Show earlier and `reveal` still reach past it, and
+// the next trim puts the edge back on it. A task's chat has no markers and is unaffected.
+test('the window opens at the last Context cleared marker and Show earlier reaches past it', () => {
+  const events = reactive([
+    ...many(1, 5),
+    event(6, 'session.cleared', {}),
+    ...many(7, 9),
+    event(10, 'msg.assistant', { text: 'sub' }, 'call-1'),
+  ]);
+  const chat = useSessionTimeline(() => events);
+  const seqs = (): number[] => chat.timeline.value.map((e) => e.seq);
+  expect(seqs()).toEqual([6, 7, 8, 9]);
+  expect(chat.earlier.value).toBe(5);
+  chat.showEarlier();
+  expect(seqs()).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  chat.trim();
+  expect(seqs()).toEqual([6, 7, 8, 9]);
+  chat.reveal(3);
+  expect(seqs()).toEqual([3, 4, 5, 6, 7, 8, 9]);
+  events.push(event(11, 'session.cleared', {}), event(12, 'msg.user', { text: 'fresh' }));
+  expect(seqs()).toEqual([11, 12]);
+  chat.select('call-1');
+  expect(seqs()).toEqual([10]);
+});
+
+// A cached log lands after the composable is made (the store loads it, then syncs).
+test('a log arriving after mount with a marker in it opens at the marker', () => {
+  const events = reactive<FluxEvent[]>([]);
+  const chat = useSessionTimeline(() => events);
+  expect(chat.timeline.value).toEqual([]);
+  events.push(...many(1, 3), event(4, 'session.cleared', {}), ...many(5, 6));
+  expect(chat.timeline.value.map((e) => e.seq)).toEqual([4, 5, 6]);
+  expect(chat.earlier.value).toBe(3);
+});
+
+test('a marker further back than the window keeps the window at its size', () => {
+  const events = [event(1, 'session.cleared', {}), ...many(2, 400)];
+  const chat = useSessionTimeline(() => events);
+  chat.trim();
+  expect(chat.timeline.value.length).toBe(300);
+  expect(chat.earlier.value).toBe(100);
+});

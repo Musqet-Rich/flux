@@ -70,7 +70,8 @@ export interface EventPayloads {
   // detached HEAD, given as its short sha): the box checks when a turn ends, at a `vcs.changed`
   // notice and before the message that spawns an agent, and `SessionSummary.head` follows.
   'session.head': { head: string };
-  // The agent's context was dropped (`sessions.clear`); what follows is a fresh conversation.
+  // The agent's context was dropped (`sessions.clear`, or a bare `/clear` sent as a message);
+  // what follows is a fresh conversation, and where a device's timeline opens.
   'session.cleared': Record<string, never>;
   'msg.user': {
     text: string;

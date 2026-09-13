@@ -71,6 +71,7 @@ const setup = (agents: AgentSpec[] = []) => {
   const sends: { target: string; text: string }[] = [];
   const opened: OpenParams[] = [];
   const archived: string[] = [];
+  const cleared: string[] = [];
   const handle = createControlHandler({
     log,
     sessions,
@@ -87,9 +88,13 @@ const setup = (agents: AgentSpec[] = []) => {
       sessions.setArchived(session, true);
       return Promise.resolve();
     },
+    clearSession: (session) => {
+      cleared.push(session);
+      return Promise.resolve({ seq: 7 });
+    },
     getAgents: () => agents,
   });
-  return { handle, log, sessions, emitted, sends, opened, archived };
+  return { handle, log, sessions, emitted, sends, opened, archived, cleared };
 };
 
 const acted = (emitted: { type: string }[]): number =>
@@ -177,6 +182,23 @@ test('send reaches the target supervisor and audits manager.acted send', async (
   expect(emitted.find((e) => e.type === 'manager.acted')).toMatchObject({
     session: 's2',
     payload: { actor: 'mgr', action: 'send', target: 's2', detail: 'run tests' },
+  });
+});
+
+// A bare `/clear` is the clear on this path too (ADR 0034): the worker never sees the text.
+test('send of a bare /clear clears the target through the shared op, audited as a send', async () => {
+  const { handle, emitted, sends, cleared } = setup();
+  const result = await handle({
+    type: 'session.send',
+    session: 'mgr',
+    target: 's2',
+    text: '/clear',
+  });
+  expect(result).toEqual({ seq: 7 });
+  expect(sends).toEqual([]);
+  expect(cleared).toEqual(['s2']);
+  expect(emitted.find((e) => e.type === 'manager.acted')).toMatchObject({
+    payload: { actor: 'mgr', action: 'send', target: 's2', detail: '/clear' },
   });
 });
 

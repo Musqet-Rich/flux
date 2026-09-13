@@ -49,6 +49,7 @@ const setup = () => {
     // The manager ops (ADR 0025) are unused by the ask/compact paths under test.
     openSession: () => Promise.reject(new Error('unused')),
     archiveSession: () => Promise.resolve(),
+    clearSession: () => Promise.reject(new Error('unused')),
     getAgents: () => [],
   });
   return { handle, log, waiting, sends };

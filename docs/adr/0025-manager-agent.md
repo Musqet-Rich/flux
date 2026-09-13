@@ -1,6 +1,6 @@
 # 0025: Manager Agent — an opt-in, audited fleet-control surface for agents
 
-Status: accepted, 2026-08-30.
+Status: accepted, 2026-08-30. § 3 is amended by 0034: a bare `/clear` a manager sends is the clear, reversible like an archive, the log intact.
 
 ## Context
 

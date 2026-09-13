@@ -131,7 +131,7 @@ test('clear settles a pending ask through the registry, an orphan in the log, th
     .then((answer) =>
       log.append('s3', { type: 'ask.answered', payload: { askId: 'live', ...answer } }),
     );
-  await sessionLifecycle.clear(ctx, 's3');
+  const cleared = await sessionLifecycle.clear(ctx, 's3');
   await handled;
   expect(closed).toEqual(['s3']);
   expect(forgotten).toEqual(['s3']);
@@ -143,6 +143,18 @@ test('clear settles a pending ask through the registry, an orphan in the log, th
     ['ask.answered', { askId: 'live', answer: '', by: 'aborted' }],
     ['session.cleared', {}],
   ]);
+  expect(cleared).toEqual({ seq: log.lastSeq('s3') });
+});
+
+// The message that is the clear (ADR 0034): `/clear` alone, whitespace around it forgiven, and
+// nothing else, so a message that starts with the word still reaches the agent.
+test('a bare /clear is the clear command; anything more is a message', () => {
+  const clears = ['/clear', ' /clear ', '/clear\n'].map((t) => sessionLifecycle.isClearCommand(t));
+  expect(clears).toEqual([true, true, true]);
+  const messages = ['/clear this up', '/cleared', 'clear', '/Clear', '/compact'].map((t) =>
+    sessionLifecycle.isClearCommand(t),
+  );
+  expect(messages).toEqual([false, false, false, false, false]);
 });
 
 test('restart closes the agent then sets the model and effort, clears one on null, keeps on absent', async () => {

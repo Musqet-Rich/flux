@@ -6,12 +6,15 @@ import type { ManagerControlOptions } from './manager-control.ts';
 import { sessionCreateOps } from './session-create-ops.ts';
 import { sessionLifecycle } from './session-lifecycle.ts';
 
-// The three lifecycle ops the manager control handler needs (ADR 0025), built from the same
+// The lifecycle ops the manager control handler needs (ADR 0025), built from the same
 // HandlerContext the RPC handlers use so nothing is duplicated. `getCtx` defers the lookup because
 // the control socket is wired before `ctx` exists in the composition root; the context is wrapped
 // with an emitting log so a session the manager opens (or closes) reaches devices exactly as a
 // device-driven one does (the plain `ctx.log` appends without broadcasting).
-type ManagerOps = Pick<ManagerControlOptions, 'openSession' | 'archiveSession' | 'getAgents'>;
+type ManagerOps = Pick<
+  ManagerControlOptions,
+  'openSession' | 'archiveSession' | 'clearSession' | 'getAgents'
+>;
 
 export const createManagerOps = (
   getCtx: () => HandlerContext,
@@ -26,6 +29,7 @@ export const createManagerOps = (
     archiveSession: async (session) => {
       await sessionLifecycle.archive(managed(), { session });
     },
+    clearSession: (session) => sessionLifecycle.clear(managed(), session),
     getAgents: () => getCtx().settings.getAgents(),
   };
 };

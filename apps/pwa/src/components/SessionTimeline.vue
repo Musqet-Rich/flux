@@ -92,7 +92,18 @@ watch(
   (rows, before) => {
     const last = before.at(-1)?.seq ?? 0;
     const added = rows.filter((row) => row.seq > last).length;
-    if (added > 0) void arrived(added, last);
+    if (added === 0) return;
+    // The top moving forward with them is a clear landing (useSessionTimeline opens the window
+    // at its marker; a trim moves the top only at the tail, after this; a log first loading has
+    // no top to move): the operator asked for a fresh start, so the screen goes to it, scrolled
+    // up or not, the marker no "new" activity.
+    const top = before[0]?.seq;
+    if (top !== undefined && (rows[0]?.seq ?? 0) > top) {
+      hold.value = null;
+      void tail.jump();
+      return;
+    }
+    void arrived(added, last);
   },
 );
 // Only growth counts: the text emptying is the reply landing, and that event is counted above.

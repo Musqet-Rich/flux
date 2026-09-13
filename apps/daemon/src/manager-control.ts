@@ -6,6 +6,7 @@ import type { EventLog } from './create-event-log.ts';
 import type { SessionRecord, SessionStore } from './create-session-store.ts';
 import type { SessionSupervisor } from './create-session-supervisor.ts';
 import { DaemonError } from './daemon-error.ts';
+import { sessionLifecycle } from './session-lifecycle.ts';
 
 // The manager surface (ADR 0025): a session marked `manager` may list / open / send / close / read
 // OTHER sessions. Every verb is authorised against the CALLER's persisted `manager` flag (§5), so a
@@ -28,6 +29,8 @@ export interface ManagerControlOptions {
   openSession: (params: OpenParams) => Promise<SessionSummary>;
   // The shared archive op (session-lifecycle.ts): closes the agent and hides the session.
   archiveSession: (session: string) => Promise<void>;
+  // The shared clear op (session-lifecycle.ts), for a `/clear` sent as text (ADR 0034).
+  clearSession: (session: string) => Promise<{ seq: number }>;
   // The saved Agents, to refuse opening a manager (§6).
   getAgents: () => AgentSpec[];
 }
@@ -148,7 +151,11 @@ const sendToTarget = async (
   audit: Audit,
 ): Promise<unknown> => {
   if (target.archived) throw new DaemonError('bad_params', `session ${target.session} is archived`);
-  const seq = await options.supervisor(target).send(text);
+  // A bare `/clear` is the clear here as on `agent.send` (ADR 0034): handed to the worker it
+  // would run the harness's own, leaving the box resuming the old context at the next spawn.
+  const { seq } = sessionLifecycle.isClearCommand(text)
+    ? await options.clearSession(target.session)
+    : { seq: await options.supervisor(target).send(text) };
   audit(target.session, 'send', clip(text));
   return { seq };
 };

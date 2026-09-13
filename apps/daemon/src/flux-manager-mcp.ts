@@ -46,7 +46,7 @@ const tools = [
   {
     name: 'flux_session_send',
     description:
-      "Send a prompt to ANOTHER session's agent (never your own). Its agent runs the text as a user turn. `target` is that session's id.",
+      "Send a prompt to ANOTHER session's agent (never your own). Its agent runs the text as a user turn; `/clear` alone clears that session's context instead. `target` is that session's id.",
     inputSchema: {
       type: 'object',
       properties: {
