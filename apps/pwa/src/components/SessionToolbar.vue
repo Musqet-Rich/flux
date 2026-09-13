@@ -151,7 +151,7 @@ const changesLabel = computed(() => `Changes (${changedCount.value})`);
 .branch {
   flex: 1;
   color: var(--muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-code);
   font-size: 0.85rem;
   overflow: hidden;
   text-overflow: ellipsis;

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "prepare": "git config core.hooksPath .githooks",
-    "check": "pnpm run fmt:check && pnpm run lint && sh .github/scripts/check-theme-default.sh && pnpm run typecheck && pnpm run test:coverage",
+    "check": "pnpm run fmt:check && pnpm run lint && sh .github/scripts/check-theme-default.sh && sh .github/scripts/check-fonts.sh && pnpm run typecheck && pnpm run test:coverage",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
     "lint": "oxlint",

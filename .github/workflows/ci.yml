@@ -131,6 +131,8 @@ jobs:
         run: sh .github/scripts/test-added-lines.sh
       - name: check-theme-default catches a default theme that differs from base.css
         run: sh .github/scripts/test-theme-default.sh
+      - name: check-fonts catches a family offered without a face, a file or a licence missing, and a platform stack that differs from base.css
+        run: sh .github/scripts/test-fonts.sh
 
   diff:
     name: diff (dependency changes are ledgered, no secret shapes, code style on added lines)

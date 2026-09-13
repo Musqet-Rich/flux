@@ -152,7 +152,7 @@ watch(
   color: var(--muted);
   border-radius: 0;
   padding: 0.1rem 0.15rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-code);
   font-size: 0.85rem;
 }
 
@@ -200,7 +200,7 @@ watch(
   flex: 1;
   min-width: 0;
   overflow-wrap: anywhere;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-code);
   font-size: 0.85rem;
 }
 

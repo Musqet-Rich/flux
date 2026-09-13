@@ -70,6 +70,9 @@ const noSidewaysOverflow = async (page: Page): Promise<void> => {
   expect(await page.evaluate(sidewaysOverflow)).toEqual({ app: 0, timeline: 0 });
 };
 
+// Whether the family named has loaded: a woff2 the app serves, or not.
+const interLoaded = `document.fonts.check('1em Inter')`;
+
 const pair = async (page: Page, stack: Stack): Promise<void> => {
   await page.goto(stack.pwaUrl);
   await page.getByLabel('Or paste the link').fill(stack.pairingUrl);
@@ -200,7 +203,13 @@ const chooseEnterToSend = async (page: Page): Promise<void> => {
     'content',
     'rgb(236, 239, 244)',
   );
-  // Kept in this device's storage, so all three are still there after a reload, the scheme
+  // A font is served from the app itself, and the page is set in it: the family loads, which
+  // a missing file would not, ahead of the platform stack, and the theme stays Nord.
+  await page.getByLabel('Text font').selectOption('Inter');
+  await expect(page.locator('body')).toHaveCSS('font-family', /^Inter, system-ui/u);
+  await expect.poll(() => page.evaluate(interLoaded)).toBe(true);
+  await expect(page.getByLabel('Theme')).toHaveValue('Nord');
+  // Kept in this device's storage, so all of it is still there after a reload, the scheme
   // from the first paint.
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-scheme', 'light');
@@ -210,6 +219,8 @@ const chooseEnterToSend = async (page: Page): Promise<void> => {
     'rgb(236, 239, 244)',
   );
   await expect(page.getByLabel('Theme')).toHaveValue('Nord');
+  await expect(page.getByLabel('Text font')).toHaveValue('Inter');
+  await expect(page.locator('body')).toHaveCSS('font-family', /^Inter, system-ui/u);
   await expect(page.getByLabel('Send with')).toHaveValue('enter');
   await page
     .getByRole('navigation', { name: 'Sessions' })

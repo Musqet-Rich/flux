@@ -197,7 +197,7 @@ watch(
   flex: none;
   width: 1.2rem;
   text-align: center;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-code);
   color: var(--muted);
 }
 
@@ -220,7 +220,7 @@ watch(
 .path,
 .from {
   overflow-wrap: anywhere;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-code);
   font-size: 0.85rem;
 }
 

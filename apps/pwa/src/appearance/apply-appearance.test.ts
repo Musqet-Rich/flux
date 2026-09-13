@@ -61,6 +61,22 @@ test('the theme goes on the root as light-dark pairs, the default too, and follo
   stop();
 });
 
+test('the font stacks go on the root with the colours, the platform stack where no family is named', async () => {
+  const a = fakeAppearance();
+  const stop = applyAppearance(document, a);
+  expect(property('--font-code')).toBe('ui-monospace, SFMono-Regular, Menlo, monospace');
+  a.setTheme({ name: 'x', fonts: { code: 'JetBrains Mono' } });
+  await nextTick();
+  expect(property('--font-code')).toBe(
+    "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
+  );
+  expect(property('--font-text')).toBe("system-ui, -apple-system, 'Segoe UI', sans-serif");
+  a.setTheme(null);
+  await nextTick();
+  expect(property('--font-code')).toBe('ui-monospace, SFMono-Regular, Menlo, monospace');
+  stop();
+});
+
 test('the theme-color metas keep their markup values while the page has no background', () => {
   const meta = metaOf('#0f1115');
   const stop = applyAppearance(document, fakeAppearance());

@@ -1,5 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, expect, test, vi } from 'vitest';
+import { nextTick } from 'vue';
 
 import { fakeAppearance } from '../../test/fake-appearance.ts';
 import { presets } from '../appearance/presets.ts';
@@ -51,6 +52,30 @@ test('a chosen preset is recognised as itself when the picker opens again', () =
   a.setTheme(nord);
   const wrapper = mount(ThemePicker, { props: { appearance: a } });
   expect(wrapper.find<HTMLSelectElement>('#flux-theme').element.value).toBe('Nord');
+});
+
+const fonts = { text: 'Sen', code: 'Kode Mono' };
+
+test('a theme is told apart by its colours, so fonts chosen leave it the preset it is', async () => {
+  const a = fakeAppearance();
+  a.setTheme({ ...nord, fonts });
+  const wrapper = mount(ThemePicker, { props: { appearance: a } });
+  expect(wrapper.find<HTMLSelectElement>('#flux-theme').element.value).toBe('Nord');
+  a.setTheme({ ...theme.default, fonts });
+  await nextTick();
+  expect(wrapper.find<HTMLSelectElement>('#flux-theme').element.value).toBe('default');
+});
+
+test('a pick keeps the fonts in force, the default becoming its own copy to carry them', async () => {
+  const a = fakeAppearance();
+  a.setTheme({ ...nord, fonts });
+  const wrapper = mount(ThemePicker, { props: { appearance: a } });
+  const select = wrapper.find<HTMLSelectElement>('#flux-theme');
+  await select.setValue('Solarized');
+  expect(a.choices.theme).toEqual({ ...presets.solarized, fonts });
+  await select.setValue('default');
+  expect(a.choices.theme).toEqual({ ...theme.default, fonts });
+  expect(select.element.value).toBe('default');
 });
 
 test('Copy puts the theme in force on the clipboard as JSON, the default included', async () => {

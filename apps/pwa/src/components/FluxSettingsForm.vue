@@ -280,7 +280,7 @@ dt {
 dd {
   margin: 0;
   overflow-wrap: anywhere;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-code);
 }
 
 .update {
