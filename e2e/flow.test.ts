@@ -180,6 +180,23 @@ const secondTabSawTurn = async (other: Page): Promise<void> => {
   await other.close();
 };
 
+// A wide window (ADR 0033): Changes opens beside the chat, the chat still there, the divider
+// between them, and the pane's close returns to the chat alone; back on the phone's width the
+// same route is the Changes screen on its own.
+const splitOnWide = async (page: Page): Promise<void> => {
+  await page.setViewportSize({ width: 1280, height: 812 });
+  await page.getByRole('button', { name: 'Changes' }).click();
+  await expect(page.locator('.split')).toBeVisible();
+  await expect(page.locator('.session .composer textarea')).toBeVisible();
+  await expect(page.locator('.panel .count')).toHaveText('1 changed');
+  await expect(page.getByRole('separator', { name: 'Resize panes' })).toBeVisible();
+  await page.getByRole('button', { name: 'Close pane' }).click();
+  await expect(page.locator('.split')).toHaveCount(0);
+  await expect(page.locator('.session .composer textarea')).toBeFocused();
+  await expect(page).toHaveURL(/\/s\/[0-9a-f-]{36}$/u);
+  await page.setViewportSize({ width: 375, height: 812 });
+};
+
 const commentOnDiff = async (page: Page): Promise<void> => {
   await page.getByRole('button', { name: 'Changes' }).click();
   await expect(page.locator('.count')).toHaveText('1 changed');
@@ -399,6 +416,7 @@ test('pair, run an agent, comment on its diff, send, reload', async ({ page, sta
   await test.step('the second tab saw the turn too, then closes', () => secondTabSawTurn(other));
   await test.step('choose Enter as the send key and the light scheme in Settings', () =>
     chooseEnterToSend(page));
+  await test.step('open Changes beside the chat on a wide window', () => splitOnWide(page));
   await test.step('comment on a line of the diff', () => commentOnDiff(page));
   await test.step('send it with a message; the agent gets the reference', () =>
     sendWithComment(page, stack));

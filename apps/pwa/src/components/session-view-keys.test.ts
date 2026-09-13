@@ -7,7 +7,8 @@ import SessionView from './SessionView.vue';
 
 // The session screen's keyboard: Esc is the Stop button from the keyboard, only while the agent
 // runs, once per press, never for an IME's Escape, and not for one something open has already
-// taken (a menu, the slash list, the help modal, the Rename…/Delete… forms, the image overlay).
+// taken (a menu, the slash list, the help modal, the Rename…/Delete… forms, the image overlay),
+// nor for one pressed in the pane beside the chat on a wide screen (ADR 0033).
 
 const escapeKey = 'Escape';
 const escape = (init: KeyboardEventInit = {}): KeyboardEvent =>
@@ -17,7 +18,12 @@ test('Esc interrupts the running agent unless the key was consumed or the agent 
   const box = await pairedStore([], { 'agent.interrupt': () => ({}) });
   const { store, relay, event } = box;
   // In the document, so a key in the composer bubbles to the window as it does in a browser.
-  const wrapper = mount(SessionView, { props: { store, session: 's1' }, attachTo: document.body });
+  const pane = document.createElement('div');
+  document.body.append(pane);
+  const wrapper = mount(SessionView, {
+    props: { store, session: 's1', pane },
+    attachTo: document.body,
+  });
   await until(() => store.state.logs['s1'] !== undefined);
   window.dispatchEvent(escape());
   await relay.emit(event(1, 'session.state', { state: 'running' }));
@@ -29,19 +35,27 @@ test('Esc interrupts the running agent unless the key was consumed or the agent 
   window.dispatchEvent(escape({ repeat: true }));
   window.dispatchEvent(escape({ isComposing: true }));
   window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true }));
+  pane.dispatchEvent(escape());
   // The one that counts goes last: the fake box answers in order, so a stray call from any of
   // the presses above would have landed before it and show in the list once it has settled.
   wrapper.find('textarea').element.dispatchEvent(escape());
   await until(() => box.calls('agent.interrupt').length > 0);
   await flushPromises();
   expect(box.calls('agent.interrupt')).toEqual([{ session: 's1' }]);
+  // Elsewhere on the screen (the header's tabs, say) is not the pane: it stops the agent too.
+  const header = document.createElement('button');
+  document.body.append(header);
+  header.dispatchEvent(escape());
+  await until(() => box.calls('agent.interrupt').length === 2);
+  header.remove();
+  pane.remove();
   wrapper.unmount();
   window.dispatchEvent(escape());
   // The same trick: a call made by hand after the press would land after any the press made.
   void store.interrupt('s1');
-  await until(() => box.calls('agent.interrupt').length === 2);
+  await until(() => box.calls('agent.interrupt').length === 3);
   await flushPromises();
-  expect(box.calls('agent.interrupt')).toHaveLength(2);
+  expect(box.calls('agent.interrupt')).toHaveLength(3);
   store.stop();
 });
 

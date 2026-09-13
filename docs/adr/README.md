@@ -38,3 +38,4 @@ Format: Context, Decision, Consequences. Keep each under a page.
 | 0030 | Theming: eleven tokens per scheme, light and dark, themes as JSON, self-hosted fonts        | accepted |
 | 0031 | An effort the operator sets in-band sticks: kept on the session, shown at once              | accepted |
 | 0032 | Model and effort set from the phone: `sessions.restart` takes them, the agent respawns      | accepted |
+| 0033 | Split panes on a wide screen: the chat beside a pane of Changes and Files                   | accepted |

@@ -30,6 +30,7 @@ const pwaDom = [
   'src/composables/useEscape.test.ts',
   'src/composables/useFileDrop.test.ts',
   'src/composables/useFocusChord.test.ts',
+  'src/composables/useWide.test.ts',
 ];
 
 export default defineConfig({

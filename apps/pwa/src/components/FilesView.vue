@@ -10,7 +10,9 @@ import Icon from './Icon.vue';
 // opens it in the editor. The current directory lives in the URL (`path`), so back-navigation and
 // reload are stateless: the parent re-lists whenever `path` changes.
 
-const props = defineProps<{ store: Store; session: string; path: string }>();
+// `paned`: beside the chat on a wide screen (ADR 0033), where the root's Back to it has nothing
+// to do; Up one directory stays.
+const props = defineProps<{ store: Store; session: string; path: string; paned?: boolean }>();
 const emit = defineEmits<{ enter: [path: string]; open: [path: string]; back: [] }>();
 
 const entries = ref<DirEntry[] | null>(null);
@@ -80,6 +82,7 @@ watch(
   <section class="files">
     <div class="toolbar">
       <button
+        v-if="!paned || path !== ''"
         type="button"
         class="secondary icon-only"
         :aria-label="upLabel"

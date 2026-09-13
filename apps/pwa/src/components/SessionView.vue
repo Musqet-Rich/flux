@@ -17,7 +17,8 @@ import SessionToolbar from './SessionToolbar.vue';
 // composer, or on a subagent's chat the note that messages go to main. The store owns the data
 // and reports failures; this only renders and dispatches.
 
-const props = defineProps<{ store: Store; session: string }>();
+// `pane`: the element beside the chat on a wide screen (ADR 0033), whose keys are its own.
+const props = defineProps<{ store: Store; session: string; pane?: HTMLElement | null }>();
 defineEmits<{ changes: []; files: []; closed: [] }>();
 
 const list = ref<InstanceType<typeof SessionTimeline> | null>(null);
@@ -108,10 +109,12 @@ const interrupt = (): void => {
 // menu, the slash list, the help modal, the Rename…/Delete… forms, the image overlay) marks
 // the key consumed, and that one only closes it: this listens on the window, so theirs, on
 // elements and the document, have run first. A held key repeats, and one interrupt is all a
-// turn needs; an Escape that cancels an IME composition is the IME's.
+// turn needs; an Escape that cancels an IME composition is the IME's. One pressed in the pane
+// beside the chat on a wide screen (`pane`, ADR 0033), in the editor say, is the pane's.
 const onKey = (event: KeyboardEvent): void => {
   if (event.key !== 'Escape' || event.repeat || event.isComposing) return;
   if (event.defaultPrevented || !busy.value) return;
+  if (event.target instanceof Node && props.pane?.contains(event.target) === true) return;
   interrupt();
 };
 
