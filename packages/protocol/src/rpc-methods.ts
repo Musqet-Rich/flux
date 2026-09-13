@@ -14,7 +14,13 @@ export interface SessionSummary {
   session: string;
   title: string;
   repo: string;
+  // The branch the session was created on, the one archive can delete.
   branch: string;
+  // Where the worktree's HEAD is once the box has seen it move off `branch` (`session.head`),
+  // a detached HEAD as its short sha; absent until then, and from daemons before this shipped.
+  head?: string;
+  // The worktree's absolute path on the box; absent from daemons before this shipped.
+  worktree?: string;
   harness: HarnessKind;
   // The configured model and effort the session spawns with: set at create (ADR 0023 § 3), by
   // a restart since (ADR 0032) or, the effort, in-band (ADR 0031); distinct from the running
@@ -99,6 +105,9 @@ export interface RpcMethods {
       // The daemon's app version (semver, ADR 0021); absent from daemons built before this
       // shipped, so the device feature-detects rather than assuming it is present.
       version?: string;
+      // The box's home directory, so the device can show a path as `~/…`; absent from daemons
+      // before this shipped.
+      home?: string;
     };
   };
   'events.sync': {

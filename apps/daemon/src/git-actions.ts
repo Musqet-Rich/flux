@@ -23,6 +23,8 @@ export interface GitActions {
   push: (worktree: string, setUpstream: boolean) => Promise<{ remote: string; branch: string }>;
   // The URL of the branch's open PR, created now or already open.
   pr: (worktree: string, options: PrOptions) => Promise<{ url: string; created: boolean }>;
+  // The branch the worktree is on, or the short sha of a detached HEAD.
+  head: (worktree: string) => Promise<string>;
   // `git init` a fresh repository (the daemon's managed help repo, ADR 0008).
   init: (repo: string) => Promise<void>;
   // `git commit --allow-empty` so `HEAD` exists to branch a worktree from; the identity is passed
@@ -73,6 +75,11 @@ const currentBranch = async (git: Runner, worktree: string): Promise<string> => 
     throw new DaemonError('git_error', 'not on a branch (detached HEAD)');
   }
 };
+
+const head = (git: Runner, worktree: string): Promise<string> =>
+  currentBranch(git, worktree).catch(async () =>
+    (await git(worktree, ['rev-parse', '--short', 'HEAD'])).trim(),
+  );
 
 const push = async (
   git: Runner,
@@ -135,6 +142,7 @@ const emptyCommit = async (git: Runner, repo: string, message: string): Promise<
 };
 
 export const gitActions = (git: Runner, gh: Runner): GitActions => ({
+  head: (worktree) => head(git, worktree),
   commit: (worktree, message, paths) => commit(git, worktree, message, paths),
   push: (worktree, setUpstream) => push(git, worktree, setUpstream),
   pr: (worktree, options) => pr(gh, worktree, options),

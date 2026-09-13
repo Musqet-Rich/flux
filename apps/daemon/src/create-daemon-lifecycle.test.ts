@@ -40,6 +40,7 @@ const setup = async () => {
     piCommand: 'no-such-binary-anywhere',
     opencodeCommand: 'no-such-binary-anywhere',
     claudeDir: join(root, 'claude'),
+    home: root,
   });
   await daemon.start();
   await relay.host();
@@ -125,6 +126,7 @@ test('abandon releases the lock synchronously, so a new daemon can start', async
     daemonName: 'flux@next',
     pushSubject: 'mailto:ops@example.com',
     claudeDir: dataDir,
+    home: dataDir,
   };
   const refused = await createDaemon(config);
   await expect(refused.start()).rejects.toThrow('another flux daemon');

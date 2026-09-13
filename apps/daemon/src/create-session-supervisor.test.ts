@@ -40,10 +40,11 @@ const untilLength = (list: unknown[], n: number): Promise<void> =>
 const untilEvent = (emitted: FluxEvent[], type: string, after = 0): Promise<FluxEvent> =>
   until(emitted, (e) => e.type === type, after);
 
-const untilState = (emitted: FluxEvent[], state: string): Promise<FluxEvent> =>
+const untilState = (emitted: FluxEvent[], state: string, after = 0): Promise<FluxEvent> =>
   until(
     emitted,
     (e) => fluxEvent.isKnown(e) && e.type === 'session.state' && e.payload.state === state,
+    after,
   );
 
 test('a user message runs a turn and the log tells the whole story', async () => {
@@ -159,9 +160,10 @@ const scripted = (replies: Mapped[] = [...signals]): AgentAdapter => ({
 });
 
 test('thinking and vcs signals go out as ephemerals and never touch the log', async () => {
-  const { supervisor, log, ephemeral } = await setup({}, scripted());
+  const { supervisor, log, ephemeral, emitted } = await setup({}, scripted());
   await supervisor.send('go');
   await untilLength(ephemeral, 5);
+  await untilState(emitted, 'idle');
   // The supervisor names the window from the table; an unknown model gets none.
   expect(ephemeral.slice(0, 5)).toEqual([
     {

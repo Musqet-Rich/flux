@@ -66,6 +66,10 @@ export interface EventPayloads {
   };
   'session.state': { state: SessionState; reason?: string };
   'session.renamed': { title: string };
+  // The worktree's HEAD moved, to another branch (an agent's `git switch`, say) or off any (a
+  // detached HEAD, given as its short sha): the box checks when a turn ends, at a `vcs.changed`
+  // notice and before the message that spawns an agent, and `SessionSummary.head` follows.
+  'session.head': { head: string };
   // The agent's context was dropped (`sessions.clear`); what follows is a fresh conversation.
   'session.cleared': Record<string, never>;
   'msg.user': {
@@ -186,6 +190,7 @@ export const eventPayloads: PayloadGuards = {
     isRecord(v) && isOneOf(v['state'], sessionStates) && isOptional(v['reason'], isString),
   'session.renamed': (v): v is EventPayloads['session.renamed'] =>
     isRecord(v) && isString(v['title']),
+  'session.head': (v): v is EventPayloads['session.head'] => isRecord(v) && isString(v['head']),
   'session.cleared': (v): v is EventPayloads['session.cleared'] => isRecord(v),
   'msg.user': (v): v is EventPayloads['msg.user'] =>
     isRecord(v) &&

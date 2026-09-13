@@ -93,6 +93,7 @@ const addedColumns = [
   { table: 'sessions', column: 'role', type: 'TEXT' },
   { table: 'sessions', column: 'tools', type: 'TEXT' },
   { table: 'sessions', column: 'manager', type: 'INTEGER' },
+  { table: 'sessions', column: 'head', type: 'TEXT' },
 ];
 
 const addMissingColumns = (db: DatabaseSync): void => {

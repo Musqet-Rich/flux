@@ -2,6 +2,7 @@ import { mkdir, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { expect, test } from 'vitest';
 
+import { gitIn } from '../test/git-in.ts';
 import { tempRepo } from '../test/temp-repo.ts';
 import { createAskRegistry } from './create-ask-registry.ts';
 import { createGitService } from './create-git-service.ts';
@@ -89,6 +90,19 @@ test('only a worktree under the data directory is ever removed', async () => {
   expect(closed).toEqual(['s1']);
   expect(sessions.get('s1').archived).toBe(false);
   expect(await git.branches(repo)).toEqual(['main']);
+});
+
+// The branch on the summary follows HEAD (`session.head`), but the one archive deletes is
+// the session's own, the one it was created on: deleting whatever the agent last checked out
+// would take a branch that is not the session's, or fail on a detached HEAD's sha.
+test('deleting the branch on archive deletes the created one, wherever HEAD went', async () => {
+  const { repo, worktreesDir, ctx, git, sessions, create } = await setup();
+  const worktree = join(worktreesDir, 's2');
+  await create('s2', worktree);
+  gitIn(worktree, ['switch', '-q', '-c', 'feat/other']);
+  sessions.setHead('s2', 'feat/other');
+  await sessionLifecycle.archive(ctx, { session: 's2', removeWorktree: true, deleteBranch: true });
+  expect(await git.branches(repo)).toEqual(['feat/other', 'main']);
 });
 
 test('a worktree removed by hand is pruned so its branch can still be deleted', async () => {

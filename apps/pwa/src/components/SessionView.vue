@@ -147,7 +147,6 @@ watch(
       :store="store"
       :session="session"
       :events="events"
-      :branch="summary?.branch ?? session"
       :busy="busy"
       @interrupt="interrupt"
       @changes="$emit('changes')"

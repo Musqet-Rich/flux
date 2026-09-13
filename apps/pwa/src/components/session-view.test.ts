@@ -41,7 +41,7 @@ test('renders the log, streams, answers asks, sends with pending comments', asyn
   await flushPromises();
   expect(wrapper.findAll('.item').length).toBe(3);
   expect(wrapper.find('.streaming').text()).toBe('thinking');
-  expect(wrapper.find('.branch').text()).toBe('flux/one');
+  expect(wrapper.find('.where').text()).toBe('/repos/r (flux/one)');
   await wrapper.find('.ask .options button').trigger('click');
   await until(() => box.calls('agent.answer').length === 1);
   expect(box.calls('agent.answer')).toEqual([{ session: 's1', askId: 'q', answer: 'yes' }]);

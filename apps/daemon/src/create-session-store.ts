@@ -58,6 +58,8 @@ export interface SessionStore {
   // Null forgets the id: the next spawn starts a fresh agent context (sessions.clear).
   setAgentSessionId: (session: string, id: string | null) => void;
   setTitle: (session: string, title: string) => void;
+  // Where the supervisor last found HEAD, once it has moved off `branch`.
+  setHead: (session: string, head: string) => void;
   // The configured model and effort for every later spawn: set at a restart (ADR 0032, null
   // clears one back to the box's default), the effort also in-band (ADR 0031).
   setModel: (session: string, model: string | null) => void;
@@ -88,6 +90,12 @@ const optionals = (model: string | undefined, effort: string | undefined) => ({
   ...(effort === undefined ? {} : { effort }),
 });
 
+// Null until the supervisor has seen HEAD move off the created branch (protocol.md § 7).
+const headField = (value: unknown): { head?: string } => {
+  const head = stringOrUndefined(value);
+  return head === undefined ? {} : { head };
+};
+
 // The tool policy is stored as JSON text; a row from before this shipped, or any value that no
 // longer parses to a valid policy, reads back as none (mode `all`) rather than failing the read.
 const toolsField = (value: unknown): { tools?: AgentTools } => {
@@ -114,6 +122,8 @@ const stateOf = (value: unknown): SessionState => {
 
 const columns =
   'session, title, repo, worktree, branch, base, agent, model, effort, role, tools, manager, agent_session_id, state, archived, created_at, updated_at';
+// `head` is never inserted: a session starts on its branch, and the column is set once HEAD moves.
+const readColumns = `${columns}, head`;
 
 // The insert's bound values in column order; optional fields become NULL when unset. The tool
 // policy is serialised to JSON text.
@@ -140,6 +150,7 @@ const toRecord = (row: Record<string, unknown>, lastSeq: number): SessionRecord 
   repo: String(row['repo']),
   worktree: String(row['worktree']),
   branch: String(row['branch']),
+  ...headField(row['head']),
   base: String(row['base']),
   harness: harnessOf(row['agent']),
   ...optionals(stringOrUndefined(row['model']), stringOrUndefined(row['effort'])),
@@ -159,6 +170,8 @@ const toSummary = (record: SessionRecord, worktreeExists: boolean): SessionSumma
   title: record.title,
   repo: record.repo,
   branch: record.branch,
+  ...headField(record.head),
+  worktree: record.worktree,
   harness: record.harness,
   ...optionals(record.model, record.effort),
   state: record.state,
@@ -176,11 +189,12 @@ const prepareStatements = (db: DatabaseSync) => {
     insert: db.prepare(
       `INSERT INTO sessions (${columns}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'idle', 0, ?, ?)`,
     ),
-    select: db.prepare(`SELECT ${columns} FROM sessions WHERE session = ?`),
-    selectAll: db.prepare(`SELECT ${columns} FROM sessions ORDER BY updated_at DESC`),
+    select: db.prepare(`SELECT ${readColumns} FROM sessions WHERE session = ?`),
+    selectAll: db.prepare(`SELECT ${readColumns} FROM sessions ORDER BY updated_at DESC`),
     state: update('state'),
     agentSessionId: update('agent_session_id'),
     title: update('title'),
+    head: update('head'),
     model: update('model'),
     effort: update('effort'),
     archived: update('archived'),
@@ -196,6 +210,34 @@ const setter =
     const changed = statement.run(value, now().toISOString(), session).changes;
     if (changed === 0) throw new DaemonError('not_found', `no session ${session}`);
   };
+
+// One column each, in the row of the session named.
+const setters = (
+  st: Statements,
+  set: ReturnType<typeof setter>,
+): Omit<SessionStore, 'create' | 'get' | 'list'> => ({
+  setState: (session, state) => {
+    set(st.state, session, state);
+  },
+  setAgentSessionId: (session, id) => {
+    set(st.agentSessionId, session, id);
+  },
+  setTitle: (session, title) => {
+    set(st.title, session, title);
+  },
+  setHead: (session, head) => {
+    set(st.head, session, head);
+  },
+  setModel: (session, model) => {
+    set(st.model, session, model);
+  },
+  setEffort: (session, effort) => {
+    set(st.effort, session, effort);
+  },
+  setArchived: (session, archived) => {
+    set(st.archived, session, archived ? 1 : 0);
+  },
+});
 
 export const createSessionStore = (options: SessionStoreOptions): SessionStore => {
   const { db, lastSeq } = options;
@@ -226,23 +268,6 @@ export const createSessionStore = (options: SessionStoreOptions): SessionStore =
     create,
     get,
     list: () => st.selectAll.all().map((row) => summary(row)),
-    setState: (session, state) => {
-      set(st.state, session, state);
-    },
-    setAgentSessionId: (session, id) => {
-      set(st.agentSessionId, session, id);
-    },
-    setTitle: (session, title) => {
-      set(st.title, session, title);
-    },
-    setModel: (session, model) => {
-      set(st.model, session, model);
-    },
-    setEffort: (session, effort) => {
-      set(st.effort, session, effort);
-    },
-    setArchived: (session, archived) => {
-      set(st.archived, session, archived ? 1 : 0);
-    },
+    ...setters(st, set),
   };
 };

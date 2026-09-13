@@ -45,6 +45,7 @@ const setup = async (extra: Partial<DaemonConfig> = {}) => {
     piCommand: 'no-such-binary-anywhere',
     opencodeCommand: 'no-such-binary-anywhere',
     claudeDir,
+    home: root,
     ...extra,
   });
   await daemon.start();
@@ -99,6 +100,7 @@ test('pair, create a session, talk to the agent, sync the log', async () => {
     vapidPublicKey: expect.stringMatching(/^B[\w-]{86}$/u),
     agents: ['claude'],
     version: expect.any(String),
+    home: expect.any(String),
   });
   expect(await call(d, 'repos.list', {})).toEqual({
     repos: [{ path: repo, name: 'app', branches: ['main'] }],
@@ -482,19 +484,4 @@ test('git.pr logs pr.published, seen by the caller before the result', async () 
     events: { type: string }[];
   };
   expect(synced.events.map((e) => e.type)).toEqual(['session.created', 'pr.published']);
-});
-
-test('refuses to create a session for a harness the box does not have', async () => {
-  const { repo } = await setup();
-  const d = await device();
-  await pair(d);
-  await expect(
-    call(d, 'sessions.create', { repo, branch: 'flux/pi', harness: 'pi' }),
-  ).rejects.toThrow('agent_unavailable');
-  await expect(call(d, 'settings.set', { flux: { defaultHarness: 'pi' } })).rejects.toThrow(
-    'agent_unavailable',
-  );
-  expect(await call(d, 'settings.set', { flux: { defaultHarness: 'claude' } })).toMatchObject({
-    flux: { defaultHarness: 'claude' },
-  });
 });

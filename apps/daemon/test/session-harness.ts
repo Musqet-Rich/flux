@@ -58,13 +58,15 @@ export interface SessionHarness {
   reopen: () => SessionSupervisor;
 }
 
-const createRecord = (sessions: SessionStore, worktree: string): SessionRecord =>
+// On the worktree's own branch, as a created session is, so the supervisor's check of HEAD
+// after a turn finds nothing moved unless a test moved it.
+const createRecord = async (sessions: SessionStore, worktree: string): Promise<SessionRecord> =>
   sessions.create({
     session: 's1',
     title: 't',
     repo: worktree,
     worktree,
-    branch: 'b',
+    branch: await createGitService().head(worktree),
     base: 'HEAD',
     harness: 'claude',
   });
@@ -83,7 +85,7 @@ export const sessionHarness = async (
   const db = openDatabase(':memory:');
   const log = createEventLog({ db });
   const sessions = createSessionStore({ db, lastSeq: log.lastSeq });
-  const record = createRecord(sessions, worktree);
+  const record = await createRecord(sessions, worktree);
   const emitted: FluxEvent[] = [];
   const ephemeral: Ephemeral[] = [];
   const spawns: SpawnRequest[] = [];

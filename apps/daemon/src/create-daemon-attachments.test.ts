@@ -48,6 +48,7 @@ const pairedSession = async () => {
     piCommand: 'no-such-binary-anywhere',
     opencodeCommand: 'no-such-binary-anywhere',
     claudeDir: join(root, 'claude'),
+    home: root,
   });
   await daemon.start();
   await relay.host();

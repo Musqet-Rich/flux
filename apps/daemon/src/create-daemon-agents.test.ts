@@ -40,6 +40,7 @@ const setup = async () => {
     piCommand: 'no-such-binary-anywhere',
     opencodeCommand: 'no-such-binary-anywhere',
     claudeDir: join(root, 'claude'),
+    home: root,
   });
   await daemon.start();
   await relay.host();
@@ -157,4 +158,20 @@ test('a restart with a model and effort respawns with the flags; null clears one
   expect(listed.find((s) => s.session === session)).not.toHaveProperty('model');
   expect(listed.find((s) => s.session === session)).toMatchObject({ effort: 'low' });
   delete process.env['FLUX_FAKE_ARGS_FILE'];
+});
+
+// The box lists the harnesses it found; the rest cannot start a session or be the default.
+test('refuses to create a session for a harness the box does not have', async () => {
+  const { repo } = await setup();
+  const d = await device();
+  await pair(d);
+  await expect(
+    call(d, 'sessions.create', { repo, branch: 'flux/pi', harness: 'pi' }),
+  ).rejects.toThrow('agent_unavailable');
+  await expect(call(d, 'settings.set', { flux: { defaultHarness: 'pi' } })).rejects.toThrow(
+    'agent_unavailable',
+  );
+  expect(await call(d, 'settings.set', { flux: { defaultHarness: 'claude' } })).toMatchObject({
+    flux: { defaultHarness: 'claude' },
+  });
 });

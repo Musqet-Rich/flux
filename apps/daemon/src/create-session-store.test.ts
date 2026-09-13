@@ -59,6 +59,7 @@ test('list gives summaries, newest first, archived ones flagged with their workt
     title: 'Fix login',
     repo: '/repos/app',
     branch: 'flux/fix-login',
+    worktree: '/repos/app/.flux/s1',
     harness: 'claude',
     state: 'idle',
     lastSeq: 7,
@@ -76,10 +77,18 @@ test('setters update the row and bump updatedAt', () => {
   store.setState('s1', 'running');
   store.setAgentSessionId('s1', 'agent-uuid');
   store.setTitle('s1', 'Renamed');
+  expect('head' in store.get('s1')).toBe(false);
+  store.setHead('s1', 'fix/other');
   const record = store.get('s1');
   expect(record.state).toBe('running');
   expect(record.agentSessionId).toBe('agent-uuid');
   expect(record.title).toBe('Renamed');
+  // The created branch stays; the summary shows where HEAD is.
+  expect(record).toMatchObject({ branch: 'flux/fix-login', head: 'fix/other' });
+  expect(store.list().find((s) => s.session === 's1')).toMatchObject({
+    branch: 'flux/fix-login',
+    head: 'fix/other',
+  });
   expect(record.updatedAt).toBe('2026-08-29T10:00:05.000Z');
   store.setState('s1', 'waiting_user');
   expect(store.get('s1').state).toBe('waiting_user');
