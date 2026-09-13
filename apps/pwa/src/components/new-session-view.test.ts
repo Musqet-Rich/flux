@@ -47,6 +47,7 @@ test('lists repos, creates the session, sends the first prompt and emits created
   ]);
   expect(box.calls('agent.send')).toEqual([{ session: 's9', text: 'Build it' }]);
   expect(box.store.state.sessions.map((s) => s.session)).toEqual(['s1', 's9']);
+  wrapper.unmount();
   box.store.stop();
 });
 
@@ -91,6 +92,7 @@ test('offers a harness picker only when the box has more than one, with model an
       effort: 'high',
     },
   ]);
+  wrapper.unmount();
   box.store.stop();
 });
 
@@ -107,6 +109,7 @@ test('shows the box error when creation fails', async () => {
   await flushPromises();
   expect(wrapper.find('.error').text()).toBe('no sessions.create');
   expect(wrapper.emitted('created')).toBeUndefined();
+  wrapper.unmount();
   box.store.stop();
 });
 
@@ -131,6 +134,7 @@ test('the picker follows the box default and the harness list, and says when the
   expect(wrapper.find('.error').text()).toContain('No harness found on the box');
   await wrapper.find('#new-prompt').setValue('go');
   expect(wrapper.find('button[type=submit]').attributes('disabled')).toBeDefined();
+  wrapper.unmount();
   box.store.stop();
 });
 
@@ -175,6 +179,7 @@ test('an agent picker prefills model and effort and sends the agent name', async
       effort: 'high',
     },
   ]);
+  wrapper.unmount();
   box.store.stop();
 });
 
@@ -187,5 +192,37 @@ test('leaving the agent picker on None omits agent on create', async () => {
   await wrapper.find('form').trigger('submit');
   await until(() => box.calls('agent.send').length === 1);
   expect(box.calls('sessions.create')[0]).not.toHaveProperty('agent');
+  wrapper.unmount();
+  box.store.stop();
+});
+
+const chordM = (): KeyboardEvent =>
+  new KeyboardEvent('keydown', {
+    key: 'm',
+    code: 'KeyM',
+    ctrlKey: true,
+    altKey: true,
+    cancelable: true,
+  });
+
+// Ctrl+Alt+M puts the caret in the first message from anywhere on the form, the Branch field
+// included, and the box's title says so. (The box disabled while the session is created leaves
+// the key: useFocusChord's own test, since the fake box answers a create at once.)
+test('the focus chord reaches the first message from the form', async () => {
+  const box = await pairedStore([], {
+    'repos.list': () => ({ repos: [{ path: '/repos/a', name: 'a', branches: [] }] }),
+  });
+  const wrapper = mount(NewSessionView, { props: { store: box.store }, attachTo: document.body });
+  await until(() => Reflect.get(wrapper.vm, 'repos').length === 1);
+  await flushPromises();
+  const prompt = wrapper.find<HTMLTextAreaElement>('#new-prompt').element;
+  expect(prompt.title).toBe('First message (Ctrl+Alt+M)');
+  wrapper.find<HTMLInputElement>('#new-branch').element.focus();
+  const first = chordM();
+  window.dispatchEvent(first);
+  expect(first.defaultPrevented).toBe(true);
+  expect(document.activeElement).toBe(prompt);
+  prompt.blur();
+  wrapper.unmount();
   box.store.stop();
 });

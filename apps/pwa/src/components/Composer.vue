@@ -25,6 +25,8 @@ const props = defineProps<{
   session: string;
   comments: PendingComment[];
   reply: ReplyTarget | null;
+  // The box's title: the screen's focus chord, named, or none (SessionView, useFocusChord).
+  hint: string | undefined;
 }>();
 const emit = defineEmits<{ sent: []; unreply: []; resized: [] }>();
 
@@ -38,6 +40,8 @@ const uploading = computed(() => draft.value.attachments.some((a) => a.status !=
 const blank = computed(() => draft.value.text.trim() === '');
 // The box is a line tall and grows with the text to ten lines (useAutoGrow).
 useAutoGrow(box, () => draft.value.text);
+// The screen's focus chord reaches the box through this (SessionView, useFocusChord).
+defineExpose({ box });
 // Any change of height, whatever inside it caused it.
 let observer: ResizeObserver | null = null;
 onMounted(() => {
@@ -221,6 +225,7 @@ const sendHint = computed(
         v-model="draft.text"
         rows="1"
         placeholder="Message the agent"
+        :title="hint"
         @keydown="key"
         @beforeinput="lineBreak"
         @paste="paste"

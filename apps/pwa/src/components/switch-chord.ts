@@ -1,5 +1,6 @@
 import type { SwitchKey } from '../store/store-state.ts';
 import { enterKey } from './enter-key.ts';
+import { inText } from './in-text.ts';
 
 // The keyboard's way between session tabs, under the device's choice (store/switch-key.ts):
 // the chosen chord with → or ↓ steps to the next tab, with ← or ↑ to the one before, wrapping
@@ -53,11 +54,6 @@ const direction = (key: string, vertical: boolean): -1 | 0 | 1 => {
   return key === (vertical ? 'ArrowUp' : 'ArrowLeft') ? -1 : 0;
 };
 
-const inText = (target: EventTarget | null): boolean =>
-  target instanceof HTMLTextAreaElement ||
-  target instanceof HTMLInputElement ||
-  (target instanceof HTMLElement && target.isContentEditable);
-
 const matches = (event: KeyboardEvent, keys: Held): boolean =>
   event.metaKey === keys.meta &&
   event.ctrlKey === keys.ctrl &&
@@ -103,7 +99,7 @@ const composers = (job: string): string =>
 const hint = (name: SwitchKey, mac: boolean): string => {
   const hints: Record<SwitchKey, string> = {
     ctrlAlt: mac
-      ? 'VoiceOver uses ⌃⌥ as its own key; with VoiceOver on, pick another chord.'
+      ? 'VoiceOver uses ⌃⌥ as its own key; with VoiceOver on, pick Off, since another chord leaves ⌃⌥M on the message box.'
       : 'Some desktops use Ctrl+Alt+← → for workspaces or screen rotation, and take it first.',
     altUpDown: mac ? composers('moves by paragraph') : '',
     metaShift: composers(mac ? 'selects to the line’s start or end' : 'selects by word'),
@@ -115,7 +111,7 @@ const hint = (name: SwitchKey, mac: boolean): string => {
       ? `${composers('moves to the line’s start or end')} Elsewhere the browser’s Back gives way.`
       : composers('moves by word'),
     shift: composers('selects a character'),
-    off: 'No keyboard shortcut between tabs.',
+    off: 'No keyboard shortcut between tabs, and none to the message box.',
   };
   return hints[name];
 };
