@@ -75,6 +75,40 @@ test('the fonts chosen are kept beside the theme, none as no key', () => {
   expect(again.choices.fonts).toEqual({ code: 'Nova Mono' });
   again.setFonts({});
   expect(storage.parsed()).toEqual({ mode: 'system', fontSize: 15 });
+  // A `null` written by hand reads the same as no key, like a theme's.
+  const byHand = appearance.create(
+    storageOf('{"mode":"dark","fontSize":15,"fonts":null}'),
+    systemOf(true),
+  );
+  expect(byHand.choices.fonts).toEqual({});
+});
+
+test('a theme and fonts are stored together, and a theme carrying fonts of its own is read whole', () => {
+  const storage = storageOf(null);
+  const a = appearance.create(storage, systemOf(true));
+  a.setTheme(nord);
+  a.setFonts({ text: 'Sen' });
+  expect(storage.parsed()).toEqual({
+    mode: 'system',
+    fontSize: 15,
+    theme: nord,
+    fonts: { text: 'Sen' },
+  });
+  const again = appearance.create(storage, systemOf(true));
+  expect(again.choices).toEqual({
+    mode: 'system',
+    fontSize: 15,
+    theme: nord,
+    fonts: { text: 'Sen' },
+  });
+  // The JSON format carries `fonts` for sharing; stored inside a theme it is kept as stored
+  // and is not the choice, which is the device's own key.
+  const inside = appearance.create(
+    storageOf('{"mode":"dark","fontSize":15,"theme":{"name":"x","fonts":{"code":"Nova Mono"}}}'),
+    systemOf(true),
+  );
+  expect(inside.choices.theme).toEqual({ name: 'x', fonts: { code: 'Nova Mono' } });
+  expect(inside.choices.fonts).toEqual({});
 });
 
 // Default is stored as no `theme` at all, which is also what a device that chose a scheme

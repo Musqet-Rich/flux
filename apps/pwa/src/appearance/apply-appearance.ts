@@ -12,8 +12,9 @@ import { theme as themes } from './theme.ts';
 // own chrome follows too:
 // `theme-color`, which a phone paints its status bar in, is set to the page background the
 // scheme and theme came to; the body's resolved colour rather than the `--bg` token, whose
-// value is a `light-dark()` call until it is used. Read on a scheme or theme change only: it
-// forces a style recalculation, which a slider dragging the size should not pay for.
+// value is a `light-dark()` call until it is used. Read on a scheme, theme or font change,
+// never for the size: it forces a style recalculation, which a slider dragging the size
+// should not pay for, while the other three are a pick each.
 //
 // Run before the app mounts, so the first paint is already right.
 
@@ -27,7 +28,7 @@ export const applyAppearance = (doc: Document, appearance: Appearance): (() => v
     },
     { immediate: true },
   );
-  const stopColours = watch(
+  const stopTheme = watch(
     () => ({
       scheme: appearance.scheme.value,
       theme: appearance.choices.theme,
@@ -53,6 +54,6 @@ export const applyAppearance = (doc: Document, appearance: Appearance): (() => v
   );
   return () => {
     stopSize();
-    stopColours();
+    stopTheme();
   };
 };

@@ -27,7 +27,7 @@ test('the fonts of a theme or of the stored choices read in the fixed order, any
   });
   expect(fonts.read({ ['k'.repeat(40)]: 'Inter' })).toEqual({
     ok: false,
-    reason: `fonts.${'k'.repeat(32)} is not a part: text, code`,
+    reason: `fonts.${'k'.repeat(32)}… is not a part: text, code`,
   });
   expect(fonts.read({ text: 7 })).toEqual({
     ok: false,

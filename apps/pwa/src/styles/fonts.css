@@ -8,17 +8,21 @@
    lists them, and .github/scripts/check-fonts.sh, run by `pnpm run check`, refuses the two
    disagreeing; the landing (Home.vue) sets itself in the first two. Each file is the Latin
    block Google Fonts serves for the family, fetched once: one variable file where the family
-   has a weight axis, else the regular and the bold, upright only (a browser slants the
-   upright for italic). The unicode-range is the block's, so a character outside it falls to
-   the platform font without a download; the block has no box drawing, so a table or a tree a
-   command draws is ruled in the platform's mono whatever family is chosen (ADR 0030). */
+   has a weight axis, else each static weight it has (a regular and a bold, or a regular alone
+   where that is all there is, and the browser makes the bold), upright only (a browser slants
+   the upright for italic). The unicode-range is the block's, so a character outside it falls
+   to the platform font without a download; the block has no box drawing, so a table or a tree
+   a command draws is ruled in the platform's mono whatever family is chosen (ADR 0030). */
 
 @font-face {
   font-family: 'Space Grotesk';
   font-style: normal;
-  font-weight: 400 700;
+  font-weight: 300 700;
   font-display: swap;
   src: url('/fonts/space-grotesk-var.woff2') format('woff2');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
 @font-face {
@@ -27,6 +31,9 @@
   font-weight: 400;
   font-display: swap;
   src: url('/fonts/ibm-plex-mono-400.woff2') format('woff2');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
 @font-face {
@@ -35,6 +42,9 @@
   font-weight: 500;
   font-display: swap;
   src: url('/fonts/ibm-plex-mono-500.woff2') format('woff2');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
 @font-face {

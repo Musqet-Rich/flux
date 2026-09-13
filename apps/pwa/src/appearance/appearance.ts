@@ -7,10 +7,10 @@ import type { Theme } from './theme.ts';
 import { theme as themes } from './theme.ts';
 
 // How the app looks on this device (ADR 0030): light or dark, or whichever the system is in,
-// the text size, the theme, the colours each scheme paints in, and the fonts. All are the device's own,
-// like its notification sound and send key, but unlike those they decide the first paint, so
-// they are not in the store: the store's storage is IndexedDB, read after the app is on
-// screen, and a light-scheme device would flash dark on every launch. They live in
+// the text size, the theme, the colours each scheme paints in, and the fonts. All are the
+// device's own, like its notification sound and send key, but unlike those they decide the
+// first paint, so they are not in the store: the store's storage is IndexedDB, read after the
+// app is on screen, and a light-scheme device would flash dark on every launch. They live in
 // `localStorage`, read synchronously before the app mounts (app-appearance.ts, main.ts), and
 // applied to the document by apply-appearance.ts.
 
@@ -59,12 +59,14 @@ const modes: readonly Mode[] = ['system', 'light', 'dark'];
 // before this runs; the two must agree or the page resizes on load.
 const fontSize = { min: 12, max: 22, step: 1, default: 15 } as const;
 
-const defaults: Readonly<AppearanceChoices> = {
+// Always a fresh object: the result becomes the reactive state, and a proxy writes through to
+// what it wraps, so one shared default would be every instance's.
+const defaults = (): AppearanceChoices => ({
   mode: 'system',
   fontSize: fontSize.default,
   theme: null,
   fonts: {},
-};
+});
 
 const isMode = (value: unknown): value is Mode => modes.some((mode) => mode === value);
 
@@ -88,28 +90,27 @@ const parseTheme = (value: Record<string, unknown>): Theme | null | undefined =>
 };
 
 const parseFonts = (value: Record<string, unknown>): Fonts | undefined => {
-  if (!('fonts' in value)) return {};
+  if (!('fonts' in value) || value['fonts'] === null) return {};
   const read = families.read(value['fonts']);
   return read.ok ? read.fonts : undefined;
 };
 
 // Anything stored that does not parse to the whole shape is ignored, not repaired: the
-// defaults stand until the operator chooses again. Always a fresh object: the result becomes
-// the reactive state, and a proxy writes through to what it wraps.
+// defaults stand until the operator chooses again.
 const parse = (text: string | null): AppearanceChoices => {
-  if (text === null) return { ...defaults };
+  if (text === null) return defaults();
   try {
     const value: unknown = JSON.parse(text);
-    if (!isRecord(value)) return { ...defaults };
+    if (!isRecord(value)) return defaults();
     const { mode, fontSize: size } = value;
     const theme = parseTheme(value);
     const fonts = parseFonts(value);
     if (!isMode(mode) || !isFontSize(size) || theme === undefined || fonts === undefined) {
-      return { ...defaults };
+      return defaults();
     }
     return { mode, fontSize: size, theme, fonts };
   } catch {
-    return { ...defaults };
+    return defaults();
   }
 };
 

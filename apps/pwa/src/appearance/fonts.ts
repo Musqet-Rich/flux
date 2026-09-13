@@ -76,13 +76,17 @@ const isPart = (key: string): key is Part => parts.some((part) => part === key);
 
 const refused = (reason: string): RefusedFonts => ({ ok: false, reason });
 
+// A key named in a reason is the operator's own text, shown on a status line: enough of it
+// to find, not all of it.
+const shown = (key: string): string => (key.length > 32 ? `${key.slice(0, 32)}…` : key);
+
 // The `fonts` of a theme's JSON, or of the stored choices: the two families, any name so long
 // as it is one, in the fixed order text then code.
 const read = (value: unknown): ReadFonts | RefusedFonts => {
   if (!isRecord(value)) return refused('fonts must be an object: {"text": ..., "code": ...}');
   const given: Fonts = {};
   for (const [key, family] of Object.entries(value)) {
-    if (!isPart(key)) return refused(`fonts.${key.slice(0, 32)} is not a part: text, code`);
+    if (!isPart(key)) return refused(`fonts.${shown(key)} is not a part: text, code`);
     const words = typeof family === 'string' ? family.trim() : '';
     if (words === '' || words.length > familyLength) {
       return refused(`fonts.${key} must be a family name`);
