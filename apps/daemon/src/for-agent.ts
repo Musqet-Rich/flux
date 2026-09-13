@@ -17,7 +17,9 @@ import { spawnPi } from './pi/spawn-pi.ts';
 // The session's harness picks its adapter pair and the flags a spawn compiles from the record
 // (ADR 0007 claude, ADR 0016 pi, ADR 0027 opencode). Split out of create-supervisor-pool.ts so
 // that file stays within its dependency budget; the pool calls `forAgent` and wires the result
-// into the supervisor.
+// into the supervisor. The effort is the request's, not the record's: the record here is the
+// snapshot the pool made the supervisor from, and an effort the operator sets in-band (ADR 0031)
+// lands in the store after it, so the supervisor carries the current one on each request.
 
 const closing = (options: SupervisorPoolOptions, session: string): CloseChildOptions => ({
   ...(options.closeGraceMs === undefined ? {} : { graceMs: options.closeGraceMs }),
@@ -37,7 +39,7 @@ const claudeSpawn =
         ? {}
         : { mcpConfig: options.mcpConfig(request.session, record.manager === true) }),
       ...(record.model === undefined ? {} : { model: record.model }),
-      ...(record.effort === undefined ? {} : { effort: record.effort }),
+      ...(request.effort === undefined ? {} : { effort: request.effort }),
       ...(record.role === undefined ? {} : { role: record.role }),
       ...(record.tools === undefined ? {} : { tools: record.tools }),
       close: closing(options, request.session),
@@ -57,7 +59,7 @@ const piSpawn =
       ...(pi.extension === undefined ? {} : { extension: pi.extension }),
       ...(pi.provider === undefined ? {} : { provider: pi.provider }),
       ...(model === undefined ? {} : { model }),
-      ...(record.effort === undefined ? {} : { thinking: record.effort }),
+      ...(request.effort === undefined ? {} : { thinking: request.effort }),
       ...(record.role === undefined ? {} : { role: record.role }),
       ...(options.env === undefined ? {} : { env: options.env(request.session) }),
       close: closing(options, request.session),
@@ -79,7 +81,7 @@ const opencodeSpawn =
       ...(opencode.command === undefined ? {} : { command: opencode.command }),
       ...(request.resume === undefined ? {} : { resume: request.resume }),
       ...(record.model === undefined ? {} : { model: record.model }),
-      ...(record.effort === undefined ? {} : { effort: record.effort }),
+      ...(request.effort === undefined ? {} : { effort: request.effort }),
       close: closing(options, request.session),
     });
   };

@@ -43,7 +43,11 @@ type ClaudeLineBody =
   | { kind: 'init'; sessionId: string; model: string; cwd: string }
   | { kind: 'status'; status: string }
   | { kind: 'delta'; text: string }
-  | { kind: 'assistant'; blocks: (TextBlock | ToolUseBlock)[] }
+  // `synthetic` marks a reply made without a model call (the model `<synthetic>`: a local
+  // command's answer), which writes no assistant line to the transcript.
+  | { kind: 'assistant'; blocks: (TextBlock | ToolUseBlock)[]; synthetic?: true }
+  // Claude's answer to the operator's `/effort <level>`: the new level, and the line's text.
+  | { kind: 'effort_set'; effort: string; text: string }
   | { kind: 'tool_result'; blocks: ToolResultBlock[]; toolUseResult: unknown }
   // A subagent's prompt: the `user` line with text content that opens its transcript.
   | { kind: 'user_text'; text: string }
@@ -148,6 +152,26 @@ const toolResultBlock = (block: ToolResultBlock): ToolResultBlock => ({
 const contentOf = (line: Record<string, unknown>): unknown[] => {
   const message = line['message'];
   return isRecord(message) && Array.isArray(message['content']) ? message['content'] : [];
+};
+
+// `/effort <level>` is answered without a model call by an assistant line whose model is
+// `<synthetic>` and whose one text block reads `Set effort level to <level> (this session
+// only): …`, or for `auto` `Effort level set to auto (this session only)` (fixtures/claude/
+// effort-set, 2.1.270). An unknown level is refused, a plain assistant line nothing is taken from.
+const setLevel = /^Set effort level to (?<level>\S+) \(this session only\)/u;
+const setAuto = /^Effort level set to (?<level>auto) \(this session only\)/u;
+const isSynthetic = (line: Record<string, unknown>): boolean => {
+  const message = line['message'];
+  return isRecord(message) && message['model'] === '<synthetic>';
+};
+
+const effortSet = (line: Record<string, unknown>): ClaudeLineBody | null => {
+  if (!isSynthetic(line)) return null;
+  const blocks = contentOf(line);
+  const [first] = blocks;
+  if (blocks.length !== 1 || !isTextBlock(first)) return null;
+  const effort = (setLevel.exec(first.text) ?? setAuto.exec(first.text))?.groups?.['level'];
+  return effort === undefined ? null : { kind: 'effort_set', effort, text: first.text };
 };
 
 // The system signals seen dogfooding 2.1.251 (fixtures/claude/session-thinking-tasks-pr): a
@@ -348,7 +372,13 @@ const body = (line: Record<string, unknown>, parent: string | undefined): Claude
     case 'stream_event':
       return streamEvent(line);
     case 'assistant':
-      return { kind: 'assistant', blocks: assistantBlocks(contentOf(line)) };
+      return (
+        effortSet(line) ?? {
+          kind: 'assistant',
+          blocks: assistantBlocks(contentOf(line)),
+          ...(isSynthetic(line) ? { synthetic: true } : {}),
+        }
+      );
     case 'user':
       return user(line, parent);
     case 'result':

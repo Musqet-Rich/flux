@@ -60,8 +60,9 @@ export const manual: ManualSection[] = [
       '(the code stays, the conversation resets). Archive hides a session and can remove its worktree',
       '(refused while it holds uncommitted or unpushed work unless you discard); Reopen brings it back',
       'while the worktree exists. Delete removes it permanently — the one destructive verb, always',
-      'yours, never an agent’s. Restart re-launches the agent, and is how you change its model or',
-      'effort mid-flight. Rename sets the tab’s title.',
+      'yours, never an agent’s. Restart re-launches the agent. On Claude Code, `/effort <level>`',
+      'typed in the composer changes the effort mid-flight, and a level the `--effort` flag takes',
+      '(low to max) sticks through restarts; the model is set at create. Rename sets the tab’s title.',
     ].join(' '),
   },
   {

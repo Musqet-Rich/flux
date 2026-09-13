@@ -346,3 +346,47 @@ test('a spec that changes is logged again, effort included', async () => {
   ]);
   await supervisor.close();
 });
+
+// An effort the operator set in-band (ADR 0031): the record keeps it, so every later spawn of
+// this session asks for it, a fresh supervisor's included, and the chip sees it as a spec row.
+test('an effort the agent confirms is kept on the record and asked for at every spawn', async () => {
+  const told: Mapped = {
+    events: [],
+    chosen: { effort: 'medium' },
+    spec: { model: 'claude-fable-5', effort: 'medium' },
+    turnEnded: true,
+  };
+  const box = await setup({}, scripted([told]));
+  const { supervisor, log, sessions, spawns, emitted } = box;
+  await supervisor.send('/effort medium');
+  await untilEvent(emitted, 'session.state', 2);
+  expect(spawns[0]?.effort).toBeUndefined();
+  expect(sessions.get('s1').effort).toBe('medium');
+  expect(specsOf(log)).toEqual([{ model: 'claude-fable-5', effort: 'medium' }]);
+  await supervisor.close();
+  await supervisor.send('again');
+  expect(spawns[1]?.effort).toBe('medium');
+  await supervisor.close();
+  const reopened = box.reopen();
+  await reopened.send('and again');
+  expect(spawns[2]?.effort).toBe('medium');
+  await reopened.close();
+});
+
+// A level the flag refuses (ADR 0031 § 3) reaches the chip and leaves the record alone.
+test('a level the agent runs but the flag refuses is a spec row, not a record change', async () => {
+  const shown: Mapped = {
+    events: [],
+    spec: { model: 'claude-fable-5', effort: 'ultracode' },
+    turnEnded: true,
+  };
+  const { supervisor, log, sessions, spawns, emitted } = await setup({}, scripted([shown]));
+  await supervisor.send('/effort ultracode');
+  await untilEvent(emitted, 'session.state', 2);
+  expect(specsOf(log)).toEqual([{ model: 'claude-fable-5', effort: 'ultracode' }]);
+  expect('effort' in sessions.get('s1')).toBe(false);
+  await supervisor.close();
+  await supervisor.send('again');
+  expect(spawns[1]?.effort).toBeUndefined();
+  await supervisor.close();
+});
