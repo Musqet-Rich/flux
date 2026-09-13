@@ -6,7 +6,7 @@ import AppearanceSection from './AppearanceSection.vue';
 
 test('offers the three modes and the size slider, each applied at once', async () => {
   const a = fakeAppearance();
-  const wrapper = mount(AppearanceSection, { props: { appearance: a } });
+  const wrapper = mount(AppearanceSection, { props: { appearance: a, visible: null } });
   const mode = wrapper.find<HTMLSelectElement>('#flux-mode');
   expect(mode.element.value).toBe('system');
   expect(mode.findAll('option').map((o) => o.text())).toEqual(['System', 'Light', 'Dark']);

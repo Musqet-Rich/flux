@@ -22,7 +22,7 @@ test('lists devices with the current one marked, and revokes another after a con
     'devices.remove': () => ({}),
   });
   await box.store.refreshDevices();
-  const wrapper = mount(DevicesSection, { props: { store: box.store } });
+  const wrapper = mount(DevicesSection, { props: { store: box.store, visible: null } });
   expect(wrapper.findAll('.device').length).toBe(2);
   expect(wrapper.findAll('.label').map((l) => l.text())).toEqual(['phone', 'dev-2']);
   expect(wrapper.findAll('.current').length).toBe(1);
@@ -49,7 +49,7 @@ test('revoking this device lands on the pair screen', async () => {
     'devices.remove': () => ({}),
   });
   await box.store.refreshDevices();
-  const wrapper = mount(DevicesSection, { props: { store: box.store } });
+  const wrapper = mount(DevicesSection, { props: { store: box.store, visible: null } });
   await wrapper.find('.revoke').trigger('click');
   expect(wrapper.find('.confirm').text()).toContain('pair again');
   await wrapper.find('.confirm .secondary').trigger('click');

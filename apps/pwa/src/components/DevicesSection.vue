@@ -2,11 +2,15 @@
 import { computed, ref } from 'vue';
 
 import type { Store } from '../store/create-store.ts';
+import { settingsIndex } from './settings-index.ts';
 
 // Paired devices with a two-tap revoke: the first tap asks, the second does it. Revoking this
-// device is allowed and lands on the pair screen.
+// device is allowed and lands on the pair screen. `visible` is the settings search's answer
+// (SettingsView): the list and the pairing hint each show while their id is in it.
 
-const props = defineProps<{ store: Store }>();
+const props = defineProps<{ store: Store; visible: ReadonlySet<string> | null }>();
+
+const show = (id: string): boolean => settingsIndex.isShown(props.visible, id);
 
 const confirming = ref<string | null>(null);
 const busy = ref(false);
@@ -49,28 +53,30 @@ const revoke = async (deviceId: string): Promise<void> => {
 <template>
   <section class="devices">
     <h2>Devices</h2>
-    <p v-if="rows.length === 0" class="hint">No devices yet.</p>
-    <ul v-else class="list">
-      <li v-for="d in rows" :key="d.deviceId" class="device">
-        <div class="who">
-          <span class="label">{{ d.label }}</span>
-          <span v-if="d.current" class="current">this device</span>
-          <span class="id">{{ d.deviceId }}</span>
-        </div>
-        <div class="meta">paired {{ d.paired }} · last seen {{ d.seen }}</div>
-        <div v-if="d.confirming" class="confirm">
-          <span>{{ d.question }}</span>
-          <button type="button" class="danger" :disabled="busy" @click="revoke(d.deviceId)">
-            Confirm
+    <div v-show="show('devices-list')" data-setting="devices-list">
+      <p v-if="rows.length === 0" class="hint">No devices yet.</p>
+      <ul v-else class="list">
+        <li v-for="d in rows" :key="d.deviceId" class="device">
+          <div class="who">
+            <span class="label">{{ d.label }}</span>
+            <span v-if="d.current" class="current">this device</span>
+            <span class="id">{{ d.deviceId }}</span>
+          </div>
+          <div class="meta">paired {{ d.paired }} · last seen {{ d.seen }}</div>
+          <div v-if="d.confirming" class="confirm">
+            <span>{{ d.question }}</span>
+            <button type="button" class="danger" :disabled="busy" @click="revoke(d.deviceId)">
+              Confirm
+            </button>
+            <button type="button" class="secondary" :disabled="busy" @click="cancel">Cancel</button>
+          </div>
+          <button v-else type="button" class="secondary revoke" @click="ask(d.deviceId)">
+            Revoke
           </button>
-          <button type="button" class="secondary" :disabled="busy" @click="cancel">Cancel</button>
-        </div>
-        <button v-else type="button" class="secondary revoke" @click="ask(d.deviceId)">
-          Revoke
-        </button>
-      </li>
-    </ul>
-    <p class="hint">
+        </li>
+      </ul>
+    </div>
+    <p v-show="show('devices-pair')" data-setting="devices-pair" class="hint">
       Pair another device: run <code>flux pair</code> on the box and scan the QR code with it.
     </p>
   </section>

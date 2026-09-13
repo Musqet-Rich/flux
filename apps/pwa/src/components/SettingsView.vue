@@ -1,22 +1,28 @@
 <script setup lang="ts">
-import { onMounted } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 
 import type { Store } from '../store/create-store.ts';
-import AgentsEditor from './AgentsEditor.vue';
-import AppearanceSection from './AppearanceSection.vue';
-import HarnessConfigEditor from './HarnessConfigEditor.vue';
-import DevicesSection from './DevicesSection.vue';
-import FluxSettingsForm from './FluxSettingsForm.vue';
 import Icon from './Icon.vue';
-import SkillsEditor from './SkillsEditor.vue';
-import ThisDeviceSection from './ThisDeviceSection.vue';
+import { settingsIndex } from './settings-index.ts';
+import SettingsSections from './SettingsSections.vue';
 
-// The settings screen (prd.md P2): paired devices, the box's runtime settings, this device's
-// own choices, how the app looks on it (ADR 0030), and the agent's global config. Each section
-// talks to the store on its own; this only fetches on open.
+// The settings screen (prd.md P2): the toolbar with its search box, and the sections
+// (SettingsSections). Each section talks to the store on its own; this only fetches on open.
+//
+// The search filters the screen through `settings-index.ts`: a field or section is shown while
+// its id is in `visible`, everything while the box is blank. The query is this screen's alone,
+// gone when it closes.
 
 const props = defineProps<{ store: Store }>();
 defineEmits<{ back: [] }>();
+
+const query = ref('');
+const trimmed = computed(() => query.value.trim());
+const visible = computed(() => settingsIndex.search(trimmed.value));
+
+const clear = (): void => {
+  query.value = '';
+};
 
 onMounted(() => {
   void props.store.refreshDevices();
@@ -37,16 +43,18 @@ onMounted(() => {
         <Icon name="back" />
       </button>
       <h1>Settings</h1>
+      <input
+        v-model="query"
+        type="search"
+        class="search"
+        aria-label="Search settings"
+        placeholder="Search settings"
+        autocomplete="off"
+        spellcheck="false"
+        @keydown.esc="clear"
+      />
     </div>
-    <div class="sections">
-      <DevicesSection :store="store" />
-      <ThisDeviceSection :store="store" />
-      <AppearanceSection :appearance="store.appearance" />
-      <FluxSettingsForm :store="store" />
-      <AgentsEditor :store="store" />
-      <SkillsEditor :store="store" />
-      <HarnessConfigEditor :store="store" />
-    </div>
+    <SettingsSections :store="store" :visible="visible" :query="trimmed" />
   </section>
 </template>
 
@@ -72,65 +80,13 @@ h1 {
   margin: 0;
 }
 
-.sections {
-  overflow-y: auto;
-  padding: 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-  max-width: 40rem;
-  width: 100%;
-  box-sizing: border-box;
-  margin: 0 auto;
-}
-
-/* Wide screens: the devices list, this device's choices and the appearance stack beside the
-   taller Flux form, the editors span below. On a phone the device's own sections come before
-   the Flux form because they are the settings an operator comes back to. Each section is
-   placed by its own root class (a child's root carries this scope), not by position, so
-   adding one cannot shuffle the others. */
-@media (min-width: 56rem) {
-  .sections {
-    max-width: 76rem;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    grid-template-areas:
-      'devices flux'
-      'this-device flux'
-      'appearance flux'
-      'agents agents'
-      'skills skills'
-      'config config';
-    align-items: start;
-    gap: 1.5rem;
-  }
-
-  .devices {
-    grid-area: devices;
-  }
-
-  .this-device {
-    grid-area: this-device;
-  }
-
-  .appearance {
-    grid-area: appearance;
-  }
-
-  .flux {
-    grid-area: flux;
-  }
-
-  .agents-editor {
-    grid-area: agents;
-  }
-
-  .skills-editor {
-    grid-area: skills;
-  }
-
-  .harness-config {
-    grid-area: config;
-  }
+/* The search takes the toolbar's remaining width: on a phone that is most of it. Without
+   `appearance: none` iOS Safari draws its own search field and ignores the app's border. */
+.search {
+  flex: 1;
+  min-width: 0;
+  padding: 0.35rem 0.6rem;
+  appearance: none;
+  -webkit-appearance: none;
 }
 </style>
