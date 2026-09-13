@@ -6,31 +6,49 @@ import { fluxEvent } from '@flux/protocol';
 
 import type { Store } from '../store/create-store.ts';
 import { sessionPr } from '../store/session-pr.ts';
+import { homePath } from './home-path.ts';
 import Icon from './Icon.vue';
 import SessionMenu from './SessionMenu.vue';
 
-// The strip above the timeline: the branch, a small chip naming what the agent is running as
-// `model:effort` from the log's latest `agent.spec` (ADR 0028; the harness alone until the agent
-// has said, and on the chip's title after), a link to the session's PR once the log has a
-// `pr.published`, Stop while the agent runs (Esc does the same, wired in SessionView), Files,
-// Changes (with the latest changed-file count) and the session menu. The buttons are icons with
-// their names on `aria-label`/`title`: the row has to fit a phone beside the branch (ADR 0029).
+// The strip above the timeline: where the session is, as a shell prompt would put it, `~/code/flux
+// (feat/x)`, the repository with the branch the worktree is on, the summary's `head` once the
+// box has seen HEAD move (`session.head`) and the created branch before, and the worktree's
+// own path as a hover hint on the title (a pointer's, not a phone's, so nothing depends on it);
+// a small chip naming what the agent is running as `model:effort` from the log's latest
+// `agent.spec` (ADR 0028; the harness alone until the agent has said, and on the chip's title
+// after), a link to the session's PR once the log has a `pr.published`, Stop while the agent
+// runs (Esc does the same, wired in SessionView), Files, Changes (with the latest changed-file
+// count) and the session menu. The buttons are icons with their names on `aria-label`/`title`:
+// the row has to fit a phone beside the place (ADR 0029).
 
 const props = defineProps<{
   store: Store;
   session: string;
   events: readonly FluxEvent[];
-  branch: string;
   busy: boolean;
 }>();
 defineEmits<{ changes: []; files: []; interrupt: []; closed: [] }>();
 
+const summary = computed(() => props.store.state.sessions.find((s) => s.session === props.session));
+// The session id stands in until the list has the session (a reload straight onto it).
+const repo = computed((): string =>
+  summary.value === undefined
+    ? props.session
+    : homePath(summary.value.repo, props.store.state.home),
+);
+const branch = computed((): string => summary.value?.head ?? summary.value?.branch ?? '');
+const whereTitle = computed((): string | undefined => {
+  const s = summary.value;
+  return s?.worktree === undefined
+    ? undefined
+    : `Worktree ${homePath(s.worktree, props.store.state.home)}`;
+});
+
 const harnessLabel = (kind: string): string =>
   kind === 'claude' ? 'Claude Code' : kind === 'pi' ? 'Pi' : kind;
-const harness = computed((): string => {
-  const summary = props.store.state.sessions.find((s) => s.session === props.session);
-  return summary === undefined ? '' : harnessLabel(summary.harness);
-});
+const harness = computed((): string =>
+  summary.value === undefined ? '' : harnessLabel(summary.value.harness),
+);
 // The latest `agent.spec`, or null before the agent has said what it runs.
 const spec = computed(() => {
   const last = props.events.findLast((e) => e.type === 'agent.spec');
@@ -76,7 +94,10 @@ const changesLabel = computed(() => `Changes (${changedCount.value})`);
 <template>
   <div class="toolbar">
     <span class="ident">
-      <span class="branch">{{ branch }}</span>
+      <span class="where" :title="whereTitle">
+        <span class="repo">{{ repo }}</span>
+        <span v-if="branch !== ''" class="branch"> ({{ branch }})</span>
+      </span>
       <span v-if="chip !== ''" class="spec-chip" :title="chipTitle">{{ chip }}</span>
     </span>
     <a
@@ -133,13 +154,13 @@ const changesLabel = computed(() => `Changes (${changedCount.value})`);
   border-bottom: 1px solid var(--border);
 }
 
-/* The branch and the chip share whatever the buttons leave: a flex basis of zero, so they never
+/* The place and the chip share whatever the buttons leave: a flex basis of zero, so they never
    push a button off a phone's width, and the row only wraps in the one state where the buttons
    alone are wider than the screen (a PR link and Stop beside Files, Changes and the menu),
    which drops the menu to a second line rather than clipping it. Inside, the chip is sized first
-   and the branch takes what is left, down to nothing on a phone: a session's title defaults
-   to its branch, so the tab already names it, while the chip is the only place what the agent
-   runs shows. */
+   and the place takes what is left, down to nothing on a phone, the repository going before
+   the branch: the branch is the part only this strip shows, since the tab's title is the one
+   the session began on, while the chip is the only place what the agent runs shows. */
 .ident {
   flex: 1 1 0;
   min-width: 0;
@@ -148,14 +169,37 @@ const changesLabel = computed(() => `Changes (${changedCount.value})`);
   align-items: center;
 }
 
-.branch {
+.where {
   flex: 1;
+  min-width: 0;
+  display: flex;
   color: var(--muted);
   font-family: var(--font-code);
   font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+/* Both clip with an ellipsis, the repository first: the branch never shrinks, so it stays whole
+   while the repository has anything left, and its max-width clips it only once it alone is
+   wider than the row. The repository clips at its end (`~/co… (feat/x)`), losing the name
+   before the `~/`: clipping the start needs a direction trick that shuffles the path's own
+   punctuation, and the title has the whole of it. */
+.repo,
+.branch {
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.repo {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.branch {
+  flex: none;
+  max-width: 100%;
+  /* The leading space that sets it off from the repository. */
+  white-space: pre;
 }
 
 .spec-chip {

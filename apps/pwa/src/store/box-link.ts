@@ -124,6 +124,7 @@ const afterConnect = async (i: StoreInternals): Promise<void> => {
   const hello = await call(i, 'hello', { protocol: protocolVersion });
   i.state.daemon = hello.daemon;
   i.state.daemonVersion = hello.version ?? null;
+  i.state.home = hello.home ?? null;
   // A self-update succeeded when the box comes back on the version we asked it to install: the
   // channel dropped on its exit, reconnect brought the new `hello.version`, so clear the banner.
   if (i.state.update.target !== null && hello.version === i.state.update.target) {
@@ -162,6 +163,7 @@ const patchSummary = (i: StoreInternals, event: FluxEvent): void => {
   if (!fluxEvent.isKnown(event)) return;
   if (event.type === 'session.state') summary.state = event.payload.state;
   else if (event.type === 'session.renamed') summary.title = event.payload.title;
+  else if (event.type === 'session.head') summary.head = event.payload.head;
 };
 
 const onEvent = (i: StoreInternals, event: FluxEvent): void => {

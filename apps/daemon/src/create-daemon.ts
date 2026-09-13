@@ -46,6 +46,8 @@ export interface DaemonConfig {
   opencodeCommand?: string;
   // The flux user's `~/.claude`; the PWA edits CLAUDE.md and settings.json there.
   claudeDir: string;
+  // The flux user's home directory, for showing paths on the device as `~/…`.
+  home: string;
   // How patiently each agent is closed on stop, per stage (close-child.ts).
   closeGraceMs?: number;
   // The installed bundle directory (siblings of the running index.mjs), or null when run from
@@ -234,6 +236,7 @@ interface ContextExtra {
 const daemonContext = (services: Services, config: DaemonConfig, extra: ContextExtra) => ({
   ...services,
   daemonName: config.daemonName,
+  home: config.home,
   vapidPublicKey: extra.notifier.vapidPublicKey,
   env: env(config),
   agents: extra.agents,

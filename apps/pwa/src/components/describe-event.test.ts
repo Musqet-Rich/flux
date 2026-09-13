@@ -135,6 +135,7 @@ test('lifecycle and interaction rows are one-line notes without an icon', () => 
     [ev('session.created', created), 'Session started on b', null],
     [ev('session.state', { state: 'waiting_user' }), 'Agent waiting user', null],
     [ev('session.state', { state: 'ended', reason: 'x' }), 'Agent ended', 'warn'],
+    [ev('session.head', { head: 'feat/x' }), 'Now on feat/x', null],
     [ev('turn.ended', { costUsd: 0.5 }), 'Turn ended · $0.500', null],
     [ev('agent.spec', { model: 'm', effort: 'high' }), 'Running m:high', null],
     [ev('ask', { askId: 'q', question: 'Go?', timeoutAt: 'x' }), 'Asked: Go?', 'warn'],

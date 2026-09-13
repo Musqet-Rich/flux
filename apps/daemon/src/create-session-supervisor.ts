@@ -14,8 +14,13 @@ import type { AgentProcess } from './claude/spawn-claude.ts';
 import type { EventInput, EventLog } from './create-event-log.ts';
 import type { GitService } from './create-git-service.ts';
 import type { SessionRecord, SessionStore } from './create-session-store.ts';
+import { DaemonError } from './daemon-error.ts';
+import type { PromptInput } from './render-prompt.ts';
 import { renderPrompt } from './render-prompt.ts';
-import type { Reply } from './render-reply.ts';
+
+// The reply shape is named through the prompt's input rather than imported from render-reply.ts
+// to stay inside the per-file import budget.
+type Reply = NonNullable<PromptInput['reply']>;
 
 // One session = one agent process + one worktree + one event stream (architecture.md § Daemon).
 // The supervisor owns the process lifecycle and is the only writer to this session's log. Which
@@ -107,6 +112,12 @@ export interface SupervisorOptions {
 interface Context extends SupervisorOptions {
   session: string;
   worktree: string;
+  // Where HEAD was last found, checked against the worktree whenever the agent, or the operator
+  // on the box between agents, may have moved it, so the device's label follows a `git switch`.
+  head: string;
+  // The check a message with no agent to go to is waiting on; shared, so two messages arriving
+  // together are logged in the order they came.
+  spawnCheck: Promise<void> | null;
   state: SessionState;
   agentSessionId: string | null;
   // The last `agent.spec` in the log, so a repeat from the agent (every `message_start` names
@@ -116,6 +127,9 @@ interface Context extends SupervisorOptions {
   effort: string | undefined;
   agent: AgentProcess | null;
   closing: boolean;
+  // Counts closes, so a message that was being prepared (its refs read, its head check run)
+  // when one came can tell, and is refused rather than spawning an agent behind it.
+  closes: number;
   // Lines are handled strictly in order even though some handlers await git.
   queue: Promise<void>;
 }
@@ -157,6 +171,15 @@ const setState = (ctx: Context, next: SessionState, reason?: string): void => {
   append(ctx, { type: 'session.state', payload });
 };
 
+// A worktree git cannot read (gone from disk) leaves the record as it was.
+const checkHead = async (ctx: Context): Promise<void> => {
+  const head = await ctx.git.head(ctx.worktree).catch(() => null);
+  if (head === null || head === ctx.head) return;
+  ctx.head = head;
+  ctx.sessions.setHead(ctx.session, head);
+  append(ctx, { type: 'session.head', payload: { head } });
+};
+
 const handleLine = async (ctx: Context, line: string): Promise<void> => {
   const mapped = ctx.adapter.mapLine(line);
   if (mapped === null) return;
@@ -174,6 +197,7 @@ const handleLine = async (ctx: Context, line: string): Promise<void> => {
   }
   if (mapped.vcsChanged !== undefined) {
     ctx.emitEphemeral({ type: 'vcs.changed', session: ctx.session, kind: mapped.vcsChanged });
+    await checkHead(ctx);
   }
   if (mapped.context !== undefined) {
     const window = contextWindow(mapped.context.model);
@@ -197,7 +221,11 @@ const handleLine = async (ctx: Context, line: string): Promise<void> => {
     const files = (await ctx.git.status(ctx.worktree)).map((f) => changedFile(f));
     append(ctx, { type: 'files.changed', payload: { files } });
   }
-  if (mapped.turnEnded === true) setState(ctx, 'idle');
+  // The check once per turn, as it ends; a stream that says so again while idle is not one.
+  if (mapped.turnEnded === true && ctx.state !== 'idle') {
+    await checkHead(ctx);
+    setState(ctx, 'idle');
+  }
 };
 
 // Returns a promise so it chains on the line queue like handleLine does.
@@ -242,6 +270,22 @@ const logged = (files: AttachedRecord[]): Attachment[] =>
     image: attachment.isImage(mime, size),
   }));
 
+// HEAD may have moved while no agent ran (the operator, on the box): a move logged before the
+// message it precedes, and after the last agent's lines. A line that failed (git in a worktree
+// gone from under it) has rejected the queue; that is not this message's error to raise.
+const headBeforeSpawn = (ctx: Context): Promise<void> => {
+  ctx.spawnCheck ??= ctx.queue
+    .catch(() => {})
+    .then(() => checkHead(ctx))
+    .finally(() => {
+      ctx.spawnCheck = null;
+    });
+  return ctx.spawnCheck;
+};
+
+const closedMeanwhile = (): DaemonError =>
+  new DaemonError('conflict', 'the session closed while the message was being prepared');
+
 const send = async (
   ctx: Context,
   text: string,
@@ -250,10 +294,16 @@ const send = async (
   reply: Reply | null,
   attachments: AttachedRecord[],
 ): Promise<number> => {
+  const { closes } = ctx;
   const [contents, images] = await Promise.all([
     Promise.all(refs.map((ref) => fileContent(ctx, ref))),
     attachmentImages(attachments),
   ]);
+  // Refused before the head check as well as after it, so a close that came while the refs
+  // were read does not have the check write to a session being archived.
+  if (ctx.closes !== closes) throw closedMeanwhile();
+  if (ctx.agent === null) await headBeforeSpawn(ctx);
+  if (ctx.closes !== closes) throw closedMeanwhile();
   const payload = {
     text,
     ...(refs.length === 0 ? {} : { refs }),
@@ -273,12 +323,15 @@ export const createSessionSupervisor = (options: SupervisorOptions): SessionSupe
     ...options,
     session: options.record.session,
     worktree: options.record.worktree,
+    head: options.record.head ?? options.record.branch,
+    spawnCheck: null,
     state: options.record.state,
     agentSessionId: options.record.agentSessionId,
     spec: lastSpec(options.log, options.record.session),
     effort: options.record.effort,
     agent: null,
     closing: false,
+    closes: 0,
     queue: Promise.resolve(),
   };
   return {
@@ -297,14 +350,19 @@ export const createSessionSupervisor = (options: SupervisorOptions): SessionSupe
     // idle now, not running forever: the next message resumes it.
     close: async () => {
       ctx.closing = true;
+      ctx.closes += 1;
       if (ctx.agent !== null) await ctx.agent.close();
       await ctx.queue;
+      // A message waiting on its head check is refused once this returns (`closes`); waiting
+      // for a check already running keeps its `setHead` from landing on a session being archived.
+      await ctx.spawnCheck;
       if (ctx.state === 'running' || ctx.state === 'waiting_user') {
         setState(ctx, 'idle', 'agent closed');
       }
     },
     kill: () => {
       ctx.closing = true;
+      ctx.closes += 1;
       ctx.agent?.kill();
     },
     state: () => ctx.state,

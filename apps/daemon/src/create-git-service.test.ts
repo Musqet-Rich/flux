@@ -144,6 +144,15 @@ test('branches and worktrees', async () => {
   expect(await git.show(path, 'a.txt', 'worktree')).toMatchObject({ content: 'one\n' });
 });
 
+test('head names the branch, and a detached HEAD by its short sha', async () => {
+  expect(await git.head(repo)).toBe('main');
+  sh(repo, ['switch', '-q', '-c', 'feat/x']);
+  expect(await git.head(repo)).toBe('feat/x');
+  sh(repo, ['switch', '-q', '--detach']);
+  expect(await git.head(repo)).toBe(sh(repo, ['rev-parse', '--short', 'HEAD']).trim());
+  await expect(git.head(join(root, 'nowhere'))).rejects.toMatchObject({ code: 'git_error' });
+});
+
 // A worktree removed by hand leaves git thinking its branch is still checked out.
 test('a branch of a worktree that is gone can be deleted once pruned', async () => {
   const path = join(root, 'wt');

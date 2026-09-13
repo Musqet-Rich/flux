@@ -127,7 +127,7 @@ const createSession = async (page: Page): Promise<void> => {
   await page.getByLabel('First message').fill(firstPrompt);
   await page.getByRole('button', { name: 'Start agent' }).click();
   await expect(page).toHaveURL(/\/s\/[0-9a-f-]{36}$/u);
-  await expect(page.locator('.branch')).toHaveText('e2e/greeting');
+  await expect(page.locator('.toolbar .branch')).toHaveText('(e2e/greeting)');
   // The chip names what runs, not what was typed (ADR 0028): the fake agent's first call names
   // `claude-fable-5` and no transcript exists for an effort, so `fable-5`, whole on the title.
   await expect(page.locator('.spec-chip')).toHaveText('fable-5');
@@ -384,7 +384,7 @@ const archiveAndReopen = async (page: Page): Promise<void> => {
   await page.getByText('Archived (1)').click();
   await page.getByRole('button', { name: 'Reopen' }).click();
   await expect(page).toHaveURL(/\/s\/[0-9a-f-]{36}$/u);
-  await expect(page.locator('.branch')).toHaveText('e2e/greeting');
+  await expect(page.locator('.toolbar .branch')).toHaveText('(e2e/greeting)');
   await expect(items).toHaveText(before);
   await expect(page.locator('.item.user .files img').last()).toHaveAttribute('src', /^blob:/u);
 };

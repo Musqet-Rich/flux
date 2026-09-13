@@ -36,6 +36,8 @@ const isSessionSummary = (v: unknown): v is SessionSummary =>
   isString(v['title']) &&
   isString(v['repo']) &&
   isString(v['branch']) &&
+  isOptional(v['head'], isString) &&
+  isOptional(v['worktree'], isString) &&
   isHarnessKind(v['harness']) &&
   isOptional(v['model'], isString) &&
   isOptional(v['effort'], isString) &&
@@ -108,7 +110,8 @@ export const rpcResults: ResultGuards = {
     isArrayOf(v['sessions'], isSessionSummary) &&
     isOptional(v['vapidPublicKey'], isString) &&
     isOptional(v['agents'], (a): a is HarnessKind[] => isArrayOf(a, isHarnessKind)) &&
-    isOptional(v['version'], isString),
+    isOptional(v['version'], isString) &&
+    isOptional(v['home'], isString),
   'events.sync': (v): v is RpcMethods['events.sync']['result'] =>
     isRecord(v) && isArrayOf(v['events'], fluxEvent.is) && isBoolean(v['complete']),
   'sessions.list': (v): v is SessionSummary[] => isArrayOf(v, isSessionSummary),

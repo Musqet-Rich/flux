@@ -150,6 +150,9 @@ export interface StoreState {
   // The daemon's app version from `hello` (ADR 0021); null until connected, or when talking to a
   // daemon built before it sent one. Shown read-only in Settings; no update action yet.
   daemonVersion: string | null;
+  // The box's home directory from `hello`, for showing its paths as `~/…`; null until connected,
+  // or when talking to a daemon built before it sent one.
+  home: string | null;
   // The daemon self-update in progress, or idle (all null).
   update: DaemonUpdate;
   // The last update check Settings ran, or null before it opens (settings-actions.ts).
@@ -236,6 +239,7 @@ export const storeState = (): StoreState =>
     status: 'stopped',
     daemon: null,
     daemonVersion: null,
+    home: null,
     update: { target: null, phase: null, failed: null },
     updateCheck: null,
     error: null,

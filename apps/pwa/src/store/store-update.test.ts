@@ -14,7 +14,14 @@ import { createStore } from './create-store.ts';
 const setup = async () => {
   let daemonVersion = '1.0.0';
   const relay = await createFakeRelay({
-    hello: () => ({ protocol: 2, daemon: 'box', sessions: [], version: daemonVersion }),
+    // The home comes with the newer daemon; the older one's hello has none.
+    hello: () => ({
+      protocol: 2,
+      daemon: 'box',
+      sessions: [],
+      version: daemonVersion,
+      ...(daemonVersion === '1.0.0' ? {} : { home: '/home/flux' }),
+    }),
     'pair.request': () => ({ deviceId: 'dev-1' }),
     'daemon.update': () => ({}),
   });
@@ -59,11 +66,13 @@ test('a refused update clears the in-progress marker and reports the error', asy
 test('a reconnect on the installed version clears the update banner', async () => {
   const { store, relay, link, setVersion } = await setup();
   await store.pair('https://relay.example', link());
+  expect(store.state.home).toBeNull();
   expect(await store.updateDaemon('1.2.0')).toBe(true);
   expect(store.state.update.target).toBe('1.2.0');
   setVersion('1.2.0');
   relay.dropGuests();
   await until(() => store.state.update.target === null);
   expect(store.state.daemonVersion).toBe('1.2.0');
+  expect(store.state.home).toBe('/home/flux');
   store.stop();
 });

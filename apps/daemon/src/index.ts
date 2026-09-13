@@ -201,6 +201,7 @@ const daemon = await createDaemon({
   pushSubject: env['FLUX_PUSH_SUBJECT'] ?? `https://${hostname()}`,
   ...(env['FLUX_CLAUDE'] === undefined ? {} : { claudeCommand: env['FLUX_CLAUDE'] }),
   claudeDir: env['FLUX_CLAUDE_DIR'] ?? env['CLAUDE_CONFIG_DIR'] ?? join(home, '.claude'),
+  home,
   ...(env['FLUX_PI'] === undefined ? {} : { piCommand: env['FLUX_PI'] }),
   ...(env['FLUX_PI_PROVIDER'] === undefined ? {} : { piProvider: env['FLUX_PI_PROVIDER'] }),
   ...(env['FLUX_PI_MODEL'] === undefined ? {} : { piModel: env['FLUX_PI_MODEL'] }),

@@ -29,10 +29,36 @@ const toolbar = async (summary: SessionSummary | null, events: FluxEvent[] = [],
   const box = await pairedStore();
   box.store.state.sessions = summary === null ? [] : [summary];
   const wrapper = mount(SessionToolbar, {
-    props: { store: box.store, session: 's1', events, branch: 'flux/one', busy },
+    props: { store: box.store, session: 's1', events, busy },
   });
   return { box, wrapper };
 };
+
+test('the place is the repository under ~ with the current branch, the worktree on its title', async () => {
+  const { box, wrapper } = await toolbar({ ...base, worktree: '/Users/rich/.flux/worktrees/s1' });
+  const where = wrapper.find('.where');
+  expect(where.text()).toBe('/repos/r (flux/one)');
+  box.store.state.home = '/Users/rich';
+  box.store.state.sessions = [
+    { ...base, repo: '/Users/rich/code/flux', worktree: '/Users/rich/.flux/worktrees/s1' },
+  ];
+  await wrapper.vm.$nextTick();
+  expect(where.text()).toBe('~/code/flux (flux/one)');
+  expect(where.attributes('title')).toBe('Worktree ~/.flux/worktrees/s1');
+  // The box moved the branch on: the label follows the summary's head, nothing else is told.
+  box.store.state.sessions = [{ ...base, repo: '/Users/rich/code/flux', head: 'feat/moved' }];
+  await wrapper.vm.$nextTick();
+  expect(where.find('.branch').text()).toBe('(feat/moved)');
+  expect(where.attributes('title')).toBeUndefined();
+  box.store.stop();
+});
+
+test('the place is the session id, no branch, until the list has the session', async () => {
+  const { box, wrapper } = await toolbar(null);
+  expect(wrapper.find('.where').text()).toBe('s1');
+  expect(wrapper.find('.branch').exists()).toBe(false);
+  box.store.stop();
+});
 
 test('the chip shows the running model and effort from the latest agent.spec', async () => {
   const { box, wrapper } = await toolbar({ ...base, model: 'fable', effort: 'low' }, [

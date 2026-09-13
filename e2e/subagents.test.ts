@@ -26,7 +26,7 @@ const pairAndStart = async (page: Page, stack: Stack): Promise<void> => {
   await page.getByLabel('Branch').fill('e2e/subagents');
   await page.getByLabel('First message').fill(prompt);
   await page.getByRole('button', { name: 'Start agent' }).click();
-  await expect(page.locator('.branch')).toHaveText('e2e/subagents');
+  await expect(page.locator('.toolbar .branch')).toHaveText('(e2e/subagents)');
 };
 
 const stripListsTasks = async (page: Page): Promise<void> => {

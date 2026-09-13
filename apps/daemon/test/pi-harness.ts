@@ -44,7 +44,8 @@ export const piHarness = async (
     title: 't',
     repo: worktree,
     worktree,
-    branch: 'b',
+    // The worktree's own branch, so the supervisor's check after a turn finds nothing moved.
+    branch: await createGitService().head(worktree),
     base: 'HEAD',
     harness: 'pi',
   });

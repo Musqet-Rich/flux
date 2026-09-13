@@ -98,7 +98,7 @@ watch(
       class="tab"
       :class="{ active: s.session === active }"
       :data-session="s.session"
-      :title="`${s.repo} · ${s.branch}`"
+      :title="`${s.repo} · ${s.head ?? s.branch}`"
       @click="$emit('select', s.session)"
     >
       <span class="dot" :class="s.state" />

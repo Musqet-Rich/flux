@@ -54,6 +54,7 @@ const lifecycleNote = (event: KnownEvent): EventView | null => {
     return note(`Agent ${state.replace('_', ' ')}`, state === 'ended' ? 'warn' : null);
   }
   if (event.type === 'session.renamed') return note(`Renamed to ${event.payload.title}`);
+  if (event.type === 'session.head') return note(`Now on ${event.payload.head}`);
   if (event.type === 'session.cleared') {
     return { kind: 'divider', text: 'Context cleared', detail: undefined, tone: null };
   }

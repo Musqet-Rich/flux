@@ -113,6 +113,7 @@ export const createSessionHandlers = (ctx: HandlerContext): SessionHandlers => (
       vapidPublicKey: ctx.vapidPublicKey,
       agents: ctx.agents,
       version,
+      home: ctx.home,
     });
   },
   'events.sync': (p) => Promise.resolve(ctx.log.read(p.session, p.since)),

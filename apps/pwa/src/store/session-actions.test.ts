@@ -106,3 +106,16 @@ test('rename sends the title and leaves the list to the session.renamed event', 
   expect(calls('sessions.list')).toEqual([]);
   store.stop();
 });
+
+// The place under the tabs follows the worktree: the box logs `session.head` when HEAD moved,
+// and the summary takes it as its `head`, as it takes a rename, with no list refresh; the
+// created branch stays what it was.
+test("a session.head event puts the summary's head on the new branch", async () => {
+  const { store, relay, event, calls } = await pairedStore();
+  await store.open('s1');
+  await relay.emit(event(1, 'session.head', { head: 'feat/moved' }));
+  await until(() => store.state.sessions[0]?.head === 'feat/moved');
+  expect(store.state.sessions[0]?.branch).toBe('flux/one');
+  expect(calls('sessions.list')).toEqual([]);
+  store.stop();
+});

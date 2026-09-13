@@ -26,6 +26,8 @@ export interface UpdateService {
 // `Services` rather than imported one by one to stay inside the per-file import budget.
 export interface HandlerContext {
   daemonName: string;
+  // The flux user's home directory, sent on `hello` so the device can show paths as `~/…`.
+  home: string;
   // base64url of the raw P-256 VAPID public key; the PWA subscribes with it (ADR 0013).
   vapidPublicKey: string;
   // What only the environment sets; reported read-only by `settings.get`.
