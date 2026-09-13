@@ -2,9 +2,11 @@
 import type { Store } from '../store/create-store.ts';
 import SendKeyPicker from './SendKeyPicker.vue';
 import SoundPicker from './SoundPicker.vue';
+import SwitchKeyPicker from './SwitchKeyPicker.vue';
 
-// The choices that belong to this device rather than the box: its notification sound and which
-// Enter sends a message. Each applies as it is changed, so there is no Save here.
+// The choices that belong to this device rather than the box: its notification sound, which
+// Enter sends a message and which chord switches session tabs. Each applies as it is changed,
+// so there is no Save here.
 
 defineProps<{ store: Store }>();
 </script>
@@ -14,6 +16,7 @@ defineProps<{ store: Store }>();
     <h2>This device</h2>
     <SoundPicker :store="store" />
     <SendKeyPicker :store="store" />
+    <SwitchKeyPicker :store="store" />
   </section>
 </template>
 

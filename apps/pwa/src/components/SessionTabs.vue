@@ -1,15 +1,31 @@
 <script setup lang="ts">
 import type { SessionSummary } from '@flux/protocol';
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 
+import { escapeStack } from './escape-stack.ts';
+import type { SwitchKey } from '../store/store-state.ts';
 import Icon from './Icon.vue';
+import { switchChord } from './switch-chord.ts';
 
 // One tab per session in creation order, plus the way to a new one. The order never follows
 // activity: with two agents working, sorting by last event made the tabs swap under the thumb.
 // Activity is shown instead: the state dot, and a count of events since the tab was last active.
+// The strip is on every paired screen, so its keyboard is too: the device's switch chord
+// (switch-chord.ts) steps along the tabs in this order, wrapping, and from a screen with no
+// tab of its own (the list, New, Settings, an archived session) → lands on the first tab and
+// ← on the last. Not while something is open on top (the help modal, a rename sheet, a menu:
+// escape-stack.ts), which would be left standing over a screen it does not belong to; the
+// composer's slash list is not on that register, and switching under it only closes it. The
+// key is taken only when a switch would happen, so with one tab ⌘← is still the browser's
+// Back; a held key's repeats are taken too, or the browser would walk Back after the first
+// step, but they switch nothing: each switch pushes a history entry and syncs a log.
 
-const props = defineProps<{ sessions: SessionSummary[]; active: string | null }>();
-defineEmits<{ select: [session: string]; create: [] }>();
+const props = defineProps<{
+  sessions: SessionSummary[];
+  active: string | null;
+  chord: SwitchKey;
+}>();
+const emit = defineEmits<{ select: [session: string]; create: [] }>();
 
 // `createdAt` is absent from a daemon older than the field; the id alone still keeps the tabs put.
 const byCreation = (a: SessionSummary, b: SessionSummary): number =>
@@ -39,6 +55,24 @@ watch(
 );
 
 const unread = (s: SessionSummary): number => Math.max(0, s.lastSeq - (seen.get(s.session) ?? 0));
+
+const onKey = (event: KeyboardEvent): void => {
+  const step = switchChord.step(props.chord, event, switchChord.apple);
+  if (step === 0 || escapeStack.open()) return;
+  const list = ordered.value;
+  const at = list.findIndex((s) => s.session === props.active);
+  const to = at < 0 ? (step > 0 ? 0 : list.length - 1) : (at + step + list.length) % list.length;
+  const target = list[to];
+  if (target === undefined || target.session === props.active) return;
+  event.preventDefault();
+  if (!event.repeat) emit('select', target.session);
+};
+onMounted(() => {
+  window.addEventListener('keydown', onKey);
+});
+onUnmounted(() => {
+  window.removeEventListener('keydown', onKey);
+});
 
 const tabs = ref<HTMLElement[]>([]);
 
