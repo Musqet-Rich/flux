@@ -5,11 +5,19 @@ import { computed, onMounted, ref, watch } from 'vue';
 import type { Store } from '../store/create-store.ts';
 import { version as appVersion } from '../version.ts';
 import Icon from './Icon.vue';
+import { settingsIndex } from './settings-index.ts';
 
 // The box's runtime settings as a form, and the environment-only values as read-only rows.
-// The form is a copy of what the box last sent; Save sends the whole copy back.
+// The form is a copy of what the box last sent; Save sends the whole copy back. `visible` is
+// the settings search's answer (SettingsView): each field and read-only block shows while its
+// id is in it, and Save while any of the form's fields does.
 
-const props = defineProps<{ store: Store }>();
+const props = defineProps<{ store: Store; visible: ReadonlySet<string> | null }>();
+
+const show = (id: string): boolean => settingsIndex.isShown(props.visible, id);
+const formShown = computed(() =>
+  ['flux-repos', 'flux-harness', 'flux-notify'].some((id) => show(id)),
+);
 
 const form = ref<FluxSettings | null>(null);
 const busy = ref(false);
@@ -158,36 +166,40 @@ const save = async (): Promise<void> => {
     <h2>Flux</h2>
     <p v-if="form === null" class="hint">Loading…</p>
     <template v-else>
-      <label for="flux-repos">Repositories directory</label>
-      <input
-        id="flux-repos"
-        v-model="form.reposDir"
-        type="text"
-        autocomplete="off"
-        :disabled="busy"
-      />
-      <label for="flux-harness">Default harness</label>
-      <select id="flux-harness" v-model="form.defaultHarness" :disabled="busy">
-        <option v-for="h in harnesses" :key="h" :value="h">{{ harnessLabel(h) }}</option>
-      </select>
-      <fieldset class="notify">
+      <div v-show="show('flux-repos')" data-setting="flux-repos" class="field">
+        <label for="flux-repos">Repositories directory</label>
+        <input
+          id="flux-repos"
+          v-model="form.reposDir"
+          type="text"
+          autocomplete="off"
+          :disabled="busy"
+        />
+      </div>
+      <div v-show="show('flux-harness')" data-setting="flux-harness" class="field">
+        <label for="flux-harness">Default harness</label>
+        <select id="flux-harness" v-model="form.defaultHarness" :disabled="busy">
+          <option v-for="h in harnesses" :key="h" :value="h">{{ harnessLabel(h) }}</option>
+        </select>
+      </div>
+      <fieldset v-show="show('flux-notify')" data-setting="flux-notify" class="notify">
         <legend>Notify me when</legend>
         <label v-for="t in triggers" :key="t.field" class="trigger">
           <input v-model="form[t.field]" type="checkbox" :disabled="busy" />
           <span>{{ t.text }}</span>
         </label>
       </fieldset>
-      <button type="submit" :disabled="!dirty || busy">
+      <button v-show="formShown" type="submit" :disabled="!dirty || busy">
         <Icon name="save" /> {{ dirty ? 'Save changes' : 'Saved' }}
       </button>
     </template>
-    <dl class="versions">
+    <dl v-show="show('flux-versions')" data-setting="flux-versions" class="versions">
       <template v-for="row in versions" :key="row.name">
         <dt>{{ row.name }}</dt>
         <dd>{{ row.value }}</dd>
       </template>
     </dl>
-    <div v-if="showUpdate" class="update">
+    <div v-if="showUpdate" v-show="show('flux-update')" data-setting="flux-update" class="update">
       <template v-if="inProgress">
         <p v-if="update.failed !== null" class="update-error">Update failed: {{ update.failed }}</p>
         <p v-else class="hint">Updating to {{ update.target }}… {{ phaseLabel }}</p>
@@ -218,18 +230,26 @@ const save = async (): Promise<void> => {
         </template>
       </template>
     </div>
-    <dl v-if="env.length > 0" class="env">
-      <template v-for="row in env" :key="row.name">
-        <dt>{{ row.name }}</dt>
-        <dd>{{ row.value }}</dd>
-      </template>
-    </dl>
-    <p v-if="env.length > 0" class="hint">Set in the daemon's environment; change them there.</p>
+    <div v-if="env.length > 0" v-show="show('flux-env')" data-setting="flux-env">
+      <dl class="env">
+        <template v-for="row in env" :key="row.name">
+          <dt>{{ row.name }}</dt>
+          <dd>{{ row.value }}</dd>
+        </template>
+      </dl>
+      <p class="hint">Set in the daemon's environment; change them there.</p>
+    </div>
   </form>
 </template>
 
 <style scoped>
 .flux {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.field {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;

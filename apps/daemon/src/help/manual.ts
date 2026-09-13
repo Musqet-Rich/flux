@@ -51,6 +51,7 @@ export const manual: ManualSection[] = [
       'tab',
       'keyboard',
       'shortcut',
+      'focus',
       'delete',
       'unarchive',
       'reopen',
@@ -68,7 +69,9 @@ export const manual: ManualSection[] = [
       'Claude Code, `/effort <level>` typed in the composer changes the effort mid-flight too, and',
       'a level the `--effort` flag takes (low to max) sticks through restarts. Rename sets the',
       'tab’s title. On a keyboard, Ctrl+Alt+← and → (⌃⌥ on a Mac) move between the tabs,',
-      'wrapping at the ends; Settings › This device offers other chords, or none.',
+      'wrapping at the ends; Settings › This device offers other chords, or Off. Ctrl+Alt+M',
+      '(⌃⌥M) puts the cursor in the message box, on the session and New screens; Off turns',
+      'that off as well.',
     ].join(' '),
   },
   {

@@ -44,3 +44,66 @@ test('Esc interrupts the running agent unless the key was consumed or the agent 
   expect(box.calls('agent.interrupt')).toHaveLength(2);
   store.stop();
 });
+
+const chordM = (): KeyboardEvent =>
+  new KeyboardEvent('keydown', {
+    key: 'm',
+    code: 'KeyM',
+    ctrlKey: true,
+    altKey: true,
+    cancelable: true,
+  });
+
+// Ctrl+Alt+M puts the caret in the composer from anywhere on the screen, and the box's title
+// says so (a PC's terms under happy-dom); not with the switch chord Off, which turns it off
+// too. The composer is main's alone: on a subagent's chat the key is left, and back on main
+// the box, remounted, has the chord and its title again.
+test('the focus chord reaches the composer, off with the switch chord, back with main', async () => {
+  const box = await pairedStore([]);
+  const { store, relay, event } = box;
+  const wrapper = mount(SessionView, { props: { store, session: 's1' }, attachTo: document.body });
+  await until(() => store.state.logs['s1'] !== undefined);
+  expect(wrapper.find('textarea').element.title).toBe('Message the agent (Ctrl+Alt+M)');
+  const first = chordM();
+  window.dispatchEvent(first);
+  expect(first.defaultPrevented).toBe(true);
+  expect(document.activeElement).toBe(wrapper.find('textarea').element);
+  wrapper.find('textarea').element.blur();
+  await store.setSwitchKey('off');
+  await flushPromises();
+  expect(wrapper.find('textarea').element.hasAttribute('title')).toBe(false);
+  const off = chordM();
+  window.dispatchEvent(off);
+  expect(off.defaultPrevented).toBe(false);
+  await store.setSwitchKey('ctrlAlt');
+  await relay.emit(
+    event(1, 'tool.start', { toolId: 'u1', name: 'Agent', input: {}, summary: 'Agent: ls' }),
+  );
+  await relay.emit(
+    event(2, 'task.started', {
+      taskId: 't1',
+      toolUseId: 'u1',
+      description: 'List files',
+      background: false,
+      agentType: 'Explore',
+    }),
+  );
+  await until(() => store.state.logs['s1']?.lastSeq === 2);
+  await flushPromises();
+  await wrapper.find('.item button.task').trigger('click');
+  await flushPromises();
+  expect(wrapper.find('textarea').exists()).toBe(false);
+  const aside = chordM();
+  window.dispatchEvent(aside);
+  expect(aside.defaultPrevented).toBe(false);
+  await wrapper.find('.aside button').trigger('click');
+  await flushPromises();
+  expect(wrapper.find('textarea').element.title).toBe('Message the agent (Ctrl+Alt+M)');
+  const back = chordM();
+  window.dispatchEvent(back);
+  expect(back.defaultPrevented).toBe(true);
+  expect(document.activeElement).toBe(wrapper.find('textarea').element);
+  wrapper.find('textarea').element.blur();
+  wrapper.unmount();
+  box.store.stop();
+});

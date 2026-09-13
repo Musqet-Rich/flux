@@ -6,6 +6,7 @@ import { expect, test } from 'vitest';
 import { fakeResizeObserver } from '../../test/fake-resize-observer.ts';
 import { ClientError } from '../client/client-error.ts';
 import { pairedStore } from '../../test/paired-store.ts';
+import type { Store } from '../store/create-store.ts';
 import { until } from '../../test/until.ts';
 import Composer from './Composer.vue';
 
@@ -14,6 +15,17 @@ import Composer from './Composer.vue';
 
 const png = new File([new Uint8Array([137, 80, 78, 71])], 'shot.png', { type: 'image/png' });
 const txt = new File(['hi'], 'notes.txt', { type: 'text/plain' });
+
+// The composer's props for session s1, the title hint a screen (SessionView) would pass.
+const on = (
+  store: Store,
+): { store: Store; session: string; comments: never[]; reply: null; hint: string } => ({
+  store,
+  session: 's1',
+  comments: [],
+  reply: null,
+  hint: 'Message the agent',
+});
 
 const setup = async () => {
   const box = await pairedStore([], {
@@ -24,7 +36,7 @@ const setup = async () => {
     'agent.send': () => ({ seq: 2 }),
   });
   const wrapper = mount(Composer, {
-    props: { store: box.store, session: 's1', comments: [], reply: null },
+    props: { ...on(box.store) },
     attachTo: document.body,
   });
   return { ...box, wrapper };
@@ -107,7 +119,7 @@ const withSkills = async (skills: Skill[]) => {
     'agent.send': () => ({ seq: 2 }),
   });
   const wrapper = mount(Composer, {
-    props: { store: box.store, session: 's1', comments: [], reply: null },
+    props: { ...on(box.store) },
     attachTo: document.body,
   });
   await until(() => box.store.state.skills !== null);
@@ -274,7 +286,7 @@ test('no suggestions once a space is typed, or when the box has no skills', asyn
   store.stop();
   const bare = await pairedStore([], { 'agent.send': () => ({ seq: 2 }) });
   const w2 = mount(Composer, {
-    props: { store: bare.store, session: 's1', comments: [], reply: null },
+    props: { ...on(bare.store) },
     attachTo: document.body,
   });
   await until(() => bare.store.state.skills !== null);
@@ -291,7 +303,7 @@ test('the draft text and files survive a remount of the composer', async () => {
   store.attach('s1', [txt]);
   wrapper.unmount();
   const again = mount(Composer, {
-    props: { store, session: 's1', comments: [], reply: null },
+    props: { ...on(store) },
   });
   expect(again.find('textarea').element.value).toBe('draft');
   expect(chips(again)).toEqual(['notes.txt']);
@@ -339,7 +351,7 @@ test("Up in the box recalls the session's messages, a slash command among them l
   });
   await box.store.open('s1');
   const wrapper = mount(Composer, {
-    props: { store: box.store, session: 's1', comments: [], reply: null },
+    props: { ...on(box.store) },
     attachTo: document.body,
   });
   await until(() => box.store.state.skills !== null);
@@ -389,7 +401,7 @@ test('a recalled message that failed to send is still the draft after leaving', 
   });
   await box.store.open('s1');
   const wrapper = mount(Composer, {
-    props: { store: box.store, session: 's1', comments: [], reply: null },
+    props: { ...on(box.store) },
     attachTo: document.body,
   });
   await box.relay.emit(box.event(1, 'msg.user', { text: 'first' }));
