@@ -111,7 +111,7 @@ const hint = (name: SwitchKey, mac: boolean): string => {
       ? `${composers('moves to the line’s start or end')} Elsewhere the browser’s Back gives way.`
       : composers('moves by word'),
     shift: composers('selects a character'),
-    off: 'No keyboard shortcut between tabs.',
+    off: 'No keyboard shortcut between tabs, and none to the message box.',
   };
   return hints[name];
 };

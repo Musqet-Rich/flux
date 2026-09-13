@@ -4,7 +4,8 @@ import { escapeStack } from './escape-stack.ts';
 import { focusChord } from './focus-chord.ts';
 
 // ⌃⌥M asks for the message box, with the modifiers exact, by the key's name or its position,
-// not from a text box, not under something open on top, not for an IME's key or a consumed one.
+// not from the box itself, not from a text box on a PC where the M came out as AltGr's µ, not
+// under something open on top, not for an IME's key or a consumed one.
 
 const press = (init: KeyboardEventInit): KeyboardEvent =>
   new KeyboardEvent('keydown', { ctrlKey: true, altKey: true, key: 'm', code: 'KeyM', ...init });
@@ -13,38 +14,49 @@ const onTop = (): void => {};
 // What a browser reports when the layout has no name for the key.
 const unnamed = 'Unidentified';
 
+const box = document.createElement('textarea');
+const other = document.createElement('input');
+document.body.append(box, other);
+
+const asks = (event: KeyboardEvent, mac = false): boolean => focusChord.matches(event, box, mac);
+
 test('the chord is Ctrl+Alt with M, by name, by µ or by position, and no other modifier', () => {
-  expect(focusChord.matches(press({}))).toBe(true);
-  expect(focusChord.matches(press({ key: 'M' }))).toBe(true);
-  expect(focusChord.matches(press({ key: 'µ', code: '' }))).toBe(true);
-  expect(focusChord.matches(press({ key: unnamed, code: 'KeyM' }))).toBe(true);
-  expect(focusChord.matches(press({ key: 'n', code: 'KeyN' }))).toBe(false);
-  expect(focusChord.matches(press({ altKey: false }))).toBe(false);
-  expect(focusChord.matches(press({ ctrlKey: false }))).toBe(false);
-  expect(focusChord.matches(press({ shiftKey: true }))).toBe(false);
-  expect(focusChord.matches(press({ metaKey: true }))).toBe(false);
+  expect(asks(press({}))).toBe(true);
+  expect(asks(press({ key: 'M' }))).toBe(true);
+  expect(asks(press({ key: 'µ', code: '' }))).toBe(true);
+  expect(asks(press({ key: unnamed, code: 'KeyM' }))).toBe(true);
+  expect(asks(press({ key: 'n', code: 'KeyN' }))).toBe(false);
+  expect(asks(press({ altKey: false }))).toBe(false);
+  expect(asks(press({ ctrlKey: false }))).toBe(false);
+  expect(asks(press({ shiftKey: true }))).toBe(false);
+  expect(asks(press({ metaKey: true }))).toBe(false);
 });
 
 test('a consumed key, an IME key and one under something open are left', () => {
   const taken = press({ cancelable: true });
   taken.preventDefault();
-  expect(focusChord.matches(taken)).toBe(false);
-  expect(focusChord.matches(press({ isComposing: true }))).toBe(false);
+  expect(asks(taken)).toBe(false);
+  expect(asks(press({ isComposing: true }))).toBe(false);
   escapeStack.register(onTop);
-  expect(focusChord.matches(press({}))).toBe(false);
+  expect(asks(press({}))).toBe(false);
   escapeStack.unregister(onTop);
-  expect(focusChord.matches(press({}))).toBe(true);
+  expect(asks(press({}))).toBe(true);
 });
 
-test('from a text box the key is the box’s', () => {
-  const input = document.createElement('input');
-  document.body.append(input);
-  input.focus();
-  expect(document.activeElement).toBe(input);
-  expect(focusChord.matches(press({}))).toBe(false);
-  input.blur();
-  expect(focusChord.matches(press({}))).toBe(true);
-  input.remove();
+test('from the box itself the key is left; from another field the focus moves', () => {
+  box.focus();
+  expect(asks(press({}))).toBe(false);
+  other.focus();
+  expect(asks(press({}))).toBe(true);
+  other.blur();
+});
+
+test('on a PC a µ typed in a field is AltGr’s; on a Mac it is the chord from anywhere', () => {
+  other.focus();
+  expect(asks(press({ key: 'µ' }))).toBe(false);
+  expect(asks(press({ key: 'µ' }), true)).toBe(true);
+  other.blur();
+  expect(asks(press({ key: 'µ' }))).toBe(true);
 });
 
 test('the label is in the keyboard’s terms', () => {

@@ -25,6 +25,8 @@ const props = defineProps<{
   session: string;
   comments: PendingComment[];
   reply: ReplyTarget | null;
+  // The box's title: the screen's focus chord, named (SessionView, useFocusChord).
+  hint: string;
 }>();
 const emit = defineEmits<{ sent: []; unreply: []; resized: [] }>();
 
@@ -223,6 +225,7 @@ const sendHint = computed(
         v-model="draft.text"
         rows="1"
         placeholder="Message the agent"
+        :title="hint"
         @keydown="key"
         @beforeinput="lineBreak"
         @paste="paste"

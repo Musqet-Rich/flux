@@ -47,7 +47,7 @@ const effort = ref('');
 const prompt = ref('');
 const box = ref<HTMLTextAreaElement | null>(null);
 // ⌃⌥M from anywhere on the screen puts the caret in the first message (useFocusChord).
-useFocusChord(box, 'First message');
+const focusHint = useFocusChord(box, 'First message', () => props.store.state.switchKey !== 'off');
 const busy = ref(false);
 const failure = ref<string | null>(null);
 
@@ -169,7 +169,14 @@ onMounted(() => {
     <label for="new-title">Title (optional)</label>
     <input id="new-title" v-model="title" type="text" autocomplete="off" :disabled="busy" />
     <label for="new-prompt">First message</label>
-    <textarea id="new-prompt" ref="box" v-model="prompt" rows="6" :disabled="busy" />
+    <textarea
+      id="new-prompt"
+      ref="box"
+      v-model="prompt"
+      rows="6"
+      :title="focusHint"
+      :disabled="busy"
+    />
     <button type="submit" :disabled="!ready || busy"><Icon name="play" /> Start agent</button>
     <p v-if="failure !== null" class="error">{{ failure }}</p>
   </form>

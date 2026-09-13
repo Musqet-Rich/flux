@@ -1,7 +1,7 @@
 // The things open on top of the screen that an Escape closes, newest last (useEscape, which
 // explains the order); one listener on the document serves them all. Kept apart from
 // useEscape so anything else that must stand aside while something is on top (the session
-// tabs' switch chord) can ask without owning a closer.
+// tabs' switch chord, the message box's focus chord) can ask without owning a closer.
 
 const closers: (() => void)[] = [];
 
