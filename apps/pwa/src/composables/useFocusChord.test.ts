@@ -6,7 +6,7 @@ import { useFocusChord } from './useFocusChord.ts';
 
 // The chord puts the caret at the end of `box` while the owner is mounted and the device
 // has it, takes the key only then, and leaves a disabled box and the key with it. The title
-// given back names the chord, or the box alone when the chord is off. Under happy-dom the
+// given back names the chord, or is nothing when the chord is off. Under happy-dom the
 // keyboard is a PC's (enter-key.ts reads the user agent), so the label is Ctrl+Alt+M.
 
 const chord = (): KeyboardEvent =>
@@ -64,10 +64,10 @@ test('a disabled box takes neither the focus nor the key', () => {
   wrapper.unmount();
 });
 
-test('off, the key is left and the title is the box alone', async () => {
+test('off, the key is left and the box has no title', async () => {
   const wrapper = mount(Owner, { props: { on: false }, attachTo: document.body });
   const box = wrapper.find('textarea').element;
-  expect(box.title).toBe('Say');
+  expect(box.hasAttribute('title')).toBe(false);
   const event = chord();
   window.dispatchEvent(event);
   expect(event.defaultPrevented).toBe(false);

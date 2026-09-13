@@ -71,7 +71,7 @@ test('the focus chord reaches the composer, off with the switch chord, back with
   wrapper.find('textarea').element.blur();
   await store.setSwitchKey('off');
   await flushPromises();
-  expect(wrapper.find('textarea').element.title).toBe('Message the agent');
+  expect(wrapper.find('textarea').element.hasAttribute('title')).toBe(false);
   const off = chordM();
   window.dispatchEvent(off);
   expect(off.defaultPrevented).toBe(false);

@@ -99,7 +99,7 @@ const composers = (job: string): string =>
 const hint = (name: SwitchKey, mac: boolean): string => {
   const hints: Record<SwitchKey, string> = {
     ctrlAlt: mac
-      ? 'VoiceOver uses ⌃⌥ as its own key; with VoiceOver on, pick another chord.'
+      ? 'VoiceOver uses ⌃⌥ as its own key; with VoiceOver on, pick Off, since another chord leaves ⌃⌥M on the message box.'
       : 'Some desktops use Ctrl+Alt+← → for workspaces or screen rotation, and take it first.',
     altUpDown: mac ? composers('moves by paragraph') : '',
     metaShift: composers(mac ? 'selects to the line’s start or end' : 'selects by word'),

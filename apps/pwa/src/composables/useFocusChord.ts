@@ -10,13 +10,14 @@ import { focusChord } from '../components/focus-chord.ts';
 // (the New screen while it creates) cannot take the focus, and the key is left. The key is
 // taken only when the box takes it, so elsewhere the browser keeps whatever it does with the
 // chord. Gives back the box's title, `name (⌃⌥M)` in the device keyboard's terms so a hover
-// says the chord, or the name alone when the chord is off.
+// says the chord, or nothing when the chord is off (the box's label or placeholder says the
+// rest).
 
 export const useFocusChord = (
   box: Ref<HTMLTextAreaElement | null>,
   name: string,
   on: () => boolean,
-): ComputedRef<string> => {
+): ComputedRef<string | undefined> => {
   const onKey = (event: KeyboardEvent): void => {
     const el = box.value;
     if (el === null || el.disabled || !on()) return;
@@ -32,5 +33,5 @@ export const useFocusChord = (
   onUnmounted(() => {
     window.removeEventListener('keydown', onKey);
   });
-  return computed(() => (on() ? `${name} (${focusChord.label(focusChord.apple)})` : name));
+  return computed(() => (on() ? `${name} (${focusChord.label(focusChord.apple)})` : undefined));
 };

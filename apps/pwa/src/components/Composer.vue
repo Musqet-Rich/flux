@@ -25,8 +25,8 @@ const props = defineProps<{
   session: string;
   comments: PendingComment[];
   reply: ReplyTarget | null;
-  // The box's title: the screen's focus chord, named (SessionView, useFocusChord).
-  hint: string;
+  // The box's title: the screen's focus chord, named, or none (SessionView, useFocusChord).
+  hint: string | undefined;
 }>();
 const emit = defineEmits<{ sent: []; unreply: []; resized: [] }>();
 
