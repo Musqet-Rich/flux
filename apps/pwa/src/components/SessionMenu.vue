@@ -3,15 +3,16 @@ import { computed, ref } from 'vue';
 
 import { useDismiss } from '../composables/useDismiss.ts';
 import type { Store } from '../store/create-store.ts';
-import type { DeleteOptions } from '../store/session-actions.ts';
+import type { DeleteOptions, Spec } from '../store/session-actions.ts';
 import DeleteConfirm from './DeleteConfirm.vue';
 import Icon from './Icon.vue';
 import RenameForm from './RenameForm.vue';
+import SpecForm from './SpecForm.vue';
 
-// The session's own menu, in its toolbar: rename, clear the agent's context, archive, or
-// delete. No menu library: a button with `aria-haspopup="menu"` and a `role="menu"` list it
-// shows, closed by Escape or a tap elsewhere. Archiving and deleting leave the session, so the
-// parent is told to navigate away.
+// The session's own menu, in its toolbar: rename, set the model and effort (which restarts the
+// agent, ADR 0032), clear the agent's context, archive, or delete. No menu library: a button
+// with `aria-haspopup="menu"` and a `role="menu"` list it shows, closed by Escape or a tap
+// elsewhere. Archiving and deleting leave the session, so the parent is told to navigate away.
 
 const props = defineProps<{ store: Store; session: string }>();
 const emit = defineEmits<{ closed: [] }>();
@@ -21,12 +22,12 @@ const open = ref(false);
 useDismiss(open, root);
 const confirming = ref(false);
 const renaming = ref(false);
+const respeccing = ref(false);
 const dirty = ref<string | null>(null);
 const busy = ref(false);
 
-const title = computed(
-  () => props.store.state.sessions.find((s) => s.session === props.session)?.title ?? '',
-);
+const summary = computed(() => props.store.state.sessions.find((s) => s.session === props.session));
+const title = computed(() => summary.value?.title ?? '');
 
 const toggle = (): void => {
   open.value = !open.value;
@@ -43,7 +44,23 @@ const run = async (action: () => Promise<boolean>, leave: boolean): Promise<void
 const startRename = (): void => {
   open.value = false;
   confirming.value = false;
+  respeccing.value = false;
   renaming.value = true;
+};
+const startRespec = (): void => {
+  open.value = false;
+  confirming.value = false;
+  renaming.value = false;
+  respeccing.value = true;
+};
+const cancelRespec = (): void => {
+  respeccing.value = false;
+};
+const respec = async (spec: Spec): Promise<void> => {
+  busy.value = true;
+  const ok = await props.store.restartSession(props.session, spec);
+  busy.value = false;
+  if (ok) respeccing.value = false;
 };
 const cancelRename = (): void => {
   renaming.value = false;
@@ -63,6 +80,7 @@ const archive = (): void => {
 const startDelete = (): void => {
   open.value = false;
   renaming.value = false;
+  respeccing.value = false;
   dirty.value = null;
   confirming.value = true;
 };
@@ -103,6 +121,9 @@ const remove = async (options: DeleteOptions): Promise<void> => {
       <button type="button" role="menuitem" @click="startRename">
         <Icon name="edit" />Rename…
       </button>
+      <button type="button" role="menuitem" @click="startRespec">
+        <Icon name="settings" />Model &amp; effort…
+      </button>
       <button type="button" role="menuitem" @click="clear">
         <Icon name="clear" />Clear context
       </button>
@@ -113,6 +134,15 @@ const remove = async (options: DeleteOptions): Promise<void> => {
     </div>
     <div v-if="renaming" class="sheet">
       <RenameForm :title="title" :busy="busy" @confirm="rename" @cancel="cancelRename" />
+    </div>
+    <div v-if="respeccing" class="sheet">
+      <SpecForm
+        :model="summary?.model"
+        :effort="summary?.effort"
+        :busy="busy"
+        @confirm="respec"
+        @cancel="cancelRespec"
+      />
     </div>
     <div v-if="confirming" class="sheet">
       <DeleteConfirm :dirty="dirty" :busy="busy" @confirm="remove" @cancel="cancel" />

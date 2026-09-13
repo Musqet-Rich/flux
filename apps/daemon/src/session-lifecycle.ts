@@ -7,15 +7,21 @@ import { inside } from './inside.ts';
 import { settleAsks } from './settle-asks.ts';
 
 // Ending a session and coming back (protocol.md § 7: `sessions.archive`, `sessions.unarchive`,
-// `sessions.clear`), and renaming it. Archiving always closes the agent; removing the worktree
-// is the operator's call, refused while it holds work that exists nowhere else unless they say
-// to discard it.
+// `sessions.clear`, `sessions.restart`), and renaming it. Archiving always closes the agent;
+// removing the worktree is the operator's call, refused while it holds work that exists nowhere
+// else unless they say to discard it.
 
 export interface ArchiveParams {
   session: string;
   removeWorktree?: boolean;
   deleteBranch?: boolean;
   discard?: boolean;
+}
+
+export interface RestartParams {
+  session: string;
+  model?: string | null;
+  effort?: string | null;
 }
 
 type Ctx = Pick<
@@ -114,6 +120,35 @@ const clear = async (ctx: Ctx, session: string): Promise<Record<string, never>> 
   return {};
 };
 
+// A restart's model or effort (ADR 0032): a string sets it, null clears it to the box's default,
+// absent keeps it. Trimmed, since the value becomes a flag; blank is refused rather than spawning
+// `--model ""`, which would end the session it was meant to change.
+const setting = (value: string | null | undefined, name: string): string | null | undefined => {
+  if (value === undefined || value === null) return value;
+  const trimmed = value.trim();
+  if (trimmed === '') throw new DaemonError('bad_params', `${name} is blank`);
+  return trimmed;
+};
+
+// The agent goes and the next send spawns it again, resuming its context, with the model and
+// effort on the row. The row is written before the close, so a send that is not queued behind
+// this one (a manager's, over the control socket) already spawns the new spec, and again after
+// it: the closing agent may still confirm an effort set in-band (ADR 0031), which would
+// otherwise land over the one just asked for.
+const restart = async (ctx: Ctx, params: RestartParams): Promise<Record<string, never>> => {
+  ctx.sessions.get(params.session);
+  const model = setting(params.model, 'model');
+  const effort = setting(params.effort, 'effort');
+  const write = (): void => {
+    if (model !== undefined) ctx.sessions.setModel(params.session, model);
+    if (effort !== undefined) ctx.sessions.setEffort(params.session, effort);
+  };
+  write();
+  await closeAgent(ctx, params.session);
+  write();
+  return {};
+};
+
 // The title is the tab's label and nothing else, so a rename touches only the row and the log,
 // archived or not. Whitespace is trimmed; a title that is nothing but whitespace would leave a
 // blank tab, and one longer than a tab could ever show is refused rather than logged forever.
@@ -135,5 +170,6 @@ export const sessionLifecycle: {
   archive: typeof archive;
   unarchive: typeof unarchive;
   clear: typeof clear;
+  restart: typeof restart;
   rename: typeof rename;
-} = { archive, unarchive, clear, rename };
+} = { archive, unarchive, clear, restart, rename };

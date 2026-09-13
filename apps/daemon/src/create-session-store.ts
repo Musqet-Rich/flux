@@ -37,7 +37,8 @@ export interface NewSession {
   base: string;
   harness: HarnessKind;
   // Configured model and effort (ADR 0023 § 3); omitted when the box spawns on its defaults.
-  // The effort is later the last one the operator set in-band (ADR 0031, `setEffort`).
+  // Both are later what a restart set (ADR 0032), the effort also what the operator set in-band
+  // (ADR 0031).
   model?: string;
   effort?: string;
   // The resolved Agent role (ADR 0023 § 2); omitted when no Agent set one.
@@ -57,8 +58,10 @@ export interface SessionStore {
   // Null forgets the id: the next spawn starts a fresh agent context (sessions.clear).
   setAgentSessionId: (session: string, id: string | null) => void;
   setTitle: (session: string, title: string) => void;
-  // The effort the operator set in-band (ADR 0031), kept for every later spawn.
-  setEffort: (session: string, effort: string) => void;
+  // The configured model and effort for every later spawn: set at a restart (ADR 0032, null
+  // clears one back to the box's default), the effort also in-band (ADR 0031).
+  setModel: (session: string, model: string | null) => void;
+  setEffort: (session: string, effort: string | null) => void;
   setArchived: (session: string, archived: boolean) => void;
 }
 
@@ -178,6 +181,7 @@ const prepareStatements = (db: DatabaseSync) => {
     state: update('state'),
     agentSessionId: update('agent_session_id'),
     title: update('title'),
+    model: update('model'),
     effort: update('effort'),
     archived: update('archived'),
   };
@@ -230,6 +234,9 @@ export const createSessionStore = (options: SessionStoreOptions): SessionStore =
     },
     setTitle: (session, title) => {
       set(st.title, session, title);
+    },
+    setModel: (session, model) => {
+      set(st.model, session, model);
     },
     setEffort: (session, effort) => {
       set(st.effort, session, effort);
