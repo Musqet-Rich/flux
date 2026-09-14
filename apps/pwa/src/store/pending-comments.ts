@@ -1,5 +1,7 @@
-import type { CodeRef, FluxEvent } from '@flux/protocol';
+import type { CodeRef } from '@flux/protocol';
 import { fluxEvent } from '@flux/protocol';
+
+import type { LogFold } from './log-fold.ts';
 
 // Comments the operator has left but not yet sent (architecture.md § PWA `pendingComments`):
 // every `comment.added` that no later `comment.sent` names and no `comment.removed` withdrew.
@@ -12,15 +14,20 @@ export interface PendingComment {
   text: string;
 }
 
-export const pendingComments = (events: readonly FluxEvent[]): PendingComment[] => {
-  const added = new Map<string, PendingComment>();
-  for (const event of events) {
-    if (!fluxEvent.isKnown(event)) continue;
+// In the order they were added, by id. A comment event returns a fresh wrapper so readers see
+// the change; any other event leaves the value alone.
+export const pendingComments: LogFold<{ added: Map<string, PendingComment> }> = {
+  init: () => ({ added: new Map() }),
+  step: (acc, event) => {
+    if (!fluxEvent.isKnown(event)) return acc;
+    const { added } = acc;
     if (event.type === 'comment.added') added.set(event.payload.commentId, event.payload);
-    else if (event.type === 'comment.removed') added.delete(event.payload.commentId);
-    else if (event.type === 'comment.sent') {
-      for (const id of event.payload.commentIds) added.delete(id);
-    }
-  }
-  return [...added.values()];
+    else if (event.type === 'comment.removed') {
+      if (!added.delete(event.payload.commentId)) return acc;
+    } else if (event.type === 'comment.sent') {
+      const sent = event.payload.commentIds.filter((id) => added.delete(id));
+      if (sent.length === 0) return acc;
+    } else return acc;
+    return { added };
+  },
 };

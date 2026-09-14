@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import type { FileStatus } from '@flux/protocol';
-import { fluxEvent } from '@flux/protocol';
 import { computed, onMounted, ref, watch } from 'vue';
 
+import { useLogFold } from '../composables/useLogFold.ts';
 import type { Store } from '../store/create-store.ts';
+import { logFold } from '../store/log-fold.ts';
 import GitActions from './GitActions.vue';
 import Icon from './Icon.vue';
 
@@ -23,13 +24,11 @@ const fresh = ref<FileStatus[] | null>(null);
 const loading = ref(false);
 const selected = ref<string[]>([]);
 
-const fromLog = computed((): FileStatus[] => {
-  const events = props.store.state.logs[props.session]?.events ?? [];
-  const last = events.findLast((e) => e.type === 'files.changed');
-  return last !== undefined && fluxEvent.isKnown(last) && last.type === 'files.changed'
-    ? last.payload.files
-    : [];
-});
+const changed = useLogFold(
+  () => props.store.state.logs[props.session]?.events ?? [],
+  logFold.latest('files.changed'),
+);
+const fromLog = computed((): FileStatus[] => changed.value?.files ?? []);
 const files = computed(() => fresh.value ?? fromLog.value);
 const selectedFiles = computed(() => files.value.filter((f) => selected.value.includes(f.path)));
 

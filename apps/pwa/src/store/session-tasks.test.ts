@@ -1,7 +1,10 @@
 import type { FluxEvent } from '@flux/protocol';
 import { expect, test } from 'vitest';
 
-import { sessionTasks } from './session-tasks.ts';
+import { logFold } from './log-fold.ts';
+import { sessionTasks as strip } from './session-tasks.ts';
+
+const sessionTasks = (events: FluxEvent[]) => strip.flatten(logFold.run(events, strip.fold));
 
 let seq = 0;
 const ev = (type: string, payload: unknown, parent?: string): FluxEvent => {
@@ -216,4 +219,29 @@ test('an interrupted task stays until the next message; nested tasks follow thei
     ['interrupted', true],
     ['completed', true],
   ]);
+});
+
+// Stepped one event at a time, as the screen keeps it: a task event returns a fresh value over
+// the same rows, a turn keeps the earlier value's turn, and anything that changes nothing
+// returns the value given.
+test('the fold returns a new value for a change and the old one for none', () => {
+  const { step } = strip.fold;
+  const first = strip.fold.init();
+  const one = step(first, started('t1', 'u1', 'List files'));
+  expect(one).not.toBe(first);
+  expect(one.tasks).toBe(first.tasks);
+  expect(step(one, ev('msg.assistant', { text: 'x' }))).toBe(one);
+  expect(step(one, ev('task.progress', { taskId: 'zz', description: 'd' }))).toBe(one);
+  expect(step(one, ev('task.ended', { taskId: 'zz', status: 'completed', summary: '' }))).toBe(one);
+  const turned = step(one, ev('msg.user', { text: 'next' }));
+  expect(turned.turn).toBe(1);
+  expect(one.turn).toBe(0);
+  const idle = step(turned, ev('session.state', { state: 'idle' }));
+  expect(idle).not.toBe(turned);
+  expect(strip.flatten(idle).map((t) => t.status)).toEqual(['interrupted']);
+  expect(step(idle, ev('session.state', { state: 'idle' }))).toBe(idle);
+  // The flattened rows are copies: a later step leaves an earlier flatten as it was.
+  const rows = strip.flatten(idle);
+  step(idle, ev('session.cleared', {}));
+  expect(rows[0]?.current).toBe(true);
 });

@@ -207,6 +207,7 @@ const controls = (i: StoreInternals): Pick<Store, 'dismissError' | 'stop'> => ({
     // once the store is stopped.
     i.soundHush?.();
     i.soundHush = null;
+    sessionLogs.stop(i);
     i.connection?.stop();
   },
 });
@@ -224,6 +225,7 @@ export const createStore = (options: StoreOptions): Store => {
     errorTimer: null,
     connectionError: null,
     soundHush: null,
+    cacheWrites: new Map(),
     files: new Map(),
     thumbLoads: new Map(),
     thumbOwners: new Map(),

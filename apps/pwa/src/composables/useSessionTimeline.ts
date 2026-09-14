@@ -3,9 +3,13 @@ import { fluxEvent } from '@flux/protocol';
 import type { ComputedRef, Ref } from 'vue';
 import { computed, ref, watch } from 'vue';
 
+import type { LogFold } from '../store/log-fold.ts';
 import { openAsk } from '../store/open-ask.ts';
+import type { PendingComment } from '../store/pending-comments.ts';
+import { pendingComments } from '../store/pending-comments.ts';
 import type { SessionTask } from '../store/session-tasks.ts';
 import { sessionTasks } from '../store/session-tasks.ts';
+import { useLogFold } from './useLogFold.ts';
 import type { MessageReply } from './useMessageReply.ts';
 import { useMessageReply } from './useMessageReply.ts';
 
@@ -28,6 +32,10 @@ import { useMessageReply } from './useMessageReply.ts';
 // for a quote from long ago; the next trim at the tail cuts it back.
 // No virtualisation: the rows in the window are all in the DOM. The reply state
 // (useMessageReply) rides along so the screen has one object for what its log means.
+// Everything here is a fold over the log (store/log-fold, useLogFold): the chats' rows, the
+// tasks, the open ask and the compact flag are each kept up an event at a time, so an incoming
+// event costs a step per fold and a copy of the window, whatever the log's length; only the
+// tasks are walked again when one of them changes, and a session runs tens, not thousands.
 
 const windowSize = 300;
 const pageSize = 200;
@@ -44,16 +52,40 @@ const hiddenTypes = new Set(['raw', 'rate_limit', 'files.changed', 'task.progres
 // `compact.boundary` has been logged since. The compaction is a black box with no incremental
 // progress, so the indicator it drives is indeterminate; the caller adds that the session is
 // `running` (architecture.md § Adapter, protocol.md § 5).
-const awaitingCompact = (events: readonly FluxEvent[]): boolean => {
-  let awaiting = false;
-  for (const event of events) {
-    if (event.parent !== undefined || !fluxEvent.isKnown(event)) continue;
+const awaitingCompactFold: LogFold<boolean> = {
+  init: () => false,
+  step: (awaiting, event) => {
+    if (event.parent !== undefined || !fluxEvent.isKnown(event)) return awaiting;
     if (event.type === 'msg.user') {
       const text = event.payload.text.trim();
-      awaiting = text === '/compact' || text.startsWith('/compact ');
-    } else if (event.type === 'compact.boundary') awaiting = false;
-  }
-  return awaiting;
+      return text === '/compact' || text.startsWith('/compact ');
+    }
+    return event.type === 'compact.boundary' ? false : awaiting;
+  },
+};
+
+// One chat's rows, main's or a task's, and where the last clear sits in them: 0 with none,
+// and always 0 in a task's chat, since the marker is top-level.
+interface Chat {
+  rows: FluxEvent[];
+  clearedAt: number;
+}
+
+const emptyChat: Chat = Object.freeze({ rows: [], clearedAt: 0 });
+
+// The chats by their key, null for main; a row returns a fresh wrapper, a hidden event the
+// value given.
+const chatsFold: LogFold<{ byView: Map<string | null, Chat> }> = {
+  init: () => ({ byView: new Map() }),
+  step: (acc, event) => {
+    if (hiddenTypes.has(event.type)) return acc;
+    const view = event.parent ?? null;
+    const chat = acc.byView.get(view) ?? { rows: [], clearedAt: 0 };
+    if (event.type === 'session.cleared') chat.clearedAt = chat.rows.length;
+    chat.rows.push(event);
+    acc.byView.set(view, chat);
+    return { byView: acc.byView };
+  },
 };
 
 // The window over the open chat's rows: how many are left out at the top, and what moves it.
@@ -83,23 +115,18 @@ export interface SessionTimeline extends MessageReply, RowWindow {
   // A /compact turn with no boundary yet; the screen shows an indeterminate "Compacting…"
   // indicator while this and `running` hold.
   awaitingCompaction: ComputedRef<boolean>;
+  // The operator's comments not yet sent (store/pending-comments), for the composer's tray.
+  comments: ComputedRef<PendingComment[]>;
   select: (view: string | null) => void;
 }
 
-const windowOver = (rows: ComputedRef<FluxEvent[]>): RowWindow => {
+const windowOver = (chat: () => Chat): RowWindow => {
   const hidden = ref(0);
-  // Where the last clear sits in the rows: 0 with none, and always 0 in a task's chat, since
-  // the marker is top-level.
-  const boundary = computed(() =>
-    Math.max(
-      0,
-      rows.value.findLastIndex((e) => e.type === 'session.cleared'),
-    ),
-  );
-  const earlier = computed(() => Math.min(hidden.value, rows.value.length));
-  const timeline = computed(() =>
-    earlier.value === 0 ? rows.value : rows.value.slice(earlier.value),
-  );
+  const boundary = computed(() => chat().clearedAt);
+  const earlier = computed(() => Math.min(hidden.value, chat().rows.length));
+  // Always a copy: the chat's rows are one array that grows in place, and the screen's
+  // watchers need a value that changes when it does.
+  const timeline = computed(() => chat().rows.slice(earlier.value));
   // A clear that lands, or the log arriving with one, moves the top edge down to it; rows only
   // append, so the marker's index never falls and the edge never moves up here. Synchronous, so
   // the edge and the rows move in one step: the screen's own watcher on the rows then sees the
@@ -116,13 +143,13 @@ const windowOver = (rows: ComputedRef<FluxEvent[]>): RowWindow => {
     earlier,
     timeline,
     trim: () => {
-      hidden.value = Math.max(boundary.value, rows.value.length - windowSize);
+      hidden.value = Math.max(boundary.value, chat().rows.length - windowSize);
     },
     showEarlier: () => {
       hidden.value = Math.max(0, earlier.value - pageSize);
     },
     reveal: (seq) => {
-      const index = rows.value.findIndex((e) => e.seq === seq);
+      const index = chat().rows.findIndex((e) => e.seq === seq);
       if (index !== -1) hidden.value = Math.min(hidden.value, index);
     },
   };
@@ -130,15 +157,16 @@ const windowOver = (rows: ComputedRef<FluxEvent[]>): RowWindow => {
 
 export const useSessionTimeline = (events: () => readonly FluxEvent[]): SessionTimeline => {
   const view = ref<string | null>(null);
-  const tasks = computed(() => sessionTasks(events()));
+  const collected = useLogFold(events, sessionTasks.fold);
+  const tasks = computed(() => sessionTasks.flatten(collected.value));
   const task = computed(() => tasks.value.find((t) => t.toolUseId === view.value) ?? null);
   const strip = computed(() => tasks.value.filter((t) => t.current || t.toolUseId === view.value));
-  const rows = computed(() =>
-    events().filter((e) => !hiddenTypes.has(e.type) && (e.parent ?? null) === view.value),
-  );
-  const rowWindow = windowOver(rows);
-  const ask = computed(() => openAsk(events()));
-  const awaitingCompaction = computed(() => awaitingCompact(events()));
+  const chats = useLogFold(events, chatsFold);
+  const rowWindow = windowOver(() => chats.value.byView.get(view.value) ?? emptyChat);
+  const ask = useLogFold(events, openAsk);
+  const awaitingCompaction = useLogFold(events, awaitingCompactFold);
+  const pending = useLogFold(events, pendingComments);
+  const comments = computed(() => [...pending.value.added.values()]);
   return {
     ...useMessageReply(events),
     ...rowWindow,
@@ -148,6 +176,7 @@ export const useSessionTimeline = (events: () => readonly FluxEvent[]): SessionT
     task,
     ask,
     awaitingCompaction,
+    comments,
     select: (next) => {
       view.value = next;
       rowWindow.trim();

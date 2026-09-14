@@ -31,6 +31,7 @@ const internals = () => {
     errorTimer: null,
     connectionError: null,
     soundHush: null,
+    cacheWrites: new Map(),
     files: new Map(),
     thumbLoads: new Map(),
     thumbOwners: new Map(),

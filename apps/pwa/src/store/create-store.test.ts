@@ -25,13 +25,9 @@ const summary = (session: string, extra: Partial<SessionSummary> = {}): SessionS
   ...extra,
 });
 
-const ev = (seq: number, type: string, payload: unknown, session = 's1'): FluxEvent => ({
-  seq,
-  ts: '2026-01-01T00:00:00Z',
-  session,
-  type,
-  payload,
-});
+const ts = '2026-01-01T00:00:00Z';
+type Ev = (seq: number, type: string, payload: unknown, session?: string) => FluxEvent;
+const ev: Ev = (seq, type, payload, session = 's1') => ({ seq, ts, session, type, payload });
 
 const boxLog: FluxEvent[] = [
   ev(1, 'session.created', {
@@ -125,7 +121,8 @@ const setup = async ({ pairable = true }: Options = {}) => {
   const relay = await createFakeRelay(handlers);
   const storage = createMemoryStorage();
   const pushes: string[] = [];
-  // The store's auto-clear timer, fired by the test instead of the clock.
+  // The store's timers (the error auto-clear, the log cache's write delay), fired by the test
+  // instead of the clock.
   const timers: (() => void)[] = [];
   const fire = (): void => {
     for (const fn of timers.splice(0)) fn();
@@ -196,7 +193,7 @@ test('a bad link or a refused pairing lands back on the pair screen with the rea
 });
 
 test('opens a session from the cache, syncs it, then applies live events and deltas', async () => {
-  const { store, storage, link, relay } = await setup();
+  const { store, storage, link, relay, fire } = await setup();
   await storage.set('log:s1:0', [boxLog[0]]);
   await storage.set('log:s2:0', 'garbage');
   await store.pair('https://relay.example', link());
@@ -210,6 +207,7 @@ test('opens a session from the cache, syncs it, then applies live events and del
   await relay.emit(reply);
   await until(() => store.state.logs['s1']?.lastSeq === 3);
   expect(store.state.logs['s1']).toMatchObject({ streaming: '', events: [...boxLog, reply] });
+  fire();
   expect(await storage.get('log:s1:0')).toEqual([...boxLog, reply]);
   expect(store.state.sessions[0]).toMatchObject({ lastSeq: 3 });
 });
@@ -394,6 +392,7 @@ test('boots from the stored box, renders the cache, and re-syncs after a reconne
   await first.store.pair('https://relay.example', first.link());
   await first.store.open('s1');
   first.store.stop();
+  expect(await first.storage.get('log:s1:0')).toEqual(boxLog);
   const { relay, called } = first;
   const store = first.another();
   await store.boot();
@@ -414,7 +413,7 @@ test('boots from the stored box, renders the cache, and re-syncs after a reconne
 });
 
 test('lists devices, revokes another, and revoking itself forgets the box', async () => {
-  const { store, storage, link, called } = await setup();
+  const { store, storage, link, called, fire } = await setup();
   await store.pair('https://relay.example', link());
   expect(await store.refreshDevices()).toBe(true);
   expect(store.state.devices.map((d) => d.deviceId)).toEqual(['dev-1', 'dev-2']);
@@ -422,6 +421,7 @@ test('lists devices, revokes another, and revoking itself forgets the box', asyn
   expect(store.state.devices.map((d) => d.deviceId)).toEqual(['dev-1']);
   expect(store.state.phase).toBe('paired');
   await store.open('s1');
+  fire();
   expect(await storage.get('log:s1:0')).toEqual(boxLog);
   expect(await store.removeDevice('dev-1')).toBe(true);
   expect(await storage.get('log:s1:0')).toBeUndefined();

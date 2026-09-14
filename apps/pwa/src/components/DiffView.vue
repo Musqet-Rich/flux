@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import type { LineRange } from '@flux/protocol';
-import { fluxEvent } from '@flux/protocol';
+import type { FluxEvent, LineRange } from '@flux/protocol';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
 import { ClientError } from '../client/client-error.ts';
+import { useLogFold } from '../composables/useLogFold.ts';
 import type { DiffEditor } from '../editor/create-diff-editor.ts';
 import { createDiffEditor } from '../editor/create-diff-editor.ts';
 import type { Store } from '../store/create-store.ts';
+import { logFold } from '../store/log-fold.ts';
 import { pendingComments } from '../store/pending-comments.ts';
 import CommentTray from './CommentTray.vue';
 import Icon from './Icon.vue';
@@ -26,10 +27,10 @@ const text = ref('');
 const posting = ref(false);
 let editor: DiffEditor | null = null;
 
+const events = (): readonly FluxEvent[] => props.store.state.logs[props.session]?.events ?? [];
+const comments = useLogFold(events, pendingComments);
 const pending = computed(() =>
-  pendingComments(props.store.state.logs[props.session]?.events ?? []).filter(
-    (c) => c.ref.path === props.path,
-  ),
+  [...comments.value.added.values()].filter((c) => c.ref.path === props.path),
 );
 const lines = computed(() => {
   const r = selection.value;
@@ -37,13 +38,8 @@ const lines = computed(() => {
   return r.startLine === r.endLine ? `line ${r.startLine}` : `lines ${r.startLine}–${r.endLine}`;
 });
 
-const baseRev = (): string | null => {
-  const events = props.store.state.logs[props.session]?.events ?? [];
-  const created = events.find((e) => e.type === 'session.created');
-  return created !== undefined && fluxEvent.isKnown(created) && created.type === 'session.created'
-    ? created.payload.base
-    : null;
-};
+const created = useLogFold(events, logFold.latest('session.created'));
+const baseRev = (): string | null => created.value?.base ?? null;
 
 // Only "the base has no such file" is an addition; any other failure is shown as one.
 const missing = (error: unknown): boolean =>

@@ -18,4 +18,9 @@ const open = async (i: StoreInternals, session: string): Promise<void> => {
   return boxLink.syncLog(i, log);
 };
 
-export const sessionLogs: { open: typeof open } = { open };
+// A stopping store writes the cache it still owes (log-cache.ts).
+const stop = (i: StoreInternals): void => {
+  logCache.flushWrites(i);
+};
+
+export const sessionLogs: { open: typeof open; stop: typeof stop } = { open, stop };

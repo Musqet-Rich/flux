@@ -4,7 +4,6 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useFocusChord } from '../composables/useFocusChord.ts';
 import { useSessionTimeline } from '../composables/useSessionTimeline.ts';
 import type { Store } from '../store/create-store.ts';
-import { pendingComments } from '../store/pending-comments.ts';
 import AgentStrip from './AgentStrip.vue';
 import Composer from './Composer.vue';
 import Icon from './Icon.vue';
@@ -33,7 +32,6 @@ const focusHint = useFocusChord(
 
 const log = computed(() => props.store.state.logs[props.session]);
 const events = computed(() => log.value?.events ?? []);
-const comments = computed(() => pendingComments(events.value));
 const chat = useSessionTimeline(() => events.value);
 const {
   strip,
@@ -47,6 +45,7 @@ const {
   quoteOf,
   startReply,
   cancelReply,
+  comments,
 } = chat;
 const streaming = computed(() => log.value?.streaming ?? '');
 const thinking = computed(() => log.value?.thinking ?? null);
