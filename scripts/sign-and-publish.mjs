@@ -20,6 +20,17 @@ const fail = (message) => {
 
 const [tag, flag, value] = process.argv.slice(2);
 
+// `security -w` prints a secret that holds a newline (a PEM does) as one line of hex rather than
+// as the bytes, so decode that form back; a secret it printed verbatim is used as it came.
+const keychainPem = () => {
+  const raw = execFileSync(
+    'security',
+    ['find-generic-password', '-s', 'flux-release-signing', '-w'],
+    { encoding: 'utf8' },
+  ).trim();
+  return /^[0-9a-f]+$/iu.test(raw) ? Buffer.from(raw, 'hex').toString('utf8') : raw;
+};
+
 const run = () => {
   if (tag === undefined) {
     fail('usage: node scripts/sign-and-publish.mjs <tag> [--key <path-to-pem>]');
@@ -33,12 +44,7 @@ const run = () => {
   });
   console.log('2/4 signing the manifest bytes with the offline key …');
   const manifest = readFileSync(join(dir, 'manifest.json'));
-  const pem =
-    keyPath === undefined
-      ? execFileSync('security', ['find-generic-password', '-s', 'flux-release-signing', '-w'], {
-          encoding: 'utf8',
-        })
-      : readFileSync(keyPath, 'utf8');
+  const pem = keyPath === undefined ? keychainPem() : readFileSync(keyPath, 'utf8');
   const signature = sign(null, manifest, createPrivateKey(pem));
   const sigPath = join(dir, 'manifest.json.sig');
   writeFileSync(sigPath, `${Buffer.from(signature).toString('base64')}\n`);
