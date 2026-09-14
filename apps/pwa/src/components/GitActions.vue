@@ -2,6 +2,7 @@
 import type { Commit, FileStatus } from '@flux/protocol';
 import { computed, onMounted, ref } from 'vue';
 
+import { useLogFold } from '../composables/useLogFold.ts';
 import { conventionalCommit } from '../git/conventional-commit.ts';
 import type { Store } from '../store/create-store.ts';
 import { sessionPr } from '../store/session-pr.ts';
@@ -35,9 +36,8 @@ const commits = ref<Commit[]>([]);
 const logLimit = 20;
 
 const summary = computed(() => props.store.state.sessions.find((s) => s.session === props.session));
-const prUrl = computed(
-  () => sessionPr(props.store.state.logs[props.session]?.events ?? [])?.url ?? null,
-);
+const pr = useLogFold(() => props.store.state.logs[props.session]?.events ?? [], sessionPr);
+const prUrl = computed(() => pr.value?.url ?? null);
 const last = computed(() => commits.value[0] ?? null);
 // The PR title starts as the newest Conventional Commit subject (the squash commit takes the
 // title, so the agent's own subject is the one CI already accepts), else the session title,

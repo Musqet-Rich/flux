@@ -1,7 +1,10 @@
 import type { FluxEvent } from '@flux/protocol';
 import { expect, test } from 'vitest';
 
-import { sessionPr } from './session-pr.ts';
+import { logFold } from './log-fold.ts';
+import { sessionPr as fold } from './session-pr.ts';
+
+const sessionPr = (events: FluxEvent[]) => logFold.run(events, fold);
 
 const ev = (seq: number, type: string, payload: unknown): FluxEvent => ({
   seq,

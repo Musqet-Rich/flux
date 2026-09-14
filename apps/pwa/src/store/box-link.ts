@@ -31,6 +31,7 @@ const unpair = async (i: StoreInternals, reason: string): Promise<void> => {
   i.sync = null;
   i.deviceId = null;
   i.logs.clear();
+  logCache.cancelWrites(i);
   i.state.logs = {};
   i.state.sessions = [];
   i.state.devices = [];

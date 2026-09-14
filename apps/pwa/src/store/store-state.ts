@@ -228,6 +228,9 @@ export interface StoreInternals {
   connectionError: StoreError | null;
   // Cancels the quiet spell after a notification sound, while one is pending.
   soundHush: (() => void) | null;
+  // The log cache writes waiting on their delay, by session (log-cache.ts): where the write
+  // starts, and its cancel.
+  cacheWrites: Map<string, { from: number; cancel: () => void }>;
   // The composer's files by chip key, off the reactive state (attachment-actions.ts).
   files: Map<string, File>;
   // Thumbnail fetches in flight or done, by attachment id, and which session each belongs to.

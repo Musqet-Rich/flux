@@ -2,9 +2,9 @@
 import type { FluxEvent } from '@flux/protocol';
 import { computed } from 'vue';
 
-import { fluxEvent } from '@flux/protocol';
-
+import { useLogFold } from '../composables/useLogFold.ts';
 import type { Store } from '../store/create-store.ts';
+import { logFold } from '../store/log-fold.ts';
 import { sessionPr } from '../store/session-pr.ts';
 import { homePath } from './home-path.ts';
 import Icon from './Icon.vue';
@@ -50,12 +50,7 @@ const harness = computed((): string =>
   summary.value === undefined ? '' : harnessLabel(summary.value.harness),
 );
 // The latest `agent.spec`, or null before the agent has said what it runs.
-const spec = computed(() => {
-  const last = props.events.findLast((e) => e.type === 'agent.spec');
-  return last !== undefined && fluxEvent.isKnown(last) && last.type === 'agent.spec'
-    ? last.payload
-    : null;
-});
+const spec = useLogFold(() => props.events, logFold.latest('agent.spec'));
 // A model id on the chip loses the vendor prefix and a dated snapshot's date, `fable-5-1` for
 // `claude-fable-5-1`, `haiku-4-5` for `claude-haiku-4-5-20251001` (a `[1m]` context suffix
 // stays): on a phone-width toolbar a full id would push the effort, the part the chip exists to
@@ -75,19 +70,15 @@ const chipTitle = computed((): string =>
     .join(' · '),
 );
 
-const pr = computed(() => sessionPr(props.events));
+const pr = useLogFold(() => props.events, sessionPr);
 const prLabel = computed(() =>
   pr.value?.identifier === '' ? 'PR' : `PR #${pr.value?.identifier}`,
 );
 const prNumber = computed(() => (pr.value?.identifier === '' ? '' : `#${pr.value?.identifier}`));
 // The count from the latest `files.changed` event, on the button so those events need not spam
 // the timeline. `ChangesView` reads the same last event when its fresher `git.status` has not run.
-const changedCount = computed(() => {
-  const last = props.events.findLast((e) => e.type === 'files.changed');
-  return last !== undefined && fluxEvent.isKnown(last) && last.type === 'files.changed'
-    ? last.payload.files.length
-    : 0;
-});
+const changed = useLogFold(() => props.events, logFold.latest('files.changed'));
+const changedCount = computed(() => changed.value?.files.length ?? 0);
 const changesLabel = computed(() => `Changes (${changedCount.value})`);
 </script>
 

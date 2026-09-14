@@ -3,6 +3,9 @@ import { fluxEvent } from '@flux/protocol';
 import type { Ref } from 'vue';
 import { nextTick, onScopeDispose, watch } from 'vue';
 
+import type { LogFold } from '../store/log-fold.ts';
+import { useLogFold } from './useLogFold.ts';
+
 // A shell's history on the message box: Up recalls the message the operator sent before, Up
 // again the one before that, Down comes back, and Down past the newest restores what was being
 // typed. The history is the session's own log, its top-level `msg.user` rows (one with a
@@ -23,17 +26,20 @@ import { nextTick, onScopeDispose, watch } from 'vue';
 const limit = 100;
 
 // Oldest first, with consecutive repeats dropped before the cap, so a run of the same message
-// does not fill it.
-const history = (events: FluxEvent[]): string[] => {
-  const texts: string[] = [];
-  for (const event of events) {
+// does not fill it. Kept up as the log grows (store/log-fold), so an arrow costs the cap's
+// worth of copying, not a pass over the day.
+const historyFold: LogFold<{ texts: string[] }> = {
+  init: () => ({ texts: [] }),
+  step: (acc, event) => {
     if (!fluxEvent.isKnown(event) || event.type !== 'msg.user' || event.parent !== undefined) {
-      continue;
+      return acc;
     }
     const { text } = event.payload;
-    if (text !== texts.at(-1)) texts.push(text);
-  }
-  return texts.slice(-limit);
+    if (text === acc.texts.at(-1)) return acc;
+    acc.texts.push(text);
+    if (acc.texts.length > limit) acc.texts.shift();
+    return { texts: acc.texts };
+  },
 };
 
 // Up from the first line of the text, Down from the last: the caret's side of the text holds
@@ -112,11 +118,12 @@ const browse = (draft: () => Draft) => {
 };
 
 export const useCommandHistory = (
-  events: () => FluxEvent[],
+  events: () => readonly FluxEvent[],
   draft: () => Draft,
   box: Ref<HTMLTextAreaElement | null>,
 ): { key: (event: KeyboardEvent) => boolean; shown: () => string | null; done: () => void } => {
   const current = browse(draft);
+  const history = useLogFold(events, historyFold);
   // True when the key was taken.
   const key = (event: KeyboardEvent): boolean => {
     const el = box.value;
@@ -126,7 +133,7 @@ export const useCommandHistory = (
     if (!live) current.leave();
     const up = way === 'up';
     if (!atEdge(el, up) || (!up && !live)) return false;
-    const entries = history(events());
+    const entries = [...history.value.texts];
     if (entries.length === 0) return false;
     event.preventDefault();
     const text = current.step(entries, up);

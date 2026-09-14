@@ -2,6 +2,7 @@ import { ClientError } from '../client/client-error.ts';
 import type { AttachmentActions } from './attachment-actions.ts';
 import { attachmentActions } from './attachment-actions.ts';
 import { boxLink } from './box-link.ts';
+import { logFold } from './log-fold.ts';
 import { pendingComments } from './pending-comments.ts';
 import type { StoreInternals } from './store-state.ts';
 
@@ -51,7 +52,7 @@ const send = async (
   replyTo?: number,
 ): Promise<boolean> => {
   const events = i.logs.get(session)?.events() ?? [];
-  const commentIds = pendingComments(events).map((c) => c.commentId);
+  const commentIds = [...logFold.run(events, pendingComments).added.keys()];
   const attachments = files.ready(session);
   const params = {
     session,
