@@ -9,7 +9,7 @@ corepack pnpm run build     # daemon, relay, pwa, in dependency order
 corepack pnpm --filter @flux/pwa dev
 ```
 
-`corepack pnpm run check` is what the pre-commit hook enforces; it must pass before every commit. Node 24 only.
+`corepack pnpm run check` is what the pre-commit hook enforces; it must pass before every commit. Node 24 or later (`docs/adr/0035`); Node 25 and later no longer bundle corepack, so install it once with `npm install -g corepack`.
 
 ## Running from source
 

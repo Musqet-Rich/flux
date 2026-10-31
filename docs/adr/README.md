@@ -40,3 +40,4 @@ Format: Context, Decision, Consequences. Keep each under a page.
 | 0032 | Model and effort set from the phone: `sessions.restart` takes them, the agent respawns      | accepted |
 | 0033 | Split panes on a wide screen: the chat beside a pane of Changes and Files                   | accepted |
 | 0034 | A typed `/clear` is Flux's clear, and the timeline opens at the Context cleared marker      | accepted |
+| 0035 | Node 24 is the floor, not the only version: develop and commit on 24 or later               | accepted |
