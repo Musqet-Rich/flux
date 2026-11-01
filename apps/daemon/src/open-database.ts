@@ -78,6 +78,7 @@ const schema = `
     hash TEXT NOT NULL,
     complete INTEGER NOT NULL DEFAULT 0,
     sent_seq INTEGER,
+    offered INTEGER,
     created_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS attachments_session ON attachments (session);
@@ -94,6 +95,7 @@ const addedColumns = [
   { table: 'sessions', column: 'tools', type: 'TEXT' },
   { table: 'sessions', column: 'manager', type: 'INTEGER' },
   { table: 'sessions', column: 'head', type: 'TEXT' },
+  { table: 'attachments', column: 'offered', type: 'INTEGER' },
 ];
 
 const addMissingColumns = (db: DatabaseSync): void => {

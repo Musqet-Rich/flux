@@ -1,6 +1,6 @@
 # 0016: pi adapter: RPC mode, session id shared with Flux, Flux tools as a pi extension
 
-Status: accepted, 2026-08-29.
+Status: accepted, 2026-08-29. Extended 2026-11-01: the extension also registers `flux_file_send` (ADR 0036).
 
 ## Context
 

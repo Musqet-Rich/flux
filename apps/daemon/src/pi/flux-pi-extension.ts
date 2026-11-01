@@ -1,9 +1,9 @@
 import { connect } from 'node:net';
 
-// The Flux tools for pi (ADR 0016): pi has no MCP client, so flux_ask and flux_notify are a pi
-// extension loaded with `--extension`. Each call goes to the daemon over the control socket
-// exactly as flux-mcp.ts does. Self-contained on purpose: pi loads this file through jiti from
-// the daemon's dist directory, outside any workspace resolution.
+// The Flux tools for pi (ADR 0016): pi has no MCP client, so flux_ask, flux_notify and
+// flux_file_send (ADR 0036) are a pi extension loaded with `--extension`. Each call goes to the
+// daemon over the control socket exactly as flux-mcp.ts does. Self-contained on purpose: pi loads
+// this file through jiti from the daemon's dist directory, outside any workspace resolution.
 
 interface ToolResult {
   content: { type: 'text'; text: string }[];
@@ -141,6 +141,48 @@ const notify = async (params: Record<string, unknown>): Promise<ToolResult> => {
   return text('noted');
 };
 
+const fileSend = async (params: Record<string, unknown>): Promise<ToolResult> => {
+  const path = params['path'];
+  if (typeof path !== 'string' || path === '') throw new FluxPiError('path is required');
+  const note = params['note'];
+  const result = await control({
+    type: 'offer',
+    session: session(),
+    path,
+    ...(typeof note === 'string' ? { note } : {}),
+  });
+  const file = isRecord(result) ? result['attachment'] : undefined;
+  const name = isRecord(file) && typeof file['name'] === 'string' ? file['name'] : 'the file';
+  return text(`Offered ${name} to the operator; it is in the chat to download.`);
+};
+
+// Same name, description and schema as flux-mcp.ts, so every harness offers files alike.
+const fileSendTool: ToolDefinition = {
+  name: 'flux_file_send',
+  label: 'Offer a file',
+  description:
+    'Offer the operator a file to download on their phone or laptop, from the chat. The file is copied at the call, so later edits do not change what they get. Use it for a deliverable they asked for (a report, an export, an image), not for every file you touch. Any regular file you can read, up to 50 MiB.',
+  promptSnippet: 'Offer the operator a file to download',
+  promptGuidelines: [
+    'Use flux_file_send when the operator asked for a deliverable they will want on their device; do not offer every file you touch.',
+  ],
+  parameters: {
+    type: 'object',
+    properties: {
+      path: {
+        type: 'string',
+        description: 'The file, absolute or relative to the working directory.',
+      },
+      note: {
+        type: 'string',
+        description: 'Optional one line shown with the file, e.g. what it is.',
+      },
+    },
+    required: ['path'],
+  },
+  execute: (_id, params) => fileSend(params),
+};
+
 const fluxPiExtension = (pi: PiExtensionApi): void => {
   pi.registerTool({
     name: 'flux_ask',
@@ -187,6 +229,7 @@ const fluxPiExtension = (pi: PiExtensionApi): void => {
     },
     execute: (_id, params) => notify(params),
   });
+  pi.registerTool(fileSendTool);
 };
 
 // pi's extension contract is a default export (docs/adr/0016); the named export is for tests.

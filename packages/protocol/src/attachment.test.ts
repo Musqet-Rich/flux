@@ -32,5 +32,6 @@ test('the caps are the ones protocol.md states', () => {
     chunkBytes: 512 * 1024,
     readBytes: 512 * 1024,
     imageBytes: 5 * 1024 * 1024,
+    offerBytes: 50 * 1024 * 1024,
   });
 });

@@ -6,9 +6,10 @@ import { createServer } from 'node:net';
 import { createInterface } from 'node:readline';
 
 // The daemon's local control socket (ADR 0008): newline-delimited JSON over a Unix socket.
-// The Flux MCP server calls `ask` and `notify` on it from inside an agent session; `flux pair`
-// calls `pair` and `flux devices rm` calls `devices.rm`, so a revocation reaches the live
-// channels. Nothing here is reachable from outside the box.
+// The Flux MCP server calls `ask`, `notify`, `compact` and `offer` (flux_file_send, ADR 0036)
+// on it from inside an agent session; `flux pair` calls `pair` and `flux devices rm` calls
+// `devices.rm`, so a revocation reaches the live channels. Nothing here is reachable from
+// outside the box.
 
 // The manager verbs (ADR 0025) all carry `session`, the CALLER: the daemon authorises them
 // against that session's persisted `manager` flag. The mutating verbs also carry `target`, the
@@ -17,6 +18,8 @@ export type ControlRequest =
   | { type: 'ask'; session: string; question: string; options?: string[]; timeoutMs?: number }
   | { type: 'notify'; session: string; summary: string; level: 'info' | 'done' | 'blocked' }
   | { type: 'compact'; session: string; focus?: string }
+  // `path` is the agent's, absolute or relative to the session's worktree.
+  | { type: 'offer'; session: string; path: string; note?: string }
   | { type: 'sessions.list'; session: string }
   | {
       type: 'session.open';
@@ -89,6 +92,8 @@ const isRequest = (v: unknown): v is ControlRequest => {
         v['session'] !== '' &&
         isOptional(v['focus'], (s): s is string => isString(s) && s !== '')
       );
+    case 'offer':
+      return filled(v['session']) && filled(v['path']) && isOptional(v['note'], isString);
     case 'sessions.list':
       return filled(v['session']);
     case 'session.open':

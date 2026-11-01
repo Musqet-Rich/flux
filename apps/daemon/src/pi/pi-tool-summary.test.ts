@@ -23,6 +23,9 @@ test('start summaries name the tool and its main argument, relative to the workt
   expect(piToolSummary.start('flux_notify', { level: 'done', summary: 'All green' }, cwd)).toBe(
     'notify done: All green',
   );
+  expect(piToolSummary.start('flux_file_send', { path: '/work/out/report.pdf' }, cwd)).toBe(
+    'offer file out/report.pdf',
+  );
   expect(piToolSummary.start('custom_tool', 'not an object', cwd)).toBe('custom_tool');
   expect(piToolSummary.start('bash', { command: 'x'.repeat(200) }, cwd)).toHaveLength(120);
 });

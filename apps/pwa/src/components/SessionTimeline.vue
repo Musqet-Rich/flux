@@ -4,6 +4,7 @@ import { computed, nextTick, ref, watch } from 'vue';
 
 import { useTailScroll } from '../composables/useTailScroll.ts';
 import AskCard from './AskCard.vue';
+import type { FetchFile } from './event-view.ts';
 import EventItem from './EventItem.vue';
 import { foldToolRuns } from './fold-tool-runs.ts';
 import Icon from './Icon.vue';
@@ -24,6 +25,8 @@ const props = defineProps<{
   earlier: number;
   quoteOf: (event: FluxEvent) => string | null | undefined;
   thumbs: Record<string, string>;
+  // Fetches a file the agent offered, for its card's Download and Share (ADR 0036).
+  fetchFile: FetchFile;
   // Main's chat: the live bubble shows and the pill follows streaming text; a subagent's has none.
   onMain: boolean;
   streaming: string;
@@ -148,6 +151,7 @@ defineExpose({ jump: tail.jump, reset: tail.reset, keep });
           :event="entry.row"
           :quote="quoteOf(entry.row) ?? null"
           :thumbs="thumbs"
+          :fetch-file="fetchFile"
           @task="$emit('task', $event)"
           @reply="$emit('reply', $event)"
           @jump="jumpTo"

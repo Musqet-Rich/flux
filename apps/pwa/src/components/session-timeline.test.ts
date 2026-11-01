@@ -31,6 +31,7 @@ const mountTimeline = (rows: FluxEvent[]): VueWrapper<InstanceType<typeof Sessio
       earlier: 0,
       quoteOf: () => null,
       thumbs: {},
+      fetchFile: () => Promise.resolve(new Blob([])),
       onMain: true,
       streaming: '',
       thinking: null,

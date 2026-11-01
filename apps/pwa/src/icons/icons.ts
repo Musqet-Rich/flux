@@ -15,6 +15,8 @@ import checkCircle from '@phosphor-icons/core/regular/check-circle.svg?path';
 import circleFill from '@phosphor-icons/core/fill/circle-fill.svg?path';
 import copy from '@phosphor-icons/core/regular/copy.svg?path';
 import dotsThree from '@phosphor-icons/core/regular/dots-three.svg?path';
+import downloadSimple from '@phosphor-icons/core/regular/download-simple.svg?path';
+import exportIcon from '@phosphor-icons/core/regular/export.svg?path';
 import file from '@phosphor-icons/core/regular/file.svg?path';
 import floppyDisk from '@phosphor-icons/core/regular/floppy-disk.svg?path';
 import gearSix from '@phosphor-icons/core/regular/gear-six.svg?path';
@@ -58,6 +60,7 @@ export const icons = {
   discard: arrowCounterClockwise,
   dot: circleFill,
   down: arrowDown,
+  download: downloadSimple,
   edit: pencilSimple,
   failed: xCircle,
   file,
@@ -80,6 +83,7 @@ export const icons = {
   save: floppyDisk,
   send: paperPlaneRight,
   settings: gearSix,
+  share: exportIcon,
   stop,
   succeeded: checkCircle,
   task: robot,

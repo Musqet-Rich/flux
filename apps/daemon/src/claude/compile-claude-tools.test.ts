@@ -36,6 +36,7 @@ test('deny never disallows the Flux tools (the floor)', () => {
       'flux_ask',
       'flux_notify',
       'flux_compact',
+      'flux_file_send',
       'flux_help',
       'mcp__flux__flux_ask',
       'mcp__flux',

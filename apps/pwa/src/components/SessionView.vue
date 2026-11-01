@@ -187,6 +187,7 @@ watch(
       :earlier="earlier"
       :quote-of="quoteOf"
       :thumbs="thumbs"
+      :fetch-file="store.fetchAttachment"
       :on-main="onMain"
       :streaming="streaming"
       :thinking="thinkingText"

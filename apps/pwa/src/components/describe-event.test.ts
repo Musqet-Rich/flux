@@ -164,3 +164,17 @@ test('lifecycle and interaction rows are one-line notes without an icon', () => 
     tone: null,
   });
 });
+
+// A file the agent offered (ADR 0036) is an `offered` row: the card carries the file, the note is
+// its text, and no note is an empty one.
+test('a file the agent offered is an offered row with its note as the text', () => {
+  const file = { id: 'f1', name: 'report.pdf', mime: 'application/pdf', size: 9, image: false };
+  expect(describeEvent(ev('file.offered', { attachment: file, note: 'Figures' }))).toEqual({
+    kind: 'offered',
+    text: 'Figures',
+    detail: undefined,
+    tone: null,
+    file,
+  });
+  expect(describeEvent(ev('file.offered', { attachment: file })).text).toBe('');
+});

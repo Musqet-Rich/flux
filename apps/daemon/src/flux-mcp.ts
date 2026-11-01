@@ -8,9 +8,10 @@ import { helpLookup } from './help/help-lookup.ts';
 import { manual } from './help/manual.ts';
 
 // The Flux MCP server (ADR 0008): a stdio JSON-RPC 2.0 server exposing flux_ask, flux_notify,
-// flux_compact and flux_help to the agent. flux_ask/flux_notify/flux_compact forward to the daemon
-// over the control socket; flux_help answers LOCALLY from the bundled manual (help/manual.ts) with
-// no round-trip. Spawned by the agent per session with FLUX_CONTROL_SOCKET and FLUX_SESSION in env.
+// flux_compact, flux_file_send (ADR 0036) and flux_help to the agent. All but flux_help forward to
+// the daemon over the control socket; flux_help answers LOCALLY from the bundled manual
+// (help/manual.ts) with no round-trip. Spawned by the agent per session with FLUX_CONTROL_SOCKET
+// and FLUX_SESSION in env.
 
 const { isString, isRecord, isArrayOf, isOneOf } = guards;
 
@@ -63,6 +64,25 @@ const tools = [
           description: 'Optional instruction passed to /compact, e.g. what to preserve.',
         },
       },
+    },
+  },
+  {
+    name: 'flux_file_send',
+    description:
+      'Offer the operator a file to download on their phone or laptop, from the chat. The file is copied at the call, so later edits do not change what they get. Use it for a deliverable they asked for (a report, an export, an image), not for every file you touch. Any regular file you can read, up to 50 MiB.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description: 'The file, absolute or relative to the working directory.',
+        },
+        note: {
+          type: 'string',
+          description: 'Optional one line shown with the file, e.g. what it is.',
+        },
+      },
+      required: ['path'],
     },
   },
   {
@@ -128,6 +148,15 @@ const control = (request: Record<string, unknown>): Promise<unknown> =>
     });
   });
 
+// What the agent reads back from flux_file_send: the stored name and size, so it can tell the
+// operator what to look for in the chat.
+const offered = (result: unknown): string => {
+  const file = isRecord(result) ? result['attachment'] : undefined;
+  if (!isRecord(file) || !isString(file['name'])) return 'Offered the file to the operator.';
+  const size = typeof file['size'] === 'number' ? `, ${String(file['size'])} bytes` : '';
+  return `Offered ${file['name']}${size} to the operator; it is in the chat to download.`;
+};
+
 const callTool = async (name: unknown, args: unknown): Promise<string> => {
   const input = isRecord(args) ? args : {};
   if (name === 'flux_ask' && isString(input['question'])) {
@@ -145,6 +174,12 @@ const callTool = async (name: unknown, args: unknown): Promise<string> => {
       isString(input['focus']) && input['focus'] !== '' ? { focus: input['focus'] } : {};
     await control({ type: 'compact', session, ...focus });
     return 'Compaction queued; it runs after this turn ends. This must be the last action in your turn.';
+  }
+  if (name === 'flux_file_send') {
+    const path = input['path'];
+    if (!isString(path) || path === '') throw new DaemonError('bad_params', 'path is required');
+    const note = isString(input['note']) ? { note: input['note'] } : {};
+    return offered(await control({ type: 'offer', session, path, ...note }));
   }
   // Answered locally from the bundled manual: no control-socket round-trip, no daemon needed.
   if (name === 'flux_help') {
