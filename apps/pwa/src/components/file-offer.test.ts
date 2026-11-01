@@ -172,3 +172,26 @@ test('a share sheet that needs another tap says so; a cancelled one is no error'
   expect(fetch.calls).toHaveLength(1);
   card.unmount();
 });
+
+// The blob URL is the app's own origin and the file is the agent's: a type a browser would run
+// is saved as an opaque download, should the browser open the URL rather than save it.
+test('a file a browser would run is saved as an opaque download; others keep their type', async () => {
+  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+  const made = vi.spyOn(URL, 'createObjectURL');
+  const fetch = controlled();
+  const card = mountCard(fetch.fetchFile);
+  await card.find('.download').trigger('click');
+  fetch.resolve(new Blob(['<script>x</script>'], { type: 'text/html' }));
+  await flushPromises();
+  const again = controlled();
+  const pdfCard = mountCard(again.fetchFile);
+  await pdfCard.find('.download').trigger('click');
+  again.resolve(new Blob(['%PDF'], { type: 'application/pdf' }));
+  await flushPromises();
+  expect(made.mock.calls.map(([blob]) => (blob as Blob).type)).toEqual([
+    'application/octet-stream',
+    'application/pdf',
+  ]);
+  card.unmount();
+  pdfCard.unmount();
+});

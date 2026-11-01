@@ -1,5 +1,5 @@
 import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test } from 'vitest';
 
@@ -16,7 +16,8 @@ import { openDatabase } from './open-database.ts';
 
 const day = 24 * 60 * 60 * 1000;
 
-const setup = async () => {
+// `refuse` stands in for a log that will not take the row (a full disk, say).
+const setup = async (refuse = false) => {
   const root = await mkdtemp(join(tmpdir(), 'flux-control-offer-'));
   const worktree = join(root, 'worktree');
   await mkdir(join(worktree, 'out'), { recursive: true });
@@ -36,8 +37,14 @@ const setup = async () => {
   const clock = { at: new Date('2026-11-01T10:00:00Z') };
   const attachments = createAttachmentStore({ db, dir, now: () => clock.at });
   const emitted: string[] = [];
+  const refusing = {
+    ...log,
+    append: () => {
+      throw new Error('disk full');
+    },
+  };
   const handle = createControlHandler({
-    log,
+    log: refuse ? refusing : log,
     sessions,
     asks: createAskRegistry(),
     attachments,
@@ -126,4 +133,22 @@ test('the sweep keeps an offered file; deleting the session removes it', async (
   expect(await readdir(join(dir, 's1'))).toHaveLength(1);
   await attachments.removeSession('s1');
   await expect(readdir(join(dir, 's1'))).rejects.toMatchObject({ code: 'ENOENT' });
+});
+
+test('a log that refuses the row takes the copy back out', async () => {
+  const { worktree, dir, emitted, handle } = await setup(true);
+  await writeFile(join(worktree, 'out', 'report.pdf'), 'figures');
+  await expect(handle({ type: 'offer', session: 's1', path: 'out/report.pdf' })).rejects.toThrow(
+    'disk full',
+  );
+  expect(await readdir(join(dir, 's1'))).toEqual([]);
+  expect(emitted).toEqual([]);
+});
+
+test('a leading ~/ is the home directory, as the agent’s shell reads it', async () => {
+  const { handle } = await setup();
+  const name = `flux-no-such-${crypto.randomUUID()}`;
+  await expect(handle({ type: 'offer', session: 's1', path: `~/${name}` })).rejects.toThrow(
+    `no file at ${join(homedir(), name)}`,
+  );
 });

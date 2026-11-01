@@ -174,7 +174,7 @@ export const describeEvent = (event: FluxEvent): EventView => {
   if (event.type === 'file.offered') {
     const { attachment } = event.payload;
     const text = event.payload.note ?? '';
-    return { kind: 'file', text, detail: undefined, tone: null, file: attachment };
+    return { kind: 'offered', text, detail: undefined, tone: null, file: attachment };
   }
   if (event.type === 'msg.assistant') {
     return { kind: 'assistant', text: event.payload.text, detail: undefined, tone: null };

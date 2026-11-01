@@ -226,11 +226,14 @@ test('read returns a digest of recent activity and audits manager.acted read', a
     type: 'tool.start',
     payload: { toolId: 't', name: 'Bash', input: {}, summary: 'Bash: ls' },
   });
+  const report = { id: 'a1', name: 'report.pdf', mime: 'application/pdf', size: 3, image: false };
+  log.append('s2', { type: 'file.offered', payload: { attachment: report } });
   const result = await handle({ type: 'session.read', session: 'mgr', target: 's2' });
   const digest = (result as { digest: string }).digest;
   expect(digest).toContain('user: do the thing');
   expect(digest).toContain('assistant: on it');
   expect(digest).toContain('tool: Bash: ls');
+  expect(digest).toContain('offered file: report.pdf');
   expect(emitted.find((e) => e.type === 'manager.acted')).toMatchObject({
     session: 's2',
     payload: { actor: 'mgr', action: 'read', target: 's2' },

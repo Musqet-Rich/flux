@@ -1,9 +1,9 @@
 import { connect } from 'node:net';
 
 // The Flux tools for pi (ADR 0016): pi has no MCP client, so flux_ask, flux_notify and
-// flux_file_send (ADR 0036) are a pi extension loaded with `--extension`. Each call goes to the daemon over the control socket
-// exactly as flux-mcp.ts does. Self-contained on purpose: pi loads this file through jiti from
-// the daemon's dist directory, outside any workspace resolution.
+// flux_file_send (ADR 0036) are a pi extension loaded with `--extension`. Each call goes to the
+// daemon over the control socket exactly as flux-mcp.ts does. Self-contained on purpose: pi loads
+// this file through jiti from the daemon's dist directory, outside any workspace resolution.
 
 interface ToolResult {
   content: { type: 'text'; text: string }[];

@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils';
 import { expect, test } from 'vitest';
 
 import EventItem from './EventItem.vue';
+import FileOffer from './FileOffer.vue';
 import MessageMenu from './MessageMenu.vue';
 
 const ev = (type: string, payload: unknown): FluxEvent => ({
@@ -304,7 +305,7 @@ test('an offered file is a download card, with the thumbnail of an image', () =>
       fetchFile: () => Promise.resolve(new Blob([])),
     },
   });
-  expect(card.find('.item').classes()).toContain('file');
+  expect(card.find('.item').classes()).toContain('offered');
   expect(card.find('.offer .name').text()).toBe('chart.png');
   expect(card.find('.offer .note').text()).toBe('The chart');
   expect(card.find('.offer .thumb').attributes('src')).toBe('blob:chart');
@@ -312,4 +313,25 @@ test('an offered file is a download card, with the thumbnail of an image', () =>
   const plain = mount(EventItem, { props: { event } });
   expect(plain.find('.offer').exists()).toBe(false);
   expect(plain.text()).toBe('File offered: chart.png');
+});
+
+// Rows are keyed by `seq`, which repeats across sessions: a card handed another file must be a
+// new card, not the old one holding the first file's bytes.
+test('an offered-file card is a new card when the row names another file', async () => {
+  const first = { id: 'f1', name: 'a.pdf', mime: 'application/pdf', size: 3, image: false };
+  const second = { ...first, id: 'f2', name: 'b.pdf' };
+  const fetched: string[] = [];
+  const fetchFile = (a: { id: string }) => {
+    fetched.push(a.id);
+    return new Promise<Blob>(() => {});
+  };
+  const item = mount(EventItem, {
+    props: { event: ev('file.offered', { attachment: first }), fetchFile },
+  });
+  const card = item.findComponent(FileOffer);
+  await item.find('.download').trigger('click');
+  await item.setProps({ event: ev('file.offered', { attachment: second }) });
+  expect(item.findComponent(FileOffer).vm).not.toBe(card.vm);
+  expect(item.find('.download').attributes('disabled')).toBeUndefined();
+  expect(fetched).toEqual(['f1']);
 });

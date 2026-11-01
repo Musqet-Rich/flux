@@ -1,6 +1,7 @@
-import type { Attachment } from '@flux/protocol';
+import type { Attachment, FluxEvent } from '@flux/protocol';
 import { attachment } from '@flux/protocol';
-import { resolve } from 'node:path';
+import { homedir } from 'node:os';
+import { join, resolve } from 'node:path';
 
 import type { AskRegistry } from './create-ask-registry.ts';
 import type { AttachmentStore } from './create-attachment-store.ts';
@@ -29,26 +30,33 @@ const defaultAskTimeoutMs = 30 * 60 * 1000;
 
 type OfferRequest = Extract<ControlRequest, { type: 'offer' }>;
 
-// The agent's path is resolved against the session's worktree, where its relative paths live.
+// The agent's path is resolved against the session's worktree, where its relative paths live; a
+// leading `~/` is the flux user's home, as the agent's own shell would read it.
+const sourcePath = (worktree: string, path: string): string =>
+  path === '~' || path.startsWith('~/') ? join(homedir(), path.slice(1)) : resolve(worktree, path);
+
 // The copy is taken first and the event logged after; a log that refuses the row takes the copy
-// back out, so no file sits on the box that no event names. The agent gets the shape the device
-// sees, so its tool result can say what it offered.
+// back out, so no file sits on the box that no event names. Only the append is guarded: once the
+// row is in the log the file must stay, whatever the broadcast does. The agent gets the shape the
+// device sees, so its tool result can say what it offered.
 const offer = async (
   options: ControlHandlerOptions,
   worktree: string,
   request: OfferRequest,
 ): Promise<{ attachment: Attachment }> => {
-  const record = await options.attachments.offer(request.session, resolve(worktree, request.path));
-  const { id, name, mime, size } = record;
+  const source = sourcePath(worktree, request.path);
+  const { id, name, mime, size } = await options.attachments.offer(request.session, source);
   const shown: Attachment = { id, name, mime, size, image: attachment.isImage(mime, size) };
   const note = request.note?.trim() ?? '';
+  const payload = { attachment: shown, ...(note === '' ? {} : { note }) };
+  let logged: FluxEvent;
   try {
-    const payload = { attachment: shown, ...(note === '' ? {} : { note }) };
-    options.emit(options.log.append(request.session, { type: 'file.offered', payload }));
+    logged = options.log.append(request.session, { type: 'file.offered', payload });
   } catch (error) {
     await options.attachments.remove(id);
     throw error;
   }
+  options.emit(logged);
   return { attachment: shown };
 };
 

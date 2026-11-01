@@ -2,7 +2,7 @@ import type { Attachment } from '@flux/protocol';
 
 import type { IconName } from '../icons/icons.ts';
 
-// Fetches a stored file whole (attach.read), reporting the fraction fetched; a `file` row's
+// Fetches a stored file whole (attach.read), reporting the fraction fetched; an `offered` row's
 // card calls it for Download and Share (the store's `fetchAttachment`).
 export type FetchFile = (a: Attachment, onProgress: (fraction: number) => void) => Promise<Blob>;
 
@@ -18,7 +18,7 @@ export interface EventView {
     | 'divider'
     | 'task'
     | 'report'
-    | 'file';
+    | 'offered';
   text: string;
   // The value behind the tap, stringified lazily; `undefined` means there is nothing to open.
   detail: unknown;
@@ -30,7 +30,7 @@ export interface EventView {
   replyTo?: number;
   // The files sent with a `user` row (ADR 0020); `thumbs` has the fetched images by id.
   attachments?: Attachment[];
-  // The file a `file` row offers for download (ADR 0036); its `text` is the agent's note.
+  // The file an `offered` row offers for download (ADR 0036); its `text` is the agent's note.
   file?: Attachment;
   // A signal row's mark, before its text.
   icon?: IconName;

@@ -20,8 +20,10 @@ import MessageMenu from './MessageMenu.vue';
 // Markdown like any reply. A message bubble carries a menu (MessageMenu) and, when it answers an
 // earlier message, that message's first line as a chip (`quote`, looked up by the parent) that
 // scrolls to it. A signal row (a task, a PR, a failed hook, a compaction) opens with its icon. A
-// `file` row is a file the agent offered (ADR 0036), drawn as a download card (FileOffer) when
-// the parent passes the fetch it needs, and as a plain note of its name otherwise.
+// `offered` row is a file the agent offered (ADR 0036), drawn as a download card (FileOffer) when
+// the parent passes the fetch it needs, and as a plain note of its name otherwise. The card is
+// keyed by the file: rows are keyed by `seq`, which is per session, so without it a card switched
+// to another session's row at the same `seq` would keep the first file's bytes.
 
 const props = withDefaults(
   defineProps<{
@@ -56,7 +58,7 @@ const toggle = (): void => {
   expanded.value = !expanded.value;
 };
 const isMessage = computed(() => view.value.kind === 'user' || view.value.kind === 'assistant');
-const offered = computed(() => (view.value.kind === 'file' ? (view.value.file ?? null) : null));
+const offered = computed(() => (view.value.kind === 'offered' ? (view.value.file ?? null) : null));
 const offeredThumb = computed(() =>
   offered.value === null ? null : (props.thumbs[offered.value.id] ?? null),
 );
@@ -94,6 +96,7 @@ const quoteLine = computed(
     </template>
     <FileOffer
       v-else-if="offered !== null && fetchFile !== null"
+      :key="offered.id"
       :file="offered"
       :note="view.text"
       :thumb="offeredThumb"
@@ -199,7 +202,7 @@ const quoteLine = computed(
 }
 
 /* A file the agent offered sits on the agent's side, as wide as a reply may be. */
-.file {
+.offered {
   align-self: flex-start;
   max-width: 85%;
 }

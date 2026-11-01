@@ -63,8 +63,13 @@ const load = async (): Promise<Blob> => {
   }
 };
 
+// Types a browser would run rather than save, were it to open the blob URL instead of
+// downloading it: the URL is the app's own origin, and the file is the agent's.
+const active = /html|xml|svg|javascript|ecmascript/iu;
+
 const save = (data: Blob): void => {
-  const url = URL.createObjectURL(data);
+  const type = active.test(data.type) ? 'application/octet-stream' : data.type;
+  const url = URL.createObjectURL(new Blob([data], { type }));
   const link = document.createElement('a');
   link.href = url;
   link.download = props.file.name;
@@ -83,12 +88,13 @@ const share = async (data: Blob): Promise<string | null> => {
     await navigator.share({ files: [asFile(data)], title: props.file.name });
     return null;
   } catch (failure) {
-    if (!(failure instanceof DOMException)) throw failure;
-    if (failure.name === 'AbortError') return null;
+    const name = failure instanceof DOMException ? failure.name : null;
+    if (name === 'AbortError') return null;
     // A fetch that took a while can outlast the tap's permission to open the sheet; the bytes
     // are kept now, so the next tap shares at once.
-    if (failure.name === 'NotAllowedError') return 'Tap Share again to open the share sheet.';
-    return `Could not share the file: ${failure.message}`;
+    if (name === 'NotAllowedError') return 'Tap Share again to open the share sheet.';
+    const why = failure instanceof Error ? failure.message : String(failure);
+    return `Could not share the file: ${why}`;
   }
 };
 
@@ -120,7 +126,7 @@ const retry = (): void => {
 <template>
   <section class="offer" aria-label="File from the agent">
     <div class="head">
-      <img v-if="thumb !== null" class="thumb" :src="thumb" :alt="file.name" />
+      <img v-if="thumb !== null" class="thumb" :src="thumb" alt="" />
       <span v-else class="icon"><Icon name="file" /></span>
       <span class="meta">
         <span class="name">{{ file.name }}</span>
