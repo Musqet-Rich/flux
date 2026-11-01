@@ -12,3 +12,13 @@ onlyBuiltDependencies: []
 
 strictPeerDependencies: true
 saveExact: true
+
+# vite-plus 1.x depends on `vite` as an alias of @voidzero-dev/vite-plus-core, versioned with
+# vite-plus (1.4.0), so its own copy of Vitest 5 sees a `vite` of 1.4.0 against a peer range of
+# ^6 || ^7 || ^8 and strictPeerDependencies refuses the install. This allows exactly that version on
+# exactly those two edges; every other peer stays strict, and the workspace's own Vitest still gets
+# vite 8 from the root. Move the version with vite-plus (docs/adr/0010-dependencies.md, vite-plus row).
+peerDependencyRules:
+  allowedVersions:
+    vitest>vite: 1.4.0
+    '@vitest/mocker>vite': 1.4.0
