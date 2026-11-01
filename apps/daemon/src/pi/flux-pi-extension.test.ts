@@ -59,9 +59,13 @@ const tools = (): Record<string, Tool> => {
   return registered;
 };
 
-test('registers flux_ask and flux_notify with JSON schemas pi can show the model', () => {
+test('registers the Flux tools with JSON schemas pi can show the model', () => {
   const registered = tools();
-  expect(Object.keys(registered)).toEqual(['flux_ask', 'flux_notify']);
+  expect(Object.keys(registered)).toEqual(['flux_ask', 'flux_notify', 'flux_file_send']);
+  expect(registered['flux_file_send']?.parameters).toMatchObject({
+    type: 'object',
+    required: ['path'],
+  });
   expect(registered['flux_ask']?.parameters).toMatchObject({
     type: 'object',
     required: ['question'],
@@ -94,6 +98,39 @@ test('flux_ask blocks on the daemon and returns the answer; flux_notify returns 
     { type: 'notify', session: 's1', summary: 'done', level: 'done' },
     { type: 'notify', session: 's1', summary: 'hm', level: 'info' },
   ]);
+});
+
+// flux_file_send (ADR 0036) sends an `offer` with the path as given and the note when there is
+// one, and tells the model the stored name; the daemon's refusal reaches it as a thrown error.
+test('flux_file_send offers the file over the control socket', async () => {
+  const offered = { id: 'a1', name: 'report.pdf', mime: 'application/pdf', size: 3, image: false };
+  process.env['FLUX_CONTROL_SOCKET'] = await listen(
+    () => `${JSON.stringify({ ok: true, result: { attachment: offered } })}\n`,
+  );
+  process.env['FLUX_SESSION'] = 's1';
+  const registered = tools();
+  const sent = await registered['flux_file_send']?.execute('t1', {
+    path: 'out/report.pdf',
+    note: 'Figures',
+  });
+  expect(sent).toEqual({
+    content: [
+      { type: 'text', text: 'Offered report.pdf to the operator; it is in the chat to download.' },
+    ],
+    details: {},
+  });
+  await registered['flux_file_send']?.execute('t2', { path: '/tmp/a.txt', note: 4 });
+  expect(seen).toEqual([
+    { type: 'offer', session: 's1', path: 'out/report.pdf', note: 'Figures' },
+    { type: 'offer', session: 's1', path: '/tmp/a.txt' },
+  ]);
+  await expect(registered['flux_file_send']?.execute('t3', {})).rejects.toThrow('path is required');
+  process.env['FLUX_CONTROL_SOCKET'] = await listen(
+    () => `${JSON.stringify({ ok: false, error: '/w/x is a directory; offer a single file' })}\n`,
+  );
+  await expect(tools()['flux_file_send']?.execute('t4', { path: 'x' })).rejects.toThrow(
+    'is a directory',
+  );
 });
 
 test('bad arguments and daemon failures are thrown, which pi reports to the model as errors', async () => {

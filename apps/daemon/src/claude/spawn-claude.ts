@@ -63,7 +63,9 @@ const baseArgs = [
 const fluxPrompt =
   'You are running unattended under Flux. The operator is on a phone. For any material decision ' +
   '(design choices, destructive actions, ambiguous requirements) call flux_ask instead of guessing; ' +
-  'call flux_notify with level "done" when the task is complete and "blocked" when you cannot proceed.';
+  'call flux_notify with level "done" when the task is complete and "blocked" when you cannot proceed. ' +
+  'When the operator asked for a deliverable they will want on their device, offer it with ' +
+  'flux_file_send; do not offer every file you touch.';
 
 // The Agent's role (ADR 0023 § 2) is appended after the Flux prompt, never in its place, so the
 // operator channel survives whatever the role says.

@@ -291,3 +291,25 @@ test('an agent.spec row renders as a note naming what runs, should it ever be li
   });
   expect(bare.text()).toBe('Running claude-fable-5');
 });
+
+// A `file.offered` row (ADR 0036) is a download card where the timeline passes the fetch, and a
+// plain note naming the file where it does not (a folded run, say).
+test('an offered file is a download card, with the thumbnail of an image', () => {
+  const file = { id: 'f1', name: 'chart.png', mime: 'image/png', size: 75, image: true };
+  const event = ev('file.offered', { attachment: file, note: 'The chart' });
+  const card = mount(EventItem, {
+    props: {
+      event,
+      thumbs: { f1: 'blob:chart' },
+      fetchFile: () => Promise.resolve(new Blob([])),
+    },
+  });
+  expect(card.find('.item').classes()).toContain('file');
+  expect(card.find('.offer .name').text()).toBe('chart.png');
+  expect(card.find('.offer .note').text()).toBe('The chart');
+  expect(card.find('.offer .thumb').attributes('src')).toBe('blob:chart');
+  expect(card.find('.offer .download').exists()).toBe(true);
+  const plain = mount(EventItem, { props: { event } });
+  expect(plain.find('.offer').exists()).toBe(false);
+  expect(plain.text()).toBe('File offered: chart.png');
+});

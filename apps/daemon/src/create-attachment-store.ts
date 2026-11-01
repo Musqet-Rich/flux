@@ -1,13 +1,15 @@
 import { attachment } from '@flux/protocol';
 import type { FileHandle } from 'node:fs/promises';
 import { open, rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import type { DatabaseSync, StatementSync } from 'node:sqlite';
 
 import type { Upload } from './attachment-upload.ts';
 import { attachmentUpload } from './attachment-upload.ts';
+import { copyOfferedFile } from './copy-offered-file.ts';
 import { DaemonError } from './daemon-error.ts';
 import { inside } from './inside.ts';
+import { mimeFromName } from './mime-from-name.ts';
 
 // Files the operator attaches to messages (ADR 0020, protocol.md § 7 `attach.*`). Rows live in
 // SQLite, bytes under `<dataDir>/attachments/<session>/<id>-<name>`, never in a worktree, so an
@@ -15,6 +17,9 @@ import { inside } from './inside.ts';
 // `begin`, an upload that never ended within 10 minutes and an attachment that was never
 // sent within 24 hours are deleted; a sent one stays until the session is deleted, which takes
 // the whole directory with it (a plain archive keeps it, so a reopened session shows it).
+// A file the agent offers (`flux_file_send`, ADR 0036) is the same kind of row, marked
+// `offered`: copied in whole at the call, complete from the start, and never swept, since its
+// `file.offered` event is what carries it, so it lives exactly as long as a sent one.
 
 export interface AttachmentRecord {
   id: string;
@@ -25,6 +30,8 @@ export interface AttachmentRecord {
   hash: string;
   complete: boolean;
   sentSeq: number | null;
+  // The agent offered it to the operator (ADR 0036) rather than the operator attaching it.
+  offered: boolean;
   createdAt: string;
   path: string;
 }
@@ -42,6 +49,9 @@ export interface AttachmentStore {
   end: (id: string, hash: string) => Promise<{ path: string; size: number }>;
   read: (id: string, offset: number, length: number) => Promise<AttachmentSlice>;
   remove: (id: string) => Promise<void>;
+  // Copies the file at `source` (absolute) in as an offered attachment of `session`; refuses a
+  // missing file, a directory, anything not a regular file and anything over the offer cap.
+  offer: (session: string, source: string) => Promise<AttachmentRecord>;
   // The complete attachments `ids` name, all belonging to `session`; `bad_params` otherwise.
   get: (session: string, ids: string[]) => AttachmentRecord[];
   markSent: (ids: string[], seq: number) => void;
@@ -78,6 +88,7 @@ const toRecord = (dir: string, row: Record<string, unknown>): AttachmentRecord =
   hash: String(row['hash']),
   complete: row['complete'] === 1,
   sentSeq: typeof row['sent_seq'] === 'number' ? row['sent_seq'] : null,
+  offered: row['offered'] === 1,
   createdAt: String(row['created_at']),
   path: join(dir, String(row['session']), `${String(row['id'])}-${String(row['name'])}`),
 });
@@ -106,6 +117,7 @@ const readSlice = async (
 
 interface Statements {
   insert: StatementSync;
+  insertOffered: StatementSync;
   byId: StatementSync;
   finish: StatementSync;
   sent: StatementSync;
@@ -119,13 +131,16 @@ const prepare = (db: DatabaseSync): Statements => ({
   insert: db.prepare(
     'INSERT INTO attachments (id, session, name, mime, size, hash, complete, sent_seq, created_at) VALUES (?, ?, ?, ?, ?, ?, 0, NULL, ?)',
   ),
+  insertOffered: db.prepare(
+    'INSERT INTO attachments (id, session, name, mime, size, hash, complete, sent_seq, offered, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, NULL, 1, ?)',
+  ),
   byId: db.prepare('SELECT * FROM attachments WHERE id = ?'),
   finish: db.prepare('UPDATE attachments SET complete = 1, hash = ? WHERE id = ?'),
   sent: db.prepare('UPDATE attachments SET sent_seq = ? WHERE id = ?'),
   del: db.prepare('DELETE FROM attachments WHERE id = ?'),
   delSession: db.prepare('DELETE FROM attachments WHERE session = ?'),
   stale: db.prepare(
-    'SELECT * FROM attachments WHERE (complete = 0 AND created_at < ?) OR (complete = 1 AND sent_seq IS NULL AND created_at < ?)',
+    'SELECT * FROM attachments WHERE (complete = 0 AND created_at < ?) OR (complete = 1 AND sent_seq IS NULL AND COALESCE(offered, 0) = 0 AND created_at < ?)',
   ),
   bySession: db.prepare('SELECT * FROM attachments WHERE session = ?'),
 });
@@ -204,6 +219,18 @@ const uploading = (s: Shared): Pick<AttachmentStore, 'begin' | 'chunk' | 'end'> 
   },
 });
 
+// The source's own name, made safe, names the copy; the row goes in only once the bytes are all
+// there, so a refused or failed copy leaves nothing behind.
+const offer = async (s: Shared, session: string, source: string): Promise<AttachmentRecord> => {
+  const id = crypto.randomUUID();
+  const safe = safeName(basename(source));
+  const path = inside(s.dir, join(session, `${id}-${safe}`));
+  const { size, hash } = await copyOfferedFile(source, path, attachment.limits.offerBytes);
+  const mime = mimeFromName(safe);
+  s.sql.insertOffered.run(id, session, safe, mime, size, hash, s.now().toISOString());
+  return s.record(id);
+};
+
 // Open uploads of the session close first, so the directory is not recreated under a closing
 // handle after it has gone.
 const removeSession = async (s: Shared, session: string): Promise<void> => {
@@ -226,6 +253,7 @@ export const createAttachmentStore = (options: AttachmentStoreOptions): Attachme
       return readSlice(r, offset, length);
     },
     remove: async (id) => s.drop(s.record(id)),
+    offer: (session, source) => offer(s, session, source),
     get: (session, ids) =>
       ids.map((id) => {
         const r = s.record(id);

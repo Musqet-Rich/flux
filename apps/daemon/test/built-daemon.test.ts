@@ -134,7 +134,7 @@ test('the build is flux, flux-mcp, flux-manager-mcp and the pi extension, resolv
   expect(flux).toContain('./flux-manager-mcp.mjs');
   expect(flux).toContain('./flux-pi-extension.mjs');
   // The extension is loaded by pi (jiti) from wherever dist lives: no workspace or relative
-  // imports may survive bundling, and its default export must register the two Flux tools.
+  // imports may survive bundling, and its default export must register the Flux tools.
   const extension = await readFile(join(outDir, 'flux-pi-extension.mjs'), 'utf8');
   expect(extension).not.toContain('@flux/');
   expect(extension).not.toMatch(/from\s+["']\.{1,2}\//u);
@@ -147,7 +147,7 @@ test('the build is flux, flux-mcp, flux-manager-mcp and the pi extension, resolv
       names.push(tool.name);
     },
   });
-  expect(names).toEqual(['flux_ask', 'flux_notify']);
+  expect(names).toEqual(['flux_ask', 'flux_notify', 'flux_file_send']);
 });
 
 test('flux daemon rejects an insecure FLUX_RELAY_URL', async () => {

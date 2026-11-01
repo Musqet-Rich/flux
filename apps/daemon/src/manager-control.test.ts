@@ -76,6 +76,11 @@ const setup = (agents: AgentSpec[] = []) => {
     log,
     sessions,
     asks: createAskRegistry(),
+    // No file is offered on these paths (flux_file_send has its own test with a real store).
+    attachments: {
+      offer: () => Promise.reject(new Error('unused')),
+      remove: () => Promise.resolve(),
+    },
     supervisor: fakeSupervisor(sends),
     emit: (e) => {
       emitted.push({ type: e.type, payload: e.payload, session: e.session });

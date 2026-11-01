@@ -110,7 +110,7 @@ export const manual: ManualSection[] = [
       'steer the agent but can never sever your operator channel. Tools has four modes: `all` (the full',
       'toolset), `allow` (only the listed tools), `deny` (everything except the listed tools) and',
       '`none` (no built-in tools). Whatever the mode, the Flux tools floor — flux_ask, flux_notify,',
-      'flux_compact and flux_help — is always available, so even a locked-down read-only Agent can',
+      'flux_compact, flux_file_send and flux_help — is always available, so even a locked-down Agent can',
       'still reach you and look things up. Fields you leave unset fall back to the box default.',
     ].join(' '),
   },
@@ -135,6 +135,18 @@ export const manual: ManualSection[] = [
       'Settings; each is a name and a SKILL.md body stored under the agent’s config directory. In the',
       'composer, typing a single `/name` shows a list of the box’s skills filtered by what you type;',
       'picking one inserts it. Skills live on the box, so they are shared across every session.',
+    ].join(' '),
+  },
+  {
+    title: 'Files from the agent',
+    keywords: ['download', 'file', 'files', 'send', 'share', 'save', 'deliverable', 'export'],
+    body: [
+      'An agent can offer you a file with the flux_file_send tool: a report, an export, an image you',
+      'asked for. It appears in the chat as a card with the name, size and the agent’s note; Download',
+      'saves it to your device, and on a phone that can share files a Share button opens the share',
+      'sheet (Save to Files, AirDrop). The box copies the file when the agent offers it, so later edits',
+      'do not change what you get, and keeps it with the session’s attachments until the session is',
+      'deleted. Up to 50 MiB per file.',
     ].join(' '),
   },
   {

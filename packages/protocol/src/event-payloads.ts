@@ -100,6 +100,10 @@ export interface EventPayloads {
   ask: { askId: string; question: string; options?: string[]; timeoutAt: string };
   'ask.answered': { askId: string; answer: string; by: 'device' | 'timeout' | 'aborted' };
   notify: { level: 'info' | 'done' | 'blocked'; summary: string };
+  // The agent offered the operator a file to download (`flux_file_send`, ADR 0036): a copy taken
+  // at the call, stored with the session's attachments and read back with `attach.read`; `note`
+  // is the agent's line about it, when it gave one.
+  'file.offered': { attachment: Attachment; note?: string };
   'files.changed': { files: ChangedFile[] };
   'comment.added': { commentId: string; ref: CodeRef; text: string };
   'comment.removed': { commentId: string };
@@ -233,6 +237,8 @@ export const eventPayloads: PayloadGuards = {
     isOneOf(v['by'], ['device', 'timeout', 'aborted']),
   notify: (v): v is EventPayloads['notify'] =>
     isRecord(v) && isOneOf(v['level'], ['info', 'done', 'blocked']) && isString(v['summary']),
+  'file.offered': (v): v is EventPayloads['file.offered'] =>
+    isRecord(v) && attachment.is(v['attachment']) && isOptional(v['note'], isString),
   'files.changed': (v): v is EventPayloads['files.changed'] =>
     isRecord(v) && isArrayOf(v['files'], isChangedFile),
   'comment.added': (v): v is EventPayloads['comment.added'] =>

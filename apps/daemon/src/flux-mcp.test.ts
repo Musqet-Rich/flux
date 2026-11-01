@@ -16,6 +16,7 @@ const binary = fileURLToPath(new URL('./flux-mcp.ts', import.meta.url));
 let socketPath: string;
 let control: ControlSocket;
 let requests: ControlRequest[];
+const offered = { id: 'a1', name: 'report.pdf', mime: 'application/pdf', size: 2048, image: false };
 
 beforeEach(async () => {
   socketPath = join(await mkdtemp(join(tmpdir(), 'flux-mcp-')), 'control.sock');
@@ -25,6 +26,7 @@ beforeEach(async () => {
     handle: (request) => {
       requests.push(request);
       if (request.type === 'ask') return Promise.resolve({ answer: 'ship it', by: 'device' });
+      if (request.type === 'offer') return Promise.resolve({ attachment: offered });
       return Promise.resolve({});
     },
   });
@@ -78,7 +80,7 @@ test('initializes, lists the flux tools, and forwards ask/notify/compact to the 
   server.notify('notifications/initialized');
   const list = await server.call('tools/list');
   const tools = (list['result'] as { tools: { name: string }[] }).tools.map((t) => t.name);
-  expect(tools).toEqual(['flux_ask', 'flux_notify', 'flux_compact', 'flux_help']);
+  expect(tools).toEqual(['flux_ask', 'flux_notify', 'flux_compact', 'flux_file_send', 'flux_help']);
   const asked = await server.call('tools/call', {
     name: 'flux_ask',
     arguments: { question: 'deploy?', options: ['yes', 'no'] },
@@ -113,6 +115,36 @@ test('initializes, lists the flux tools, and forwards ask/notify/compact to the 
   server.close();
 });
 
+// flux_file_send (ADR 0036) forwards the path as given (the daemon resolves it against the
+// worktree) and the note when there is one; the agent reads back what it offered. A missing
+// path is the tool's own error, with no control request.
+test('flux_file_send forwards an offer and reports the stored name and size', async () => {
+  const server = start();
+  const sent = await server.call('tools/call', {
+    name: 'flux_file_send',
+    arguments: { path: 'out/report.pdf', note: 'The quarterly figures' },
+  });
+  expect(sent['result']).toEqual({
+    content: [
+      {
+        type: 'text',
+        text: 'Offered report.pdf, 2048 bytes to the operator; it is in the chat to download.',
+      },
+    ],
+  });
+  await server.call('tools/call', { name: 'flux_file_send', arguments: { path: '/tmp/a.txt' } });
+  const bare = await server.call('tools/call', { name: 'flux_file_send', arguments: {} });
+  expect(bare['result']).toEqual({
+    content: [{ type: 'text', text: 'path is required' }],
+    isError: true,
+  });
+  expect(requests).toEqual([
+    { type: 'offer', session: 's1', path: 'out/report.pdf', note: 'The quarterly figures' },
+    { type: 'offer', session: 's1', path: '/tmp/a.txt' },
+  ]);
+  server.close();
+});
+
 test('flux_help answers locally from the bundled manual and makes no control request', async () => {
   const server = start();
   const helped = await server.call('tools/call', {
@@ -138,7 +170,7 @@ test('exposes no command-runner tool to the agent (ADR 0026 § 1)', async () => 
   const server = start();
   const list = await server.call('tools/list');
   const names = (list['result'] as { tools: { name: string }[] }).tools.map((t) => t.name);
-  expect(names).toEqual(['flux_ask', 'flux_notify', 'flux_compact', 'flux_help']);
+  expect(names).toEqual(['flux_ask', 'flux_notify', 'flux_compact', 'flux_file_send', 'flux_help']);
   expect(names.some((name) => /shell|command|exec|\brun\b|terminal/iu.test(name))).toBe(false);
   const asked = await server.call('tools/call', {
     name: 'shell.run',

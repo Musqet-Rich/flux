@@ -1,6 +1,6 @@
 # 0008: Flux-owned MCP tools for ask, notify and compact
 
-Status: accepted, 2026-08-28. Extended 2026-08-30 with `flux_compact` (agent self-compaction). Extended 2026-08-31 with `flux_help` (a bundled manual answered locally; a `flux help` CLI and a seeded Help Agent share the same lookup).
+Status: accepted, 2026-08-28. Extended 2026-08-30 with `flux_compact` (agent self-compaction). Extended 2026-08-31 with `flux_help` (a bundled manual answered locally; a `flux help` CLI and a seeded Help Agent share the same lookup). Extended 2026-11-01 with `flux_file_send` (the agent offers the operator a file to download; ADR 0036).
 
 ## Context
 

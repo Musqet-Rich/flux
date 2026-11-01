@@ -4,7 +4,7 @@ import { fluxEvent } from '@flux/protocol';
 import type { EventView } from './event-view.ts';
 
 // What one timeline event looks like (EventItem.vue draws it): every event type becomes one of
-// the nine `kind`s of EventView, with its one line of text, what a tap opens, its tone, and for
+// the ten `kind`s of EventView, with its one line of text, what a tap opens, its tone, and for
 // Claude Code's own signals (a task, a PR, a failed hook, a compaction) the icon that marks the
 // row (ADR 0029). Pure, so the mapping is testable without mounting the component. Chains of
 // `if` rather than a switch on `type`: the type-aware exhaustiveness rule wants every one of the
@@ -169,6 +169,12 @@ export const describeEvent = (event: FluxEvent): EventView => {
       ...(replyTo === undefined ? {} : { replyTo }),
       ...(attachments === undefined ? {} : { attachments }),
     };
+  }
+  // A file the agent offered (ADR 0036): a download card, its note as the text.
+  if (event.type === 'file.offered') {
+    const { attachment } = event.payload;
+    const text = event.payload.note ?? '';
+    return { kind: 'file', text, detail: undefined, tone: null, file: attachment };
   }
   if (event.type === 'msg.assistant') {
     return { kind: 'assistant', text: event.payload.text, detail: undefined, tone: null };
