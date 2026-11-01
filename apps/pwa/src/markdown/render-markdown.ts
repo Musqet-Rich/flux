@@ -2,6 +2,7 @@ import type { VNode, VNodeChild } from 'vue';
 import { h } from 'vue';
 
 import CodeBlock from '../components/CodeBlock.vue';
+import InlineCode from '../components/InlineCode.vue';
 import type { InlineNode } from './inline-markdown.ts';
 import { inlineMarkdown } from './inline-markdown.ts';
 import type {
@@ -18,23 +19,25 @@ import { tokeniseMarkdown } from './tokenise-markdown.ts';
 // anywhere, so text from the agent can only ever become text nodes. Links open in a new tab
 // with `noopener noreferrer`; only `http:`/`https:` URLs survive the inline pass.
 
-const inlineNode = (node: InlineNode): VNodeChild => {
+// Inline code copies on a tap (InlineCode.vue), except inside a link, where the tap is the
+// link's: a span that both copied and opened a tab would do neither reliably.
+const inlineNode = (node: InlineNode, inLink = false): VNodeChild => {
   switch (node.kind) {
     case 'text':
       return node.text;
     case 'code':
-      return h('code', node.text);
+      return inLink ? h('code', node.text) : h(InlineCode, { text: node.text });
     case 'strong':
     case 'em':
       return h(
         node.kind,
-        node.children.map((child) => inlineNode(child)),
+        node.children.map((child) => inlineNode(child, inLink)),
       );
     case 'link':
       return h(
         'a',
         { href: node.href, rel: 'noopener noreferrer', target: '_blank' },
-        node.children.map((child) => inlineNode(child)),
+        node.children.map((child) => inlineNode(child, true)),
       );
   }
 };
@@ -49,7 +52,7 @@ const lines = (texts: string[]): VNodeChild[] =>
 const listItem = (item: MarkdownListItem): VNode =>
   h('li', item.nested === null ? lines(item.lines) : [...lines(item.lines), block(item.nested)]);
 
-// The one block that is a component rather than a bare element: the Copy button keeps state.
+// A block that is a component rather than a bare element: the Copy button keeps state.
 const code = (node: MarkdownCode): VNode =>
   h(CodeBlock, { text: node.text, lang: node.lang, closed: node.closed });
 
