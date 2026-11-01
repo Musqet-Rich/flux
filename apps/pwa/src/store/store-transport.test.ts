@@ -4,8 +4,8 @@ import { expect, test } from 'vitest';
 import { createFakeRelay } from '../../test/fake-relay.ts';
 import { storeOptions } from '../../test/store-options.ts';
 import { createMemoryStorage } from '../client/create-memory-storage.ts';
-import { pairedBox } from '../client/paired-box.ts';
 import { createStore } from './create-store.ts';
+import { pairings } from './pairings.ts';
 
 // The store's side of protocol.md § 2: a plaintext relay is only the developer's own machine.
 // A pairing link with any other http:// origin is refused before a socket opens, and a stored
@@ -45,9 +45,13 @@ test('a stored box behind a plaintext relay lands on the pair screen', async () 
   const first = store();
   await first.pair('https://relay.example', link());
   first.stop();
-  const stored = await storage.get(pairedBox.storageKey);
-  const record = { ...(stored as Record<string, unknown>), relayUrl: 'http://relay.example' };
-  await storage.set(pairedBox.storageKey, record);
+  await pairings.update(storage, (current) => ({
+    ...current,
+    entries: current.entries.map((e) => ({
+      ...e,
+      box: { ...e.box, relayUrl: 'http://relay.example' },
+    })),
+  }));
   const second = store();
   await second.boot();
   expect(second.state.phase).toBe('unpaired');

@@ -1,4 +1,4 @@
-import type { Attachment, FluxEvent } from '@flux/protocol';
+import type { Attachment, FluxEvent, RpcMethods } from '@flux/protocol';
 import { attachment, fluxEvent } from '@flux/protocol';
 
 import { base64 } from '../client/base64.ts';
@@ -39,9 +39,21 @@ const composer = (i: StoreInternals, session: string): ComposerDraft => {
   return i.state.composers[session] ?? { text: '', attachments: [] };
 };
 
+// A call on the connection an upload started on (ADR 0037): once another daemon is open, the
+// upload's ids mean nothing there, so its remaining calls fail rather than reach that daemon.
+const boundCall = <M extends keyof RpcMethods>(
+  i: StoreInternals,
+  method: M,
+  params: RpcMethods[M]['params'],
+  link: object | null = i.link,
+): Promise<RpcMethods[M]['result']> =>
+  i.link === link
+    ? boxLink.call(i, method, params)
+    : Promise.reject(new ClientError('offline', 'Another daemon was opened.'));
+
 // Best effort: the box sweeps what this misses (create-attachment-store.ts).
-const discard = (i: StoreInternals, id: string): void => {
-  void boxLink.call(i, 'attach.delete', { attachmentId: id }).catch(() => null);
+const discard = (i: StoreInternals, id: string, link: object | null = i.link): void => {
+  void boundCall(i, 'attach.delete', { attachmentId: id }, link).catch(() => null);
 };
 
 const run = async (i: StoreInternals, session: string, entry: PendingAttachment): Promise<void> => {
@@ -51,9 +63,10 @@ const run = async (i: StoreInternals, session: string, entry: PendingAttachment)
   entry.progress = 0;
   entry.error = null;
   entry.id = null;
+  const link = i.link;
   try {
     entry.id = await uploadAttachment({
-      call: (method, params) => boxLink.call(i, method, params),
+      call: (method, params) => boundCall(i, method, params, link),
       session,
       file,
       onBegun: (id) => {
@@ -65,10 +78,10 @@ const run = async (i: StoreInternals, session: string, entry: PendingAttachment)
       cancelled: () => !i.files.has(entry.key),
     });
     // Removed while `attach.end` was in flight: the box has a file nobody will send.
-    if (!i.files.has(entry.key)) discard(i, entry.id);
+    if (!i.files.has(entry.key)) discard(i, entry.id, link);
     entry.status = 'ready';
   } catch (error) {
-    if (entry.id !== null) discard(i, entry.id);
+    if (entry.id !== null) discard(i, entry.id, link);
     entry.id = null;
     entry.status = 'failed';
     entry.error = error instanceof Error ? error.message : String(error);

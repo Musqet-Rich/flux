@@ -9,12 +9,18 @@ import Icon from './Icon.vue';
 
 // The connect affordance in the editorial-brutalist look: scan the QR that `flux pair` prints,
 // or paste the link it encodes. Standalone it heads its own screen (`h1`); the homepage embeds
-// it as the `#pair` section (`h2`). The uppercase button labels are CSS only — the DOM text and
-// the input's label stay in their original casing so the e2e selectors keep matching.
+// it as the `#pair` section (`h2`), and the "Pair another daemon" dialog embeds it as `another`
+// (ADR 0037), one column and its own words. The uppercase button labels are CSS only: the DOM
+// text and the input's label stay in their original casing so the e2e selectors keep matching.
 
 const props = withDefaults(
-  defineProps<{ phase: StorePhase; error: string | null; headingTag?: 'h1' | 'h2' }>(),
-  { headingTag: 'h1' },
+  defineProps<{
+    phase: StorePhase;
+    error: string | null;
+    headingTag?: 'h1' | 'h2';
+    another?: boolean;
+  }>(),
+  { headingTag: 'h1', another: false },
 );
 const emit = defineEmits<{ pair: [relayUrl: string, fragment: string] }>();
 
@@ -58,14 +64,21 @@ const message = computed(() => {
 </script>
 
 <template>
-  <section class="pair">
+  <section class="pair" :class="{ another }">
     <div class="lede">
       <component :is="props.headingTag" class="title">
         <template v-if="status !== null">{{ status }}</template>
+        <template v-else-if="another">Pair <span class="accent">another daemon</span></template>
         <template v-else>Pair with <span class="accent">your box</span></template>
       </component>
-      <p class="hint">Run <code>flux pair</code> on the box and scan the QR code it prints.</p>
-      <p class="trust">NO ACCOUNTS · NO THIRD PARTIES · E2E ENCRYPTED</p>
+      <p v-if="another" class="hint">
+        Run <code>flux pair</code> on the daemon's machine and scan the QR code it prints. The
+        daemons already paired stay paired.
+      </p>
+      <p v-else class="hint">
+        Run <code>flux pair</code> on the box and scan the QR code it prints.
+      </p>
+      <p v-if="!another" class="trust">NO ACCOUNTS · NO THIRD PARTIES · E2E ENCRYPTED</p>
     </div>
 
     <div class="card">
@@ -256,6 +269,25 @@ const message = computed(() => {
   font-size: 12px;
   color: var(--danger);
   margin: 0;
+}
+
+/* In the dialog: one column, the dialog's own padding. */
+.pair.another {
+  grid-template-columns: 1fr;
+  gap: 20px;
+  padding: 0;
+}
+
+.another .title {
+  font-size: 1.6rem;
+}
+
+.another .hint {
+  font-size: 15px;
+}
+
+.another .card {
+  padding: 20px;
 }
 
 @media (max-width: 720px) {

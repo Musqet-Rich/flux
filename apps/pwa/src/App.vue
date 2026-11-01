@@ -4,13 +4,16 @@ import { computed, onMounted } from 'vue';
 
 import Home from './components/Home.vue';
 import Shell from './components/Shell.vue';
+import { notificationOpens } from './push/notification-opens.ts';
 import { browserHistory } from './router/browser-history.ts';
 import { createRouter } from './router/create-router.ts';
 import { appStore } from './store/app-store.ts';
 
-// Root: boots the store (or pairs from a link), then shows the homepage or the app shell.
+// Root: boots the store (or pairs from a link), then shows the homepage or the app shell. A
+// notification's daemon (ADR 0037) is read from the address before the router drops the query.
 
 const store = appStore;
+const wanted = notificationOpens.fromQuery(location.search);
 const router = createRouter(browserHistory);
 const paired = computed(() => store.state.phase === 'paired');
 const error = computed(() => store.state.error?.message ?? null);
@@ -23,10 +26,20 @@ const pairFromFragment = async (fragment: string): Promise<void> => {
   router.replace({ name: 'sessions' });
 };
 
+// A tap on another daemon's notification while the app is open: that daemon opens (Shell goes
+// to its sessions on the switch), then the session the notice was about.
+const openFromNotification = async (daemon: string, session: string | null): Promise<void> => {
+  if (!(await store.switchDaemon(daemon)) || session === null) return;
+  router.go({ name: 'session', session });
+};
+
 onMounted(() => {
   const fragment = location.hash;
-  if (pairing.parse(fragment) === null) void store.boot();
+  if (pairing.parse(fragment) === null) void store.boot(wanted);
   else void pairFromFragment(fragment);
+  notificationOpens.listen((open) => {
+    void openFromNotification(open.daemon, open.session);
+  });
 });
 </script>
 

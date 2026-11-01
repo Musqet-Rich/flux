@@ -86,13 +86,14 @@ const remove = async (
   session: string,
   options: DeleteOptions,
 ): Promise<DeleteOutcome> => {
+  const link = i.link;
   try {
     await boxLink.call(i, 'sessions.archive', { session, ...options });
   } catch (error) {
     if (error instanceof ClientError && error.code === 'dirty') {
       return { ok: false, dirty: error.message };
     }
-    boxLink.reportError(i, error);
+    boxLink.reportFor(i, link, error);
     return { ok: false, dirty: null };
   }
   boxLink.clearActionError(i);

@@ -7,8 +7,9 @@ import type { StoreInternals } from './store-state.ts';
 
 // The device's copy of each opened session's log (architecture.md § PWA). The log itself is a
 // plain closure (create-session-log.ts) that only ever grows, so publishing appends the new
-// tail to the reactive view and storage holds the log in fixed-size chunks, `log:<session>:<n>`,
-// of which only the chunks the tail touches are rewritten.
+// tail to the reactive view and storage holds the log in fixed-size chunks, `<cache><session>:<n>`,
+// of which only the chunks the tail touches are rewritten. `<cache>` is the open daemon's prefix
+// (pairings.ts, ADR 0037): `log:` for the first, a namespace of its own for each other daemon.
 //
 // The view's array is shallow: the screen wants to know when the log grows, never when an
 // event changes, since none ever does, and a day's session holds a hundred thousand events
@@ -22,7 +23,10 @@ const chunkSize = 256;
 const writeDelayMs = 500;
 const pushSize = 1024;
 
-const key = (session: string, chunk: number): string => `log:${session}:${chunk}`;
+const key = (session: string, chunk: number, cache = 'log:'): string =>
+  `${cache}${session}:${chunk}`;
+
+const cacheOf = (i: StoreInternals): string => i.pairing?.cache ?? 'log:';
 
 const defaultSchedule = (fn: () => void, ms: number): (() => void) => {
   const timer = setTimeout(fn, ms);
@@ -31,20 +35,21 @@ const defaultSchedule = (fn: () => void, ms: number): (() => void) => {
   };
 };
 
-const writeChunks = (i: StoreInternals, log: SessionLog, from: number): void => {
+const writeChunks = (i: StoreInternals, log: SessionLog, from: number, cache: string): void => {
   const events = log.events();
   const first = Math.floor(from / chunkSize);
   const last = Math.floor((events.length - 1) / chunkSize);
   for (let chunk = first; chunk <= last; chunk += 1) {
     const slice = events.slice(chunk * chunkSize, (chunk + 1) * chunkSize);
-    void i.options.storage.set(key(log.session, chunk), slice).catch(() => {
+    void i.options.storage.set(key(log.session, chunk, cache), slice).catch(() => {
       // A failed cache write costs a re-sync next boot, nothing more.
     });
   }
 };
 
 // Queues a write of the log from `from`; one already waiting takes the earlier start and
-// keeps its time, so a log that never pauses still writes once a delay.
+// keeps its time, so a log that never pauses still writes once a delay. The prefix is taken now,
+// so a write can only ever land in the cache of the daemon whose log it is.
 const queueWrite = (i: StoreInternals, log: SessionLog, from: number): void => {
   const waiting = i.cacheWrites.get(log.session);
   if (waiting !== undefined) {
@@ -52,11 +57,13 @@ const queueWrite = (i: StoreInternals, log: SessionLog, from: number): void => {
     return;
   }
   const schedule = i.options.schedule ?? defaultSchedule;
+  const cache = cacheOf(i);
   const entry = {
     from,
+    cache,
     cancel: schedule(() => {
       i.cacheWrites.delete(log.session);
-      writeChunks(i, log, entry.from);
+      writeChunks(i, log, entry.from, cache);
     }, writeDelayMs),
   };
   i.cacheWrites.set(log.session, entry);
@@ -73,7 +80,7 @@ const flushWrites = (i: StoreInternals): void => {
   for (const [session, waiting] of i.cacheWrites) {
     waiting.cancel();
     const log = i.logs.get(session);
-    if (log !== undefined) writeChunks(i, log, waiting.from);
+    if (log !== undefined) writeChunks(i, log, waiting.from, waiting.cache);
   }
   i.cacheWrites.clear();
 };
@@ -109,11 +116,16 @@ const publish = (i: StoreInternals, log: SessionLog): void => {
 
 // Chunks are read in order until one is missing; whatever is cached is validated on the way
 // out, and a corrupt chunk ends the log there so seq stays gapless.
-const load = async (i: StoreInternals, session: string, chunk = 0): Promise<FluxEvent[]> => {
-  const cached = await i.options.storage.get(key(session, chunk)).catch(() => null);
+const load = async (
+  i: StoreInternals,
+  session: string,
+  chunk = 0,
+  cache = cacheOf(i),
+): Promise<FluxEvent[]> => {
+  const cached = await i.options.storage.get(key(session, chunk, cache)).catch(() => null);
   if (!guards.isArrayOf(cached, fluxEvent.is) || cached.length === 0) return [];
   if (cached.length < chunkSize) return cached;
-  return [...cached, ...(await load(i, session, chunk + 1))];
+  return [...cached, ...(await load(i, session, chunk + 1, cache))];
 };
 
 export const logCache: {

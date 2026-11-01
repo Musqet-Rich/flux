@@ -33,7 +33,14 @@ export const createIndexedDbStorage = (): Storage => {
     const store = (await db).transaction(storeName, mode).objectStore(storeName);
     return request(op(store));
   };
+  const locks = 'locks' in navigator ? navigator.locks : null;
   return {
+    ...(locks === null
+      ? {}
+      : {
+          exclusive: async <T>(name: string, task: () => Promise<T>): Promise<T> =>
+            locks.request(name, task),
+        }),
     get: (key) => run('readonly', (store) => store.get(key)),
     set: async (key, value) => {
       await run('readwrite', (store) => store.put(value, key));

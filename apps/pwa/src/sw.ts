@@ -3,6 +3,12 @@
 // is type-checked and linted like the rest of the app. The daemon sends { session, type,
 // summary? } and nothing else. No fetch caching at P1: without the box there is nothing to show.
 //
+// The same script runs as the root worker, which serves the app's pages, and as each paired
+// daemon's own worker under `/push/<daemon>/` (ADR 0037, push-support.ts), where that daemon's
+// push subscription lives. The scope is how a worker knows whose push it is showing, so a tap
+// opens the session on the right daemon: an open window is told to switch to it (App.vue), and
+// a new one is opened at the session with the daemon in its query, for boot to open first.
+//
 // The DOM lib has no worker-scope types, so the slice of ServiceWorkerGlobalScope used here is
 // described structurally and `globalThis` is checked against it once.
 
@@ -23,10 +29,14 @@ interface NotificationClickEvent extends Event {
 interface WindowClient {
   focus: () => Promise<unknown>;
   navigate: (url: string) => Promise<unknown>;
+  postMessage: (message: unknown) => void;
 }
 
-interface WorkerScope {
-  registration: { showNotification: (title: string, options: object) => Promise<void> };
+export interface WorkerScope {
+  registration: {
+    scope: string;
+    showNotification: (title: string, options: object) => Promise<void>;
+  };
   clients: {
     matchAll: (options: object) => Promise<WindowClient[]>;
     openWindow: (url: string) => Promise<unknown>;
@@ -59,28 +69,55 @@ const parse = (event: PushEvent): Record<string, unknown> => {
 
 const text = (v: unknown): string | null => (typeof v === 'string' ? v : null);
 
+// The daemon whose worker this is, from its scope; null for the root worker.
+const daemonOf = (scopeUrl: string): string | null => {
+  const match = /^\/push\/([^/]+)\/$/u.exec(new URL(scopeUrl).pathname);
+  const daemon = match?.[1];
+  return daemon === undefined ? null : decodeURIComponent(daemon);
+};
+
+// The root worker's pushes are the carried-over daemon's, from before it had a worker of its own;
+// `root` names it to boot (daemon-state.ts `pick`), whichever daemon was open last.
+const urlFor = (session: string | null, daemon: string | null): string => {
+  const path = session === null ? '/' : `/s/${encodeURIComponent(session)}`;
+  return `${path}?${new URLSearchParams({ daemon: daemon ?? 'root' }).toString()}`;
+};
+
 const install = (scope: WorkerScope): void => {
+  const daemon = daemonOf(scope.registration.scope);
+
   scope.addEventListener('push', (event) => {
     const data = parse(event);
     const session = text(data['session']);
     const title = titles[text(data['type']) ?? ''] ?? 'Flux';
     const body = text(data['summary']) ?? '';
+    // Two daemons may each have a session of the same id; the tag keeps their notices apart.
+    const tag = session ?? 'flux';
     event.waitUntil(
       scope.registration.showNotification(title, {
         body,
-        tag: session ?? 'flux',
+        tag: daemon === null ? tag : `${daemon}:${tag}`,
         data: { session },
       }),
     );
   });
 
-  const open = async (url: string): Promise<void> => {
+  // An open window is told which daemon and session to open: a daemon's worker controls no
+  // page, so it cannot navigate one, and the app opens it without a reload. The root worker
+  // navigates its window as before.
+  const open = async (session: string | null): Promise<void> => {
+    const url = urlFor(session, daemon);
     const [existing] = await scope.clients.matchAll({ type: 'window', includeUncontrolled: true });
     if (existing === undefined) {
       await scope.clients.openWindow(url);
       return;
     }
     await existing.focus();
+    if (daemon !== null) {
+      // oxlint-disable-next-line unicorn/require-post-message-target-origin -- a worker's Client.postMessage has no target origin: it only ever reaches that same-origin window
+      existing.postMessage({ type: 'flux.open', daemon, session });
+      return;
+    }
     // navigate() is refused for a window the worker does not control (e.g. a cross-origin
     // page in the same tab group); a fresh window is the fallback.
     await existing.navigate(url).catch(() => scope.clients.openWindow(url));
@@ -89,10 +126,12 @@ const install = (scope: WorkerScope): void => {
   scope.addEventListener('notificationclick', (event) => {
     event.notification.close();
     const data: unknown = event.notification.data;
-    const session = isRecord(data) ? text(data['session']) : null;
-    event.waitUntil(open(session === null ? '/' : `/s/${encodeURIComponent(session)}`));
+    event.waitUntil(open(isRecord(data) ? text(data['session']) : null));
   });
 };
 
 const scope: unknown = globalThis;
 if (isWorkerScope(scope)) install(scope);
+
+// What a test drives with a fake scope; the worker itself only ever installs on its own.
+export const sw: { install: typeof install } = { install };

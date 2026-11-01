@@ -9,7 +9,10 @@ import type { StoreInternals } from './store-state.ts';
 const open = async (i: StoreInternals, session: string): Promise<void> => {
   const existing = i.logs.get(session);
   if (existing !== undefined) return boxLink.syncLog(i, existing);
+  const pairing = i.pairing;
   const log = createSessionLog(session, await logCache.load(i, session));
+  // Another daemon opened while the cache was read (ADR 0037): this log is not its to show.
+  if (i.pairing !== pairing) return;
   // Two views can open the same session before the cache read settles; the first one wins.
   const raced = i.logs.get(session);
   if (raced !== undefined) return boxLink.syncLog(i, raced);

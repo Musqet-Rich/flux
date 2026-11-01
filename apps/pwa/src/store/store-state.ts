@@ -19,6 +19,7 @@ import type { SessionLog } from '../client/create-session-log.ts';
 import type { SocketFactory } from '../client/socket.ts';
 import type { SyncSession } from '../client/sync-session.ts';
 import type { SoundName } from '../sound/notification-sounds.ts';
+import type { Pairing } from './pairings.ts';
 
 // What the views see (architecture.md § PWA): one connection store and one view per opened
 // session, all in a single reactive object so components can read it directly.
@@ -143,8 +144,34 @@ export interface RunnerState {
   activeRunId: string | null;
 }
 
+// A daemon this device is paired with, as the header's picker and Settings show it (ADR 0037):
+// its pairing id and its name from `hello`, null until the first one.
+export interface DaemonChoice {
+  id: string;
+  name: string | null;
+}
+
+// What the store keeps of one daemon while another is open (daemon-state.ts), so switching back
+// finds its unsent text where it was left and its sessions and thumbnails on screen before its
+// `hello` arrives, or while it cannot be reached.
+export interface DaemonStash {
+  drafts: Record<string, Draft>;
+  composers: Record<string, ComposerDraft>;
+  sessions: SessionSummary[];
+  thumbs: Record<string, string>;
+  thumbOwners: Map<string, Set<string>>;
+}
+
 export interface StoreState {
   phase: StorePhase;
+  // Every daemon this device is paired with, and the one whose connection is open (null while
+  // none is); the picker shows itself once there are two (ADR 0037).
+  daemons: DaemonChoice[];
+  activeDaemon: string | null;
+  // The open daemon no longer knows this device (ADR 0037): it answered `not_paired`, or it is
+  // present but never answered this device's handshake (`unanswered`, most likely revoked from
+  // another device). The banner offers Forget; null while it knows the device.
+  unknownDevice: 'not_paired' | 'unanswered' | null;
   status: ConnectionStatus;
   daemon: string | null;
   // The daemon's app version from `hello` (ADR 0021); null until connected, or when talking to a
@@ -198,18 +225,25 @@ export interface StoreOptions {
   // is applied before anything is on screen; the store only carries it to the views.
   appearance: Appearance;
   socket: SocketFactory;
-  // Resolves to the browser's PushSubscription JSON. With `prompt` false it must not ask the
-  // user for permission (there is no gesture to ask under) and resolves to null when it cannot
-  // subscribe silently; with `prompt` true it rejects with a `ClientError` whose code says why
-  // (`push_unsupported`, `push_denied`, `push_no_worker`, `push_failed`). Left out where push
-  // can never work (the dev server, a browser without it): `state.push` then stays
-  // `unavailable` and the status bar offers nothing.
-  subscribePush?: (vapidPublicKey: string, prompt: boolean) => Promise<unknown>;
+  // Resolves to the browser's PushSubscription JSON for `daemon`'s own service worker (ADR
+  // 0037), so each daemon's pushes arrive and say which daemon they are from. With `prompt`
+  // false it must not ask the user for permission (there is no gesture to ask under) and
+  // resolves to null when it cannot subscribe silently; with `prompt` true it rejects with a
+  // `ClientError` whose code says why (`push_unsupported`, `push_denied`, `push_no_worker`,
+  // `push_failed`). Left out where push can never work (the dev server, a browser without it):
+  // `state.push` then stays `unavailable` and the status bar offers nothing.
+  subscribePush?: (vapidPublicKey: string, prompt: boolean, daemon: string) => Promise<unknown>;
+  // Lets the push subscription of one daemon go (subscribe-push.ts): the browser forgets it and,
+  // for a daemon's own worker, the worker too. Null names the root worker, where the one
+  // subscription from before ADR 0037 lived. Left out where push can never work.
+  forgetPush?: (daemon: string | null) => Promise<void>;
   // Plays a notification sound (sound/create-sound-player.ts); left out where the page has no
   // audio.
   playSound?: (name: SoundName) => void;
   minBackoffMs?: number;
   maxBackoffMs?: number;
+  // How long a present daemon may leave the handshake unanswered (create-connection.ts).
+  handshakeTimeoutMs?: number;
   // Runs `fn` after `ms` and returns a cancel; defaults to setTimeout. Tests inject one they fire.
   schedule?: (fn: () => void, ms: number) => () => void;
 }
@@ -220,6 +254,19 @@ export interface StoreInternals {
   state: StoreState;
   logs: Map<string, SessionLog>;
   connection: Connection | null;
+  // The open daemon's pairing (pairings.ts), null while none is open.
+  pairing: Pairing | null;
+  // Whose callbacks are live (box-link.ts): the token of the adopted connection, so a pairing
+  // under way beside it, or a connection being let go, changes nothing on screen.
+  link: object | null;
+  // The unsent drafts of each daemon not open now, by pairing id (daemon-switch.ts).
+  stash: Map<string, DaemonStash>;
+  // Forgets the open daemon (daemon-switch.ts) and opens another paired one, or lands on the
+  // pair screen; `reason` is shown, if any. Set by createStore, since box-link.ts calls it on a
+  // revocation and cannot import the module that opens connections.
+  forget: (reason: string | null) => Promise<void>;
+  // The tail of the daemon changes queued one after another (daemon-switch.ts).
+  serial: Promise<unknown>;
   sync: SyncSession | null;
   vapidPublicKey: string | null;
   refreshing: Promise<void> | null;
@@ -232,8 +279,8 @@ export interface StoreInternals {
   // Cancels the quiet spell after a notification sound, while one is pending.
   soundHush: (() => void) | null;
   // The log cache writes waiting on their delay, by session (log-cache.ts): where the write
-  // starts, and its cancel.
-  cacheWrites: Map<string, { from: number; cancel: () => void }>;
+  // starts, the cache prefix it writes under, and its cancel.
+  cacheWrites: Map<string, { from: number; cache: string; cancel: () => void }>;
   // The composer's files by chip key, off the reactive state (attachment-actions.ts).
   files: Map<string, File>;
   // Thumbnail fetches in flight or done, by attachment id, and which session each belongs to.
@@ -245,6 +292,9 @@ export interface StoreInternals {
 export const storeState = (): StoreState =>
   reactive({
     phase: 'booting',
+    daemons: [],
+    activeDaemon: null,
+    unknownDevice: null,
     status: 'stopped',
     daemon: null,
     daemonVersion: null,

@@ -30,6 +30,13 @@ const clear = (i: StoreInternals): void => {
   i.state.error = null;
 };
 
+// The condition behind a connection error is over (the box answered `hello` again); an action
+// error showing over it keeps the rest of its time, since what it said is still news.
+const clearConnection = (i: StoreInternals): void => {
+  i.connectionError = null;
+  if (i.state.error?.kind === 'connection') i.state.error = null;
+};
+
 // A success clears a prior action error; a connection error is a condition it does not resolve.
 const clearAction = (i: StoreInternals): void => {
   if (i.state.error?.kind !== 'action') return;
@@ -58,6 +65,7 @@ const report = (i: StoreInternals, error: unknown, kind: ErrorKind = 'action'): 
 export const storeErrors: {
   report: typeof report;
   clear: typeof clear;
+  clearConnection: typeof clearConnection;
   clearAction: typeof clearAction;
   actionErrorMs: number;
-} = { report, clear, clearAction, actionErrorMs };
+} = { report, clear, clearConnection, clearAction, actionErrorMs };

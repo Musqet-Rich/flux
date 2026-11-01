@@ -9,8 +9,8 @@ import { storeOptions } from '../../test/store-options.ts';
 import { until } from '../../test/until.ts';
 import { ClientError } from '../client/client-error.ts';
 import { createMemoryStorage } from '../client/create-memory-storage.ts';
-import { pairedBox } from '../client/paired-box.ts';
 import { createStore } from './create-store.ts';
+import { pairings } from './pairings.ts';
 
 const summary = (session: string, extra: Partial<SessionSummary> = {}): SessionSummary => ({
   session,
@@ -174,7 +174,7 @@ test('pairs from a link, says hello, subscribes to push silently and remembers t
   expect(called('push.subscribe')[0]?.params).toEqual({
     subscription: { endpoint: 'https://push.example/x' },
   });
-  expect(await pairedBox.load(await storage.get(pairedBox.storageKey))).not.toBeNull();
+  expect((await pairings.load(storage)).entries).toHaveLength(1);
   store.stop();
   expect(store.state.status).toBe('stopped');
 });
@@ -432,11 +432,11 @@ test('lists devices, revokes another, and revoking itself forgets the box', asyn
   expect(store.state).toMatchObject({ phase: 'unpaired', status: 'stopped', devices: [] });
   expect(store.state.error).toMatchObject({ kind: 'connection' });
   expect(store.state.error?.message).toContain('removed');
-  expect(await storage.get(pairedBox.storageKey)).toBeUndefined();
+  expect(await pairings.load(storage)).toEqual({ active: null, entries: [] });
   expect(await store.refreshDevices()).toBe(false);
 });
 
-test('a revoked notice for this device, or a not_paired answer, lands on the pair screen', async () => {
+test('a revoked notice lands on the pair screen; a not_paired answer marks the daemon unknown', async () => {
   const first = await setup();
   await first.store.pair('https://relay.example', first.link());
   await first.relay.ephemeral({ type: 'device.revoked', deviceId: 'someone-else' });
@@ -456,8 +456,9 @@ test('a revoked notice for this device, or a not_paired answer, lands on the pai
   };
   second.relay.refuseCall('sessions.list', 'not_paired');
   await second.store.refreshSessions();
-  expect(second.store.state).toMatchObject({ phase: 'unpaired', sessions: [] });
-  expect(second.store.state.error?.message).toContain('no longer paired');
+  expect(second.store.state).toMatchObject({ phase: 'paired', unknownDevice: 'not_paired' });
+  await second.store.forgetDaemon();
+  expect(second.store.state).toMatchObject({ phase: 'unpaired', error: null, sessions: [] });
 });
 
 test('reads and saves settings', async () => {

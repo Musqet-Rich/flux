@@ -157,6 +157,35 @@ test('reconnects after the socket drops and fails the calls in flight', async ()
   expect(relay.guests()).toBe(0);
 });
 
+// A box that has forgotten this device ignores its handshake (ADR 0015) while the relay says it
+// is there, so the device would wait for ever. After the timeout it says so (ADR 0037) and tries
+// again at the full backoff, in case the box was only slow.
+test('a box that never answers the handshake is reported, and retried until it does', async () => {
+  const relay = await createRelay();
+  relay.ignoreHandshakes(true);
+  const signals = createSignals();
+  const connection = await createConnection({
+    relayUrl: 'https://relay.example',
+    keys: await handshake.generateKeyPair(),
+    boxPub: relay.boxPub,
+    socket: relay.socket,
+    onEvent: signals.onEvent,
+    onEphemeral: signals.onEphemeral,
+    onStatus: signals.onStatus,
+    onError: signals.onError,
+    minBackoffMs: 1,
+    maxBackoffMs: 5,
+    handshakeTimeoutMs: 5,
+  });
+  connection.start();
+  await expect.poll(() => signals.errors.length).toBeGreaterThanOrEqual(1);
+  expect(signals.errors[0]).toMatchObject({ code: 'unanswered' });
+  expect(signals.statuses).not.toContain('connected');
+  relay.ignoreHandshakes(false);
+  await connection.connected();
+  connection.stop();
+});
+
 // A box on another protocol version answers the handshake with its version and no keys
 // (protocol.md § 8). The device says which side to update, keeps retrying in case the box is
 // updated meanwhile, and never reports a channel that cannot decrypt as connected.

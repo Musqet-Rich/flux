@@ -65,6 +65,11 @@ const entries: readonly SettingsEntry[] = [
     'flux-switch-key',
     'switch tabs with chord session tabs keyboard shortcut arrow ctrl alt option next previous',
   ),
+  field(
+    'this-device',
+    'flux-daemons',
+    'daemons pair another daemon unpair this device forget log out logout sign out server machine',
+  ),
   section('appearance', 'appearance look colours colors'),
   field('appearance', 'flux-mode', 'light or dark mode system scheme night'),
   field(
