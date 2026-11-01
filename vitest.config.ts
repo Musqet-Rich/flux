@@ -65,8 +65,10 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['packages/protocol/src/**/*.ts'],
-      // Vitest 5 measures test files that match `include`; Vitest 4 left them out. The gate is on
-      // the source, so the tests are excluded to keep the measured set what it was.
+      // Both Vitest 4 and 5 drop files matching the test `include` from coverage, but Vitest 5
+      // matches it relative to the root, so `{src,test}/**/*.test.ts` no longer catches
+      // packages/protocol/src/*.test.ts. The gate is on the source; this keeps the measured set
+      // to the protocol source files, as before.
       exclude: ['packages/protocol/src/**/*.test.ts'],
       // Vitest hides fully covered files from the text table when it detects an AI agent
       // (skipFull defaults to true there). Always list every measured file so a reader can see
