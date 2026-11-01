@@ -68,7 +68,11 @@ test('begins, sends sequential chunks, ends with the sha256 of the whole file', 
     size: bytes.length,
   });
   expect(chunks.map((c) => c.length)).toEqual([512 * 1024, 100]);
-  expect(new Uint8Array(await new Blob(chunks).arrayBuffer())).toEqual(bytes);
+  // Compared by digest: `toEqual` walks half a MiB element by element, which on a machine loaded
+  // by other work outlasts the test's timeout.
+  expect(hex(await crypto.subtle.digest('SHA-256', await new Blob(chunks).arrayBuffer()))).toBe(
+    hex(await crypto.subtle.digest('SHA-256', bytes)),
+  );
   expect(calls.at(-1)?.params).toEqual({
     attachmentId: 'att-1',
     hash: hex(await crypto.subtle.digest('SHA-256', bytes)),
