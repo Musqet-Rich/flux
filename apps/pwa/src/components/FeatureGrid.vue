@@ -1,26 +1,46 @@
 <script setup lang="ts">
-// The homepage's "what you get" grid: four bordered cells, numbered in mono, on the
-// editorial-brutalist landing. The --flux-* custom properties are inherited from the .home
-// wrapper in Home.vue.
+// The homepage's "what you get" grid: eight bordered cells, numbered in mono, on the
+// editorial-brutalist landing, wrapping to as many columns as fit. The --flux-* custom
+// properties are inherited from the .home wrapper in Home.vue.
 
 const features = [
   {
     num: '01',
     title: 'Agents on a box',
-    body: 'Each session is one agent in its own git worktree, running unattended so your laptop stays free.',
+    body: 'Claude Code, pi or opencode, one per session in its own git worktree, running unattended so your laptop stays free. Pick the model and effort from your phone.',
   },
   {
     num: '02',
     title: 'Review from anywhere',
-    body: 'Read replies stream in, open changed files as diffs, and leave comments on the exact lines.',
+    body: 'Replies stream in as they are written. Open changed files as diffs, comment on exact lines, edit a file, then commit, push and open the PR without a terminal.',
   },
   {
     num: '03',
     title: "Know when you're needed",
-    body: 'Push notifications when an agent asks a question or goes idle. Answer from the notification.',
+    body: 'Push notifications when an agent asks a question, says it is done or stuck, or finishes its turn. Tap one to land in that session and answer.',
   },
   {
     num: '04',
+    title: 'Subagents in plain sight',
+    body: 'A strip lists every subagent and what it is doing. Each one has its own chat, so you can read its work without losing the main thread.',
+  },
+  {
+    num: '05',
+    title: 'Files both ways',
+    body: 'Send a screenshot, a log or a spec to the agent. When it makes a report or an export for you, it offers the file to download.',
+  },
+  {
+    num: '06',
+    title: 'Every machine, one app',
+    body: 'Pair a work server and a hobby box, switch between them from the header, and get notifications from both.',
+  },
+  {
+    num: '07',
+    title: 'Made for a phone',
+    body: 'Stop sits where your thumb is, inline code copies with a tap, and a command runner handles quick one-off commands. On a laptop the chat and your files sit side by side.',
+  },
+  {
+    num: '08',
     title: 'End-to-end encrypted',
     body: "A blind relay passes encrypted bytes even the host can't read. Hosted for you, or self-host it. No accounts, no third parties.",
   },
