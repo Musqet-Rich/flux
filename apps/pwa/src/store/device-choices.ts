@@ -1,3 +1,4 @@
+import { foldedStrips } from './folded-strips.ts';
 import { notificationSound } from './notification-sound.ts';
 import { sendKey } from './send-key.ts';
 import { splitAt } from './split-at.ts';
@@ -6,10 +7,11 @@ import { switchKey } from './switch-key.ts';
 
 // What this device keeps for itself, apart from the box: its notification sound
 // (notification-sound.ts), which Enter sends (send-key.ts), which chord switches session tabs
-// (switch-key.ts) and where the divider sits on a wide screen (split-at.ts), for box-link.ts,
-// which reads them once when a connection is adopted and hands the sound every live event. A
-// module of its own only because oxlint's `import/max-dependencies` (pedantic) allows box-link
-// ten modules and it already had them; the settings actions reach the four directly.
+// (switch-key.ts), where the divider sits on a wide screen (split-at.ts) and which sessions'
+// agents strips are folded (folded-strips.ts), for box-link.ts, which reads them once when a
+// connection is adopted and hands the sound every live event. A module of its own only
+// because oxlint's `import/max-dependencies` (pedantic) allows box-link ten modules and it
+// already had them; the settings actions reach the five directly.
 
 const load = async (i: StoreInternals): Promise<void> => {
   await Promise.all([
@@ -17,6 +19,7 @@ const load = async (i: StoreInternals): Promise<void> => {
     sendKey.load(i),
     switchKey.load(i),
     splitAt.load(i),
+    foldedStrips.load(i),
   ]);
 };
 

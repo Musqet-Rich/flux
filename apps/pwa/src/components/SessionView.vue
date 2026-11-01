@@ -11,10 +11,11 @@ import SessionTimeline from './SessionTimeline.vue';
 import SessionToolbar from './SessionToolbar.vue';
 
 // One session: its toolbar (SessionToolbar), the agents strip while it has a task row (a lone
-// `main` says nothing the toolbar does not), the timeline of the open chat (SessionTimeline:
-// main's or one subagent's rows, the streaming reply, the agent's open question) and the
-// composer, or on a subagent's chat the note that messages go to main. The store owns the data
-// and reports failures; this only renders and dispatches.
+// `main` says nothing the toolbar does not; folded to one line if the operator folded it), the
+// timeline of the open chat (SessionTimeline: main's or one subagent's rows, the streaming
+// reply, the agent's open question) and the composer, or on a subagent's chat the note that
+// messages go to main. The store owns the data and reports failures; this only renders and
+// dispatches.
 
 // `pane`: the element beside the chat on a wide screen (ADR 0033), whose keys are its own.
 const props = defineProps<{ store: Store; session: string; pane?: HTMLElement | null }>();
@@ -70,6 +71,11 @@ const onMain = computed(() => view.value === null);
 // running /compact turn on main with no boundary logged yet (useSessionTimeline).
 const compacting = computed(() => busy.value && onMain.value && awaitingCompaction.value);
 const ended = ref(false);
+// The agents strip folded to one line, remembered per session on this device.
+const folded = computed(() => props.store.state.foldedStrips.includes(props.session));
+const fold = (next: boolean): void => {
+  void props.store.setStripFolded(props.session, next);
+};
 // Replies go with the composer, which main alone has; a subagent's chat has none to reply from.
 const pick = (seq: number): void => {
   if (onMain.value) startReply(seq);
@@ -169,7 +175,9 @@ watch(
       :tasks="strip"
       :active="view"
       :busy="busy"
+      :folded="folded"
       @select="select"
+      @fold="fold"
     />
     <SessionTimeline
       ref="list"

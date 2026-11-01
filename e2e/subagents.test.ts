@@ -30,7 +30,11 @@ const pairAndStart = async (page: Page, stack: Stack): Promise<void> => {
 };
 
 const stripListsTasks = async (page: Page): Promise<void> => {
-  const rows = page.getByRole('navigation', { name: 'Agents' }).getByRole('button');
+  // The chat rows: each says whether it is the open chat; the fold caret does not.
+  const rows = page
+    .getByRole('navigation', { name: 'Agents' })
+    .getByRole('button')
+    .and(page.locator('[aria-pressed]'));
   await expect(rows).toHaveText([
     /main$/u,
     /^Explore\s*List directory files/u,
@@ -50,7 +54,11 @@ const stripListsTasks = async (page: Page): Promise<void> => {
 };
 
 const openSubagentChat = async (page: Page): Promise<void> => {
-  const rows = page.getByRole('navigation', { name: 'Agents' }).getByRole('button');
+  // The chat rows: each says whether it is the open chat; the fold caret does not.
+  const rows = page
+    .getByRole('navigation', { name: 'Agents' })
+    .getByRole('button')
+    .and(page.locator('[aria-pressed]'));
   await rows.nth(1).click();
   const timeline = page.locator('.timeline');
   await expect(timeline.locator('.item.user')).toHaveText([/^List the files/u]);
@@ -63,10 +71,20 @@ const openSubagentChat = async (page: Page): Promise<void> => {
   await expect(rows.first()).toHaveAttribute('aria-pressed', 'true');
 };
 
+// Folded, the strip is one line with the count; a tap on it opens the rows again.
+const foldAndOpen = async (page: Page): Promise<void> => {
+  const strip = page.getByRole('navigation', { name: 'Agents' });
+  await strip.getByRole('button', { name: 'Hide agents' }).click();
+  await expect(strip.getByRole('button')).toHaveText([/^main\s*2 subagents$/u]);
+  await strip.getByRole('button', { name: /^Show agents/u }).click();
+  await expect(strip.getByRole('button', { name: 'Hide agents' })).toBeFocused();
+};
+
 test('subagents get their own chats, reached from the agents strip', async ({ page, stack }) => {
   await test.step('pair and start a session on the subagent capture', () =>
     pairAndStart(page, stack));
   await test.step('the strip lists both Explore tasks, done', () => stripListsTasks(page));
+  await test.step('the strip folds to one line and opens again', () => foldAndOpen(page));
   await test.step('a tapped row opens that chat; Back returns to main', () =>
     openSubagentChat(page));
 });

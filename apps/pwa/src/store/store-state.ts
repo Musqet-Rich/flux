@@ -169,6 +169,9 @@ export interface StoreState {
   // The chat's share of a wide screen while a side pane is open (split-at.ts, ADR 0033); half
   // until the divider is dragged.
   splitAt: number;
+  // The sessions whose agents strip is folded on this device (folded-strips.ts); none until
+  // the operator folds one.
+  foldedStrips: string[];
   sessions: SessionSummary[];
   // Harnesses the box can run, from `hello`; a daemon that predates the field has claude only.
   agents: HarnessKind[];
@@ -254,6 +257,7 @@ export const storeState = (): StoreState =>
     sendKey: 'meta',
     switchKey: 'ctrlAlt',
     splitAt: 0.5,
+    foldedStrips: [],
     sessions: [],
     agents: ['claude'],
     rateWindows: [],
