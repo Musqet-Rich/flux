@@ -67,9 +67,10 @@ const load = async (): Promise<Blob> => {
 
 // Types a browser would run rather than save, were it to open the blob URL instead of
 // downloading it: the URL is the app's own origin, and the file is the agent's.
-// Whole types only: an Office file's `openxmlformats` type is no script.
+// Whole types only, so an Office file's `openxmlformats` type is no script; any `+xml` type
+// (XHTML, SVG, Atom and the like) is.
 const active =
-  /^(?:text\/html|application\/xhtml\+xml|(?:text|application)\/xml|image\/svg\+xml|(?:text|application)\/(?:java|ecma)script)$/iu;
+  /^(?:text\/html|(?:text|application)\/xml|[a-z]+\/[a-z0-9.-]+\+xml|(?:text|application)\/(?:java|ecma)script)$/iu;
 
 const save = (data: Blob): void => {
   const type = active.test(data.type) ? 'application/octet-stream' : data.type;

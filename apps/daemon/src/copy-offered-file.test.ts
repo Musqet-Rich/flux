@@ -115,12 +115,15 @@ test('a file the agent cannot read, or cannot reach, is refused as unreadable', 
 });
 
 // A file whose size the stat cannot know (a /proc file stats as empty) is held to the cap by the
-// bytes themselves, and the partial copy is removed.
-test('a file that turns out larger than its stat said is refused mid-copy', async () => {
-  const { target } = await setup();
-  await expect(copyOfferedFile('/proc/self/status', target, 1)).rejects.toMatchObject({
-    code: 'too_large',
-    message: expect.stringContaining('while it was copied'),
-  });
-  expect(await exists(target)).toBe(false);
-});
+// bytes themselves, and the partial copy is removed. Linux only: macOS has no /proc.
+test.skipIf(process.platform !== 'linux')(
+  'a file that turns out larger than its stat said is refused mid-copy',
+  async () => {
+    const { target } = await setup();
+    await expect(copyOfferedFile('/proc/self/status', target, 1)).rejects.toMatchObject({
+      code: 'too_large',
+      message: expect.stringContaining('while it was copied'),
+    });
+    expect(await exists(target)).toBe(false);
+  },
+);

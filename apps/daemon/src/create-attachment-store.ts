@@ -1,7 +1,7 @@
 import { attachment } from '@flux/protocol';
 import type { FileHandle } from 'node:fs/promises';
 import { open, rm } from 'node:fs/promises';
-import { basename, join } from 'node:path';
+import { basename, extname, join } from 'node:path';
 import type { DatabaseSync, StatementSync } from 'node:sqlite';
 
 import type { Upload } from './attachment-upload.ts';
@@ -70,13 +70,18 @@ const uploadWithinMs = 10 * 60 * 1000;
 const unsentWithinMs = 24 * 60 * 60 * 1000;
 
 // `[A-Za-z0-9._-]` only, so the name is safe in a path and on any shell; capped so a long
-// name cannot exceed a filesystem's limit once the id is prepended.
+// name cannot exceed a filesystem's limit once the id is prepended. The cut comes out of the
+// stem, so a long name keeps its extension, which types an offered file and opens a download.
+const nameCap = 100;
+const extCap = 16;
+
 const safeName = (name: string): string => {
-  const cleaned = name
-    .replaceAll(/[^A-Za-z0-9._-]/gu, '_')
-    .replace(/^\.+/u, '')
-    .slice(0, 100);
-  return cleaned === '' ? 'file' : cleaned;
+  const cleaned = name.replaceAll(/[^A-Za-z0-9._-]/gu, '_').replace(/^\.+/u, '');
+  if (cleaned === '') return 'file';
+  if (cleaned.length <= nameCap) return cleaned;
+  const ext = extname(cleaned);
+  if (ext.length > extCap) return cleaned.slice(0, nameCap);
+  return `${cleaned.slice(0, nameCap - ext.length)}${ext}`;
 };
 
 const toRecord = (dir: string, row: Record<string, unknown>): AttachmentRecord => ({

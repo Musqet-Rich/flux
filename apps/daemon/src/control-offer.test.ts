@@ -152,3 +152,14 @@ test('a leading ~/ is the home directory, as the agent’s shell reads it', asyn
     `no file at ${join(homedir(), name)}`,
   );
 });
+
+// The stored name is capped (ADR 0020), but the cut comes out of the stem: a long name keeps its
+// extension, and with it its type.
+test('a long file name keeps its extension, and so its type', async () => {
+  const { worktree, handle } = await setup();
+  await writeFile(join(worktree, `${'a'.repeat(120)}.pdf`), 'figures');
+  const result = await handle({ type: 'offer', session: 's1', path: `${'a'.repeat(120)}.pdf` });
+  expect(result).toMatchObject({
+    attachment: { name: `${'a'.repeat(96)}.pdf`, mime: 'application/pdf' },
+  });
+});
