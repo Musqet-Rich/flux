@@ -48,6 +48,8 @@ const shareable = probe();
 
 const percent = computed(() => `${Math.round(progress.value * 100)}%`);
 const size = computed(() => formatBytes(props.file.size));
+// Named per file, so a screen reader's list of regions tells one card from the next.
+const label = computed(() => `File from the agent: ${props.file.name}`);
 
 const load = async (): Promise<Blob> => {
   if (blob !== null) return blob;
@@ -65,7 +67,9 @@ const load = async (): Promise<Blob> => {
 
 // Types a browser would run rather than save, were it to open the blob URL instead of
 // downloading it: the URL is the app's own origin, and the file is the agent's.
-const active = /html|xml|svg|javascript|ecmascript/iu;
+// Whole types only: an Office file's `openxmlformats` type is no script.
+const active =
+  /^(?:text\/html|application\/xhtml\+xml|(?:text|application)\/xml|image\/svg\+xml|(?:text|application)\/(?:java|ecma)script)$/iu;
 
 const save = (data: Blob): void => {
   const type = active.test(data.type) ? 'application/octet-stream' : data.type;
@@ -124,7 +128,7 @@ const retry = (): void => {
 </script>
 
 <template>
-  <section class="offer" aria-label="File from the agent">
+  <section class="offer" :aria-label="label">
     <div class="head">
       <img v-if="thumb !== null" class="thumb" :src="thumb" alt="" />
       <span v-else class="icon"><Icon name="file" /></span>

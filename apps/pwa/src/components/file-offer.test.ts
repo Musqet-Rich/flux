@@ -65,6 +65,7 @@ afterEach(() => {
 test('shows the name, size and note, with a file icon when there is no thumbnail', () => {
   const card = mountCard(controlled().fetchFile, 'The quarterly figures');
   expect(card.find('.name').text()).toBe('report.pdf');
+  expect(card.find('section').attributes('aria-label')).toBe('File from the agent: report.pdf');
   expect(card.find('.size').text()).toBe('2.0 KiB');
   expect(card.find('.note').text()).toBe('The quarterly figures');
   expect(card.find('.thumb').exists()).toBe(false);
@@ -183,15 +184,17 @@ test('a file a browser would run is saved as an opaque download; others keep the
   await card.find('.download').trigger('click');
   fetch.resolve(new Blob(['<script>x</script>'], { type: 'text/html' }));
   await flushPromises();
-  const again = controlled();
-  const pdfCard = mountCard(again.fetchFile);
-  await pdfCard.find('.download').trigger('click');
-  again.resolve(new Blob(['%PDF'], { type: 'application/pdf' }));
+  const docx = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  const kept = ['application/pdf', docx, 'text/css'];
+  const others = kept.map((type) => ({ type, fetch: controlled() }));
+  const cards = others.map((other) => mountCard(other.fetch.fetchFile));
+  await Promise.all(cards.map((c) => c.find('.download').trigger('click')));
+  for (const other of others) other.fetch.resolve(new Blob(['x'], { type: other.type }));
   await flushPromises();
   expect(made.mock.calls.map(([blob]) => (blob as Blob).type)).toEqual([
     'application/octet-stream',
-    'application/pdf',
+    ...kept,
   ]);
   card.unmount();
-  pdfCard.unmount();
+  for (const c of cards) c.unmount();
 });
