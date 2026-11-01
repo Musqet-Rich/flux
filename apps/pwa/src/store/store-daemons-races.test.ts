@@ -116,3 +116,33 @@ test('the carried-over pairing keeps its root subscription while its own cannot 
   expect((await pairings.load(storage)).entries[0]?.rootPush).toBe(true);
   again.stop();
 });
+
+test('Unpair stops waiting for a daemon that does not answer and forgets it here', async () => {
+  const { work, timers, make, fire } = await twoDaemons.setup();
+  const store = make();
+  await store.pair('https://relay.example', work.link);
+  work.relay.mute(true);
+  const unpairing = store.unpairDevice();
+  await until(() => timers.length === 1);
+  fire();
+  expect(await unpairing).toBe(false);
+  expect(store.state.phase).toBe('unpaired');
+  expect(store.state.error?.message).toContain('could not be reached');
+  store.stop();
+});
+
+test('a tap on a root-worker notification opens the carried-over daemon', async () => {
+  const { work, hobby, storage, make } = await twoDaemons.setup();
+  const first = make();
+  await first.pair('https://relay.example', work.link);
+  await first.pair('https://relay.example', hobby.link);
+  first.stop();
+  await pairings.update(storage, (current) => ({
+    ...current,
+    entries: current.entries.map((e) => ({ ...e, rootPush: e.id === work.id })),
+  }));
+  const again = make({ subscribePush: () => Promise.resolve(null) });
+  await again.boot('root');
+  expect(again.state.activeDaemon).toBe(work.id);
+  again.stop();
+});

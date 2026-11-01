@@ -53,13 +53,26 @@ const call = async <M extends keyof RpcMethods>(
 
 // Runs an action for a view: a failure lands in `state.error` for the status bar and the view
 // gets false, never a rejection to handle. A success takes a previous action's failure with it.
+// A failure is shown only while the daemon it came from is still the open one: letting a
+// daemon go stops its connection, which rejects what it had in flight with "stopped", and that
+// is not news about the daemon opened instead (ADR 0037).
+const reportFor = (
+  i: StoreInternals,
+  link: object | null,
+  error: unknown,
+  kind: ErrorKind = 'action',
+): void => {
+  if (i.link === link) reportError(i, error, kind);
+};
+
 const attempt = async (i: StoreInternals, action: () => Promise<unknown>): Promise<boolean> => {
+  const link = i.link;
   try {
     await action();
     storeErrors.clearAction(i);
     return true;
   } catch (error) {
-    reportError(i, error);
+    reportFor(i, link, error);
     return false;
   }
 };
@@ -73,11 +86,13 @@ const syncLog = async (i: StoreInternals, log: SessionLog): Promise<void> => {
 
 const refreshSessions = (i: StoreInternals): Promise<void> => {
   if (i.refreshing !== null) return i.refreshing;
+  const link = i.link;
   const run = async (): Promise<void> => {
     try {
-      i.state.sessions = await call(i, 'sessions.list', {});
+      const sessions = await call(i, 'sessions.list', {});
+      if (i.link === link) i.state.sessions = sessions;
     } catch (error) {
-      reportError(i, error);
+      reportFor(i, link, error);
     } finally {
       i.refreshing = null;
     }
@@ -300,8 +315,9 @@ const onStatus = (i: StoreInternals, status: StoreInternals['state']['status']):
   // While pairing, the caller runs afterConnect once pair.request has been accepted; a hello
   // before that would be refused as not_paired.
   if (status === 'connected' && i.state.phase === 'paired') {
+    const link = i.link;
     void afterConnect(i).catch((error: unknown) => {
-      reportError(i, error, 'connection');
+      reportFor(i, link, error, 'connection');
     });
   }
 };
@@ -351,6 +367,7 @@ export const boxLink: {
   refreshSessions: typeof refreshSessions;
   enablePush: typeof enablePush;
   reportError: typeof reportError;
+  reportFor: typeof reportFor;
   clearError: typeof clearError;
   clearActionError: typeof clearActionError;
   attempt: typeof attempt;
@@ -364,6 +381,7 @@ export const boxLink: {
   refreshSessions,
   enablePush,
   reportError,
+  reportFor,
   clearError,
   clearActionError,
   attempt,

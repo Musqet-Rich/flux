@@ -1,6 +1,6 @@
 import type { FluxEvent, SessionSummary } from '@flux/protocol';
 import { pairing, room } from '@flux/protocol';
-import { reactive } from 'vue';
+import { reactive, shallowReactive } from 'vue';
 
 import { createMemoryStorage } from '../src/client/create-memory-storage.ts';
 import { createStore } from '../src/store/create-store.ts';
@@ -68,7 +68,8 @@ const setup = async () => {
   };
   const pushes: string[] = [];
   const forgotten: (string | null)[] = [];
-  const timers: (() => void)[] = [];
+  // Reactive, so a test can await a timer being set before it fires it.
+  const timers = shallowReactive<(() => void)[]>([]);
   const make = (extra: Partial<StoreOptions> = {}) =>
     createStore(
       storeOptions({
@@ -96,7 +97,7 @@ const setup = async () => {
   const fire = (): void => {
     for (const fn of timers.splice(0)) fn();
   };
-  return { work, hobby, storage, written, pushes, forgotten, make, fire };
+  return { work, hobby, storage, written, pushes, forgotten, timers, make, fire };
 };
 
 export const twoDaemons: { setup: typeof setup; event: typeof event } = { setup, event };

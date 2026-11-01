@@ -18,6 +18,7 @@ const root = ref<HTMLElement | null>(null);
 const open = ref(false);
 useDismiss(open, root);
 const pairing = ref(false);
+const trigger = ref<HTMLButtonElement | null>(null);
 
 const labels = computed(() => daemonLabels(props.store.state.daemons));
 const active = computed(() => props.store.state.activeDaemon);
@@ -37,8 +38,10 @@ const choose = (id: string): void => {
   open.value = false;
   void props.store.switchDaemon(id);
 };
+// The picker's button takes the focus first, so the dialog gives it back there on close.
 const startPairing = (): void => {
   open.value = false;
+  trigger.value?.focus();
   pairing.value = true;
 };
 </script>
@@ -46,6 +49,7 @@ const startPairing = (): void => {
 <template>
   <div v-if="store.state.daemons.length > 1" ref="root" class="picker">
     <button
+      ref="trigger"
       type="button"
       class="current"
       aria-haspopup="menu"

@@ -76,9 +76,11 @@ const daemonOf = (scopeUrl: string): string | null => {
   return daemon === undefined ? null : decodeURIComponent(daemon);
 };
 
+// The root worker's pushes are the carried-over daemon's, from before it had a worker of its own;
+// `root` names it to boot (daemon-state.ts `pick`), whichever daemon was open last.
 const urlFor = (session: string | null, daemon: string | null): string => {
   const path = session === null ? '/' : `/s/${encodeURIComponent(session)}`;
-  return daemon === null ? path : `${path}?${new URLSearchParams({ daemon }).toString()}`;
+  return `${path}?${new URLSearchParams({ daemon: daemon ?? 'root' }).toString()}`;
 };
 
 const install = (scope: WorkerScope): void => {

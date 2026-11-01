@@ -32,6 +32,7 @@ test('pairs a second daemon beside the first; one connection, drafts kept per da
   expect(await store.switchDaemon(work.id)).toBe(true);
   await until(() => store.state.daemon === 'work');
   expect(store.state.drafts['s1\u0000a.txt']?.text).toBe('unsent on work');
+  expect(store.state.sessions.map((x) => x.session)).toEqual(['s1']);
   await until(() => hobby.relay.guests() === 0);
   store.stop();
 });

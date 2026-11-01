@@ -8,7 +8,7 @@ import type { Pairing, Pairings } from './pairings.ts';
 import { pairings } from './pairings.ts';
 import type { StoreInternals } from './store-state.ts';
 
-const { serial, publish, remember, leave, enter, open, pick } = daemonState;
+const { serial, publish, remember, leave, dropStash, enter, open, pick } = daemonState;
 
 // Several daemons, one open at a time (ADR 0037). The store holds every pairing (pairings.ts)
 // but opens one connection: boot opens the one used last, a switch lets the open one go and
@@ -168,10 +168,11 @@ const pair = async (
     await failed(i, error, first, signal?.aborted === true);
     return false;
   }
+  const adopted = i.link;
   try {
     await boxLink.afterConnect(i);
   } catch (error) {
-    boxLink.reportError(i, error, 'connection');
+    boxLink.reportFor(i, adopted, error, 'connection');
   }
   return true;
 };
@@ -191,7 +192,7 @@ const forget = (
   const pairing = target;
   if (pairing === null) return Promise.resolve();
   if (i.pairing?.id === pairing.id) leave(i, false);
-  i.stash.delete(pairing.id);
+  dropStash(i, pairing.id);
   return serial(i, async () => {
     const { storage, forgetPush } = i.options;
     const without = (current: Pairings): Pairings => ({
@@ -246,12 +247,7 @@ const unpair = async (i: StoreInternals): Promise<boolean> => {
   let revoked = false;
   if (connection !== null && deviceId !== null && connection.status() === 'connected') {
     i.link = null;
-    try {
-      await connection.call('devices.remove', { deviceId });
-      revoked = true;
-    } catch (error) {
-      revoked = error instanceof ClientError && error.code === 'not_paired';
-    }
+    revoked = await daemonState.revoke(i, connection, deviceId);
   }
   const unreachable =
     `${name} could not be reached, so this device was only forgotten here. ` +

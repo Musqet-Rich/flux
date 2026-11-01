@@ -151,11 +151,15 @@ export interface DaemonChoice {
   name: string | null;
 }
 
-// What a view keeps of one daemon while another is open, so switching back finds its unsent
-// text where it was left (daemon-switch.ts).
+// What the store keeps of one daemon while another is open (daemon-state.ts), so switching back
+// finds its unsent text where it was left and its sessions and thumbnails on screen before its
+// `hello` arrives, or while it cannot be reached.
 export interface DaemonStash {
   drafts: Record<string, Draft>;
   composers: Record<string, ComposerDraft>;
+  sessions: SessionSummary[];
+  thumbs: Record<string, string>;
+  thumbOwners: Map<string, Set<string>>;
 }
 
 export interface StoreState {

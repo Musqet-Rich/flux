@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onScopeDispose, ref } from 'vue';
+import { onMounted, onScopeDispose, onUnmounted, ref } from 'vue';
 
 import { useEscape } from '../composables/useEscape.ts';
 import type { Store } from '../store/create-store.ts';
@@ -36,6 +36,13 @@ const pair = async (relayUrl: string, fragment: string): Promise<void> => {
   if (ok) emit('close');
   else if (!cancelled) failure.value = props.store.state.error?.message ?? 'Pairing failed.';
 };
+
+// Focus goes back where it came from on close, if that is still on the page (a menu item that
+// opened the dialog has gone with its menu).
+const opener = document.activeElement;
+onUnmounted(() => {
+  if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
+});
 
 onMounted(() => {
   dialog.value?.focus();

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onMounted, onUnmounted, ref } from 'vue';
 
 import { useEscape } from '../composables/useEscape.ts';
 import Icon from './Icon.vue';
@@ -19,6 +19,13 @@ const cancel = (): void => {
   if (!props.busy) emit('cancel');
 };
 useEscape(cancel);
+
+// Focus goes back where it came from on close, if that is still on the page (a menu item that
+// opened the dialog has gone with its menu).
+const opener = document.activeElement;
+onUnmounted(() => {
+  if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
+});
 
 onMounted(() => {
   cancelButton.value?.focus();
