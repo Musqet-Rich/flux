@@ -59,8 +59,14 @@ const offer = async (
     await options.attachments.remove(id).catch(() => null);
     throw error;
   }
-  options.attachments.markSent([id], logged.seq);
   options.emit(logged);
+  // Best effort: the `offered` mark already keeps the row from this daemon's sweep, so a failed
+  // update must not turn an offer the operator can see into an error for the agent.
+  try {
+    options.attachments.markSent([id], logged.seq);
+  } catch {
+    // Nothing to undo; see above.
+  }
   return { attachment: shown };
 };
 
