@@ -9,7 +9,7 @@ const link = pairing.url('https://relay.example', {
   secret: new Uint8Array(pairing.secretLength),
 });
 
-test('presents the hero, the four things you get, and the four setup steps', () => {
+test('presents the hero, the eight things you get, and the setup steps', () => {
   const wrapper = mount(Home, { props: { phase: 'unpaired', error: null } });
   expect(wrapper.find('h1').text()).toBe('Give coding agents their own computer.');
   const titles = wrapper.findAll('.cell h3').map((node) => node.text());
@@ -17,6 +17,10 @@ test('presents the hero, the four things you get, and the four setup steps', () 
     'Agents on a box',
     'Review from anywhere',
     "Know when you're needed",
+    'Subagents in plain sight',
+    'Files both ways',
+    'Every machine, one app',
+    'Made for a phone',
     'End-to-end encrypted',
   ]);
   const steps = wrapper.findAll('.steps li');
