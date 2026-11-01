@@ -34,6 +34,7 @@ Phase 1 has exactly one user: the author. Everything is designed for a single op
 - Persisting anything on the relay. If the box is offline the remote is offline.
 - Replacing the agent's own config formats. Claude Code keeps `settings.json`, `CLAUDE.md`, `.mcp.json`; Flux edits them in place where needed.
 - A hosted service.
+- Previewing the box's localhost dev servers. The operator brings their own tunnel or private network (Tailscale, a Cloudflare tunnel, ngrok); the relay stays a forwarder of ciphertext. See ADR 0038.
 
 ## Parts
 
