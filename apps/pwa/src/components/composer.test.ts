@@ -1,7 +1,7 @@
 import type { Skill } from '@flux/protocol';
 import type { VueWrapper } from '@vue/test-utils';
 import { flushPromises, mount } from '@vue/test-utils';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 
 import { fakeResizeObserver } from '../../test/fake-resize-observer.ts';
 import { ClientError } from '../client/client-error.ts';
@@ -19,12 +19,21 @@ const txt = new File(['hi'], 'notes.txt', { type: 'text/plain' });
 // The composer's props for session s1, the title hint a screen (SessionView) would pass.
 const on = (
   store: Store,
-): { store: Store; session: string; comments: never[]; reply: null; hint: string } => ({
+  busy = false,
+): {
+  store: Store;
+  session: string;
+  comments: never[];
+  reply: null;
+  hint: string;
+  busy: boolean;
+} => ({
   store,
   session: 's1',
   comments: [],
   reply: null,
   hint: 'Message the agent',
+  busy,
 });
 
 const setup = async () => {
@@ -417,5 +426,69 @@ test('a recalled message that failed to send is still the draft after leaving', 
   expect(box.store.composer('s1').text).toBe('first');
   wrapper.unmount();
   expect(box.store.composer('s1').text).toBe('first');
+  box.store.stop();
+});
+
+// While the agent runs, an empty box offers Stop where Send was; anything to send keeps Send,
+// and so does the moment after a send, so a double tap cannot stop the run it just fed.
+test('an empty box while the agent runs is Stop; text, files or a fresh send keep Send', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  const box = await pairedStore([], { 'agent.send': () => ({ seq: 2 }) });
+  await box.store.open('s1');
+  const idle = mount(Composer, { props: { ...on(box.store) } });
+  const wrapper = mount(Composer, { props: { ...on(box.store, true) } });
+  try {
+    expect(idle.find('button[aria-label="Stop"]').exists()).toBe(false);
+    const stop = wrapper.find('button[aria-label="Stop"]');
+    expect(stop.attributes('title')).toBe('Stop the agent (Esc)');
+    expect(stop.classes()).toContain('secondary');
+    expect(stop.find('[data-icon="stop"]').exists()).toBe(true);
+    await stop.trigger('click', { detail: 1 });
+    expect(wrapper.emitted('interrupt')).toEqual([[]]);
+    await wrapper.find('textarea').setValue('more');
+    expect(wrapper.find('button[aria-label="Stop"]').exists()).toBe(false);
+    expect(wrapper.find('button[aria-label="Send"]').attributes('disabled')).toBeUndefined();
+    await wrapper.find('form.row').trigger('submit');
+    await until(() => Reflect.get(wrapper.vm, 'settling') === true);
+    await flushPromises();
+    expect(wrapper.find('textarea').element.value).toBe('');
+    expect(wrapper.find('button[aria-label="Send"]').attributes('disabled')).toBeDefined();
+    vi.advanceTimersByTime(1000);
+    await flushPromises();
+    expect(wrapper.find('button[aria-label="Stop"]').exists()).toBe(true);
+    box.store.attach('s1', [new File(['x'], 'a.txt', { type: 'text/plain' })]);
+    await flushPromises();
+    expect(wrapper.find('button[aria-label="Stop"]').exists()).toBe(false);
+  } finally {
+    idle.unmount();
+    wrapper.unmount();
+    vi.useRealTimers();
+    box.store.stop();
+  }
+});
+
+// A word an Android keyboard is still composing is not in the draft yet, but it is text.
+test('a word being composed keeps Send', async () => {
+  const box = await pairedStore([]);
+  const wrapper = mount(Composer, { props: { ...on(box.store, true) } });
+  const area = wrapper.find('textarea');
+  await area.trigger('compositionstart');
+  expect(wrapper.find('button[aria-label="Stop"]').exists()).toBe(false);
+  await area.trigger('compositionend');
+  expect(wrapper.find('button[aria-label="Stop"]').exists()).toBe(true);
+  wrapper.unmount();
+  box.store.stop();
+});
+
+// Stop pressed from the keyboard leaves the focus in the box; a tap does not open the keyboard.
+test('Stop from the keyboard puts the focus in the box, a tap does not', async () => {
+  const box = await pairedStore([]);
+  const wrapper = mount(Composer, { props: { ...on(box.store, true) }, attachTo: document.body });
+  await wrapper.find('button[aria-label="Stop"]').trigger('click', { detail: 1 });
+  expect(document.activeElement).not.toBe(wrapper.find('textarea').element);
+  await wrapper.find('button[aria-label="Stop"]').trigger('click', { detail: 0 });
+  expect(document.activeElement).toBe(wrapper.find('textarea').element);
+  expect(wrapper.emitted('interrupt')).toHaveLength(2);
+  wrapper.unmount();
   box.store.stop();
 });

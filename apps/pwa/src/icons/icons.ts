@@ -17,7 +17,6 @@ import copy from '@phosphor-icons/core/regular/copy.svg?path';
 import dotsThree from '@phosphor-icons/core/regular/dots-three.svg?path';
 import file from '@phosphor-icons/core/regular/file.svg?path';
 import floppyDisk from '@phosphor-icons/core/regular/floppy-disk.svg?path';
-import folder from '@phosphor-icons/core/regular/folder.svg?path';
 import gearSix from '@phosphor-icons/core/regular/gear-six.svg?path';
 import gitCommit from '@phosphor-icons/core/regular/git-commit.svg?path';
 import gitDiff from '@phosphor-icons/core/regular/git-diff.svg?path';
@@ -62,7 +61,6 @@ export const icons = {
   edit: pencilSimple,
   failed: xCircle,
   file,
-  files: folder,
   forward: caretRight,
   from: arrowLeft,
   help: question,

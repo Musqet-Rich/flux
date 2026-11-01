@@ -64,9 +64,6 @@ const go = (to: Route): void => {
 const openChanges = (): void => {
   go({ name: 'changes', session: props.route.session });
 };
-const openFiles = (): void => {
-  go({ name: 'files', session: props.route.session, path: '' });
-};
 // Closing the pane takes its button with it; the focus goes to the message box, the reason
 // the chat is there.
 const close = async (): Promise<void> => {
@@ -84,7 +81,6 @@ const close = async (): Promise<void> => {
         :session="route.session"
         :pane="pane"
         @changes="openChanges"
-        @files="openFiles"
         @closed="go({ name: 'sessions' })"
       />
     </div>

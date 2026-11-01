@@ -18,7 +18,9 @@ import Icon from './Icon.vue';
 // and files, lives in the store so leaving the session keeps it. Sends through the store, which
 // reports failures; a failed send keeps the draft and the reply. Says when it `resized`: the
 // box growing a line, a reply row, the tray, chips or the skill list all take their room from
-// the timeline above, which the screen then keeps at its tail.
+// the timeline above, which the screen then keeps at its tail. While the agent runs and there
+// is nothing to send, the send button is Stop (`interrupt`): on a phone the bottom bar is where
+// the thumb already is, and the toolbar has no room to spare.
 
 const props = defineProps<{
   store: Store;
@@ -27,8 +29,10 @@ const props = defineProps<{
   reply: ReplyTarget | null;
   // The box's title: the screen's focus chord, named, or none (SessionView, useFocusChord).
   hint: string | undefined;
+  // The agent is running: an empty box offers Stop in place of Send.
+  busy: boolean;
 }>();
-const emit = defineEmits<{ sent: []; unreply: []; resized: [] }>();
+const emit = defineEmits<{ sent: []; unreply: []; resized: []; interrupt: [] }>();
 
 const draft = computed(() => props.store.composer(props.session));
 const sending = ref(false);
@@ -40,8 +44,6 @@ const uploading = computed(() => draft.value.attachments.some((a) => a.status !=
 const blank = computed(() => draft.value.text.trim() === '');
 // The box is a line tall and grows with the text to ten lines (useAutoGrow).
 useAutoGrow(box, () => draft.value.text);
-// The screen's focus chord reaches the box through this (SessionView, useFocusChord).
-defineExpose({ box });
 // Any change of height, whatever inside it caused it.
 let observer: ResizeObserver | null = null;
 onMounted(() => {
@@ -50,6 +52,7 @@ onMounted(() => {
 });
 onUnmounted(() => {
   observer?.disconnect();
+  window.clearTimeout(settle);
 });
 
 const add = (files: File[]): void => {
@@ -80,6 +83,10 @@ watch(
   },
 );
 
+// A moment after a send the button stays Send, disabled, even if the run has started: the box
+// empties as the message goes, and a double tap on Send must not land on Stop.
+const settling = ref(false);
+let settle: number | undefined;
 const send = async (): Promise<void> => {
   const text = draft.value.text.trim();
   if (text === '' || sending.value || uploading.value) return;
@@ -88,6 +95,11 @@ const send = async (): Promise<void> => {
   emit('sent');
   const ok = await props.store.send(props.session, text, props.reply?.seq);
   sending.value = false;
+  settling.value = true;
+  window.clearTimeout(settle);
+  settle = window.setTimeout(() => {
+    settling.value = false;
+  }, 1000);
   if (!ok) return;
   if (props.reply !== null) emit('unreply');
 };
@@ -167,6 +179,14 @@ const recall = useCommandHistory(
   box,
 );
 
+// Stop goes with the run, so a keyboard press (a click with no pointer, `detail` 0) puts the
+// focus back in the box rather than on the page; a tap leaves it, or the phone's keyboard would
+// open.
+const stop = (event: MouseEvent): void => {
+  emit('interrupt');
+  if (event.detail === 0) box.value?.focus();
+};
+
 // Which Enter sends is the device's choice (enter-key.ts); the rest break the line.
 const ready = computed(() => !blank.value && !sending.value && !uploading.value);
 const key = (event: KeyboardEvent): void => {
@@ -180,6 +200,22 @@ const key = (event: KeyboardEvent): void => {
 const lineBreak = (event: InputEvent): void => {
   if (enterKey.lineBreak(props.store.state.sendKey, ready.value, event, box.value)) void send();
 };
+// Nothing typed and nothing on its way: a text in the box, or files waiting for one, keep Send,
+// so a tap meant to send never stops the run. A word still being composed (an Android keyboard
+// composes each one) is not in the draft yet, so composing counts as text.
+const composing = ref(false);
+const stoppable = computed(
+  () =>
+    props.busy &&
+    blank.value &&
+    !composing.value &&
+    draft.value.attachments.length === 0 &&
+    !sending.value &&
+    !settling.value,
+);
+// The screen's focus chord reaches the box through this (SessionView, useFocusChord); the
+// screen shows the toolbar's Stop whenever this one is not Stop.
+defineExpose({ box, stoppable });
 const sendHint = computed(
   () => `Send (${enterKey.label(props.store.state.sendKey, enterKey.apple)})`,
 );
@@ -229,8 +265,21 @@ const sendHint = computed(
         @keydown="key"
         @beforeinput="lineBreak"
         @paste="paste"
+        @compositionstart="composing = true"
+        @compositionend="composing = false"
       />
       <button
+        v-if="stoppable"
+        type="button"
+        class="secondary icon-only send stop"
+        aria-label="Stop"
+        title="Stop the agent (Esc)"
+        @click="stop"
+      >
+        <Icon name="stop" />
+      </button>
+      <button
+        v-else
         type="submit"
         class="icon-only send"
         aria-label="Send"
