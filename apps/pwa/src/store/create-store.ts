@@ -2,10 +2,8 @@ import type { CodeRef, RpcMethods, SessionSummary } from '@flux/protocol';
 
 import { ClientError } from '../client/client-error.ts';
 import type { Connection } from '../client/create-connection.ts';
-import { createConnection } from '../client/create-connection.ts';
-import { pairDevice } from '../client/pair-device.ts';
-import { pairedBox } from '../client/paired-box.ts';
 import { boxLink } from './box-link.ts';
+import { daemonSwitch } from './daemon-switch.ts';
 import type { SessionActions } from './session-actions.ts';
 import { sessionActions } from './session-actions.ts';
 import { sessionLogs } from './session-logs.ts';
@@ -33,10 +31,21 @@ export interface Store extends SettingsActions, SessionActions {
   // The device's scheme and text size (ADR 0030): Settings sets them, the editors read the
   // scheme when they are built.
   appearance: StoreOptions['appearance'];
-  // Loads the paired box from storage and connects, or lands on the pair screen.
-  boot: () => Promise<void>;
-  // Pairs from a link's fragment; on failure `state.error` says why and the phase is unpaired.
-  pair: (relayUrl: string, fragment: string) => Promise<void>;
+  // Loads the pairings from storage and connects to `daemon` if it is paired (a notification's,
+  // ADR 0037), else to the daemon used last, or lands on the pair screen.
+  boot: (daemon?: string) => Promise<void>;
+  // Pairs from a link's fragment and opens the new daemon, resolving to whether it paired; on
+  // failure `state.error` says why. A first pairing that fails lands on the pair screen; one
+  // made beside an open daemon (the "Pair another daemon" dialog, which may cancel it through
+  // `signal`) leaves that daemon open.
+  pair: (relayUrl: string, fragment: string, signal?: AbortSignal) => Promise<boolean>;
+  // Lets the open daemon go and opens another paired one (ADR 0037), resolving to whether it is
+  // now the open one.
+  switchDaemon: (daemon: string) => Promise<boolean>;
+  // The operator's Unpair: asks the open daemon to forget this device, forgets the daemon here
+  // whatever it answers, and opens the next paired one or lands on the pair screen. Resolves to
+  // whether the daemon forgot the device too.
+  unpairDevice: () => Promise<boolean>;
   // Makes a session's log available in `state.logs`: cache first, then a sync.
   open: (session: string) => Promise<void>;
   answer: (session: string, askId: string, answer: string) => Promise<boolean>;
@@ -72,44 +81,6 @@ export interface Store extends SettingsActions, SessionActions {
   dismissError: () => void;
   stop: () => void;
 }
-
-const boot = async (i: StoreInternals): Promise<void> => {
-  const stored = await i.options.storage.get(pairedBox.storageKey).catch(() => null);
-  const box = await pairedBox.load(stored);
-  if (box === null) {
-    i.state.phase = 'unpaired';
-    return;
-  }
-  const options = { ...boxLink.options(i), relayUrl: box.record.relayUrl };
-  try {
-    const connection = await createConnection({ ...options, keys: box.keys, boxPub: box.boxPub });
-    await boxLink.adopt(i, connection);
-    i.deviceId = box.record.deviceId;
-    i.state.phase = 'paired';
-    connection.start();
-  } catch (error) {
-    // A stored relay the connection refuses (plaintext off loopback) needs a new pairing link;
-    // the pair screen with the reason is where that starts.
-    boxLink.reportError(i, error, 'connection');
-    i.state.phase = 'unpaired';
-  }
-};
-
-const pair = async (i: StoreInternals, relayUrl: string, fragment: string): Promise<void> => {
-  i.state.phase = 'pairing';
-  boxLink.clearError(i);
-  try {
-    const { box, connection } = await pairDevice({ ...boxLink.options(i), relayUrl, fragment });
-    await i.options.storage.set(pairedBox.storageKey, box.record);
-    await boxLink.adopt(i, connection);
-    i.deviceId = box.record.deviceId;
-    i.state.phase = 'paired';
-    await boxLink.afterConnect(i);
-  } catch (error) {
-    boxLink.reportError(i, error, 'connection');
-    i.state.phase = 'unpaired';
-  }
-};
 
 const saveFile = async (
   i: StoreInternals,
@@ -212,12 +183,17 @@ const controls = (i: StoreInternals): Pick<Store, 'dismissError' | 'stop'> => ({
   },
 });
 
-export const createStore = (options: StoreOptions): Store => {
+const internals = (options: StoreOptions): StoreInternals => {
   const i: StoreInternals = {
     options,
     state: storeState(),
     logs: new Map(),
     connection: null,
+    pairing: null,
+    link: null,
+    stash: new Map(),
+    serial: Promise.resolve(),
+    forget: (reason) => daemonSwitch.forget(i, reason),
     sync: null,
     vapidPublicKey: null,
     refreshing: null,
@@ -230,13 +206,27 @@ export const createStore = (options: StoreOptions): Store => {
     thumbLoads: new Map(),
     thumbOwners: new Map(),
   };
+  return i;
+};
+
+// The daemons this device is paired with (daemon-switch.ts, ADR 0037).
+const daemonActions = (
+  i: StoreInternals,
+): Pick<Store, 'boot' | 'pair' | 'switchDaemon' | 'unpairDevice'> => ({
+  boot: (daemon) => daemonSwitch.boot(i, daemon),
+  pair: (relayUrl, fragment, signal) => daemonSwitch.pair(i, relayUrl, fragment, signal),
+  switchDaemon: (daemon) => daemonSwitch.switchTo(i, daemon),
+  unpairDevice: () => daemonSwitch.unpair(i),
+});
+
+export const createStore = (options: StoreOptions): Store => {
+  const i = internals(options);
   return {
     ...settingsActions(i),
     ...sessionActions(i),
     state: i.state,
     appearance: options.appearance,
-    boot: () => boot(i),
-    pair: (relayUrl, fragment) => pair(i, relayUrl, fragment),
+    ...daemonActions(i),
     // Views fire this from onMounted and cannot handle a rejection; a failed sync is reported.
     open: async (session) => {
       await boxLink.attempt(i, () => sessionLogs.open(i, session));

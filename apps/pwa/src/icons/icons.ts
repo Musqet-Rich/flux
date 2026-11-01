@@ -9,6 +9,7 @@ import arrowLeft from '@phosphor-icons/core/regular/arrow-left.svg?path';
 import arrowsClockwise from '@phosphor-icons/core/regular/arrows-clockwise.svg?path';
 import bell from '@phosphor-icons/core/regular/bell.svg?path';
 import broom from '@phosphor-icons/core/regular/broom.svg?path';
+import caretDown from '@phosphor-icons/core/regular/caret-down.svg?path';
 import caretRight from '@phosphor-icons/core/regular/caret-right.svg?path';
 import check from '@phosphor-icons/core/regular/check.svg?path';
 import checkCircle from '@phosphor-icons/core/regular/check-circle.svg?path';
@@ -24,6 +25,7 @@ import gitCommit from '@phosphor-icons/core/regular/git-commit.svg?path';
 import gitDiff from '@phosphor-icons/core/regular/git-diff.svg?path';
 import gitPullRequest from '@phosphor-icons/core/regular/git-pull-request.svg?path';
 import link from '@phosphor-icons/core/regular/link.svg?path';
+import linkBreak from '@phosphor-icons/core/regular/link-break.svg?path';
 import paperPlaneRight from '@phosphor-icons/core/regular/paper-plane-right.svg?path';
 import paperclip from '@phosphor-icons/core/regular/paperclip.svg?path';
 import pencilSimple from '@phosphor-icons/core/regular/pencil-simple.svg?path';
@@ -62,6 +64,7 @@ export const icons = {
   down: arrowDown,
   download: downloadSimple,
   edit: pencilSimple,
+  expand: caretDown,
   failed: xCircle,
   file,
   forward: caretRight,
@@ -88,6 +91,7 @@ export const icons = {
   succeeded: checkCircle,
   task: robot,
   trash,
+  unpair: linkBreak,
   verified: sealCheck,
   warning,
 } as const;

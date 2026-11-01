@@ -1,8 +1,10 @@
 import type { KeyPair } from '@flux/protocol';
 import { base64url, guards, handshake } from '@flux/protocol';
 
-// What the device remembers about its box after pairing (ADR 0012): where the relay is, the
-// box's static public key, the device's own keypair and the id the box gave it.
+// What the device remembers about a box after pairing (ADR 0012): where the relay is, the box's
+// static public key, the device's own keypair and the id the box gave it. One record per paired
+// daemon, kept in the pairings record (store/pairings.ts, ADR 0037); `storageKey` is where the
+// app kept its one record before there could be more, read once to carry it over.
 
 export interface PairedBoxRecord {
   relayUrl: string;
@@ -54,8 +56,14 @@ const create = async (
   boxPub,
 });
 
-export const pairedBox: { load: typeof load; create: typeof create; storageKey: string } = {
+export const pairedBox: {
+  load: typeof load;
+  create: typeof create;
+  isRecord: typeof isRecordShape;
+  storageKey: string;
+} = {
   load,
   create,
+  isRecord: isRecordShape,
   storageKey: 'paired-box',
 };

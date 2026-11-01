@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, ref } from 'vue';
+import { computed, defineAsyncComponent, ref, watch } from 'vue';
 
 import type { Route, Router } from '../router/create-router.ts';
 import type { Store } from '../store/create-store.ts';
@@ -46,10 +46,26 @@ const onHelpCreated = (session: { session: string }): void => {
 const enablePush = (): void => {
   void props.store.enablePush();
 };
+
+// Another daemon opened (the picker, an Unpair, a revocation, ADR 0037): the screen on show was
+// the last one's, so its sessions list is where this one starts. Synchronous, so a notification
+// that switched daemons to open a session (App.vue) routes there after this, not before. A
+// switch passes through none open, so the daemon last shown is what it is compared with.
+let shown = state.activeDaemon;
+watch(
+  () => state.activeDaemon,
+  (daemon) => {
+    if (daemon === null || daemon === shown) return;
+    if (shown !== null) go({ name: 'sessions' });
+    shown = daemon;
+  },
+  { flush: 'sync' },
+);
 </script>
 
 <template>
   <AppHeader
+    :store="store"
     :sessions="state.sessions"
     :active="active"
     :chord="state.switchKey"

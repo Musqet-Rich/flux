@@ -53,7 +53,8 @@ const removeDevice = async (i: StoreInternals, deviceId: string): Promise<void> 
   const self = i.state.devices.find((d) => d.deviceId === deviceId)?.current === true;
   await boxLink.call(i, 'devices.remove', { deviceId });
   // The box tells this device too, but the answer came first; do not wait for the notice.
-  if (self) await boxLink.unpair(i, 'This device was removed from the box.');
+  const name = i.state.daemon ?? i.pairing?.name ?? 'the daemon';
+  if (self) await boxLink.unpair(i, `This device was removed from ${name}.`);
   else i.state.devices = i.state.devices.filter((d) => d.deviceId !== deviceId);
 };
 

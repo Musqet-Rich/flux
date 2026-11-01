@@ -8,6 +8,10 @@ export interface Storage {
   remove: (key: string) => Promise<void>;
   // Forgets every key starting with `prefix`.
   clear: (prefix: string) => Promise<void>;
+  // Runs `run` while no other tab of the app runs one under the same `name`, for a read and a
+  // write that must not interleave with another tab's (store/pairings.ts). The browser's
+  // storage has it where Web Locks exist; memory storage, one tab by definition, does not.
+  exclusive?: <T>(name: string, run: () => Promise<T>) => Promise<T>;
 }
 
 export const createMemoryStorage = (): Storage => {
