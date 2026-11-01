@@ -62,13 +62,22 @@ const screens = async (route: SessionRoute, storage = createMemoryStorage()) => 
   return { box, wrapper, storage };
 };
 
-test('a narrow screen shows one screen at a time, the panel without its strip', async () => {
+test('a narrow screen shows one screen at a time, the panel tabs without a close', async () => {
   wideScreen(false);
   const { box, wrapper } = await screens({ name: 'changes', session: 's1' });
   expect(wrapper.find('.split').exists()).toBe(false);
   expect(wrapper.findComponent({ name: 'SessionView' }).exists()).toBe(false);
-  expect(wrapper.find('nav.tabs').exists()).toBe(false);
+  expect(wrapper.findAll('nav.tabs button').map((b) => b.text())).toEqual(['Changes', 'Files']);
+  expect(wrapper.find('[aria-label="Close pane"]').exists()).toBe(false);
   expect(wrapper.findComponent({ name: 'ChangesView' }).props('paned')).toBe(false);
+  await wrapper.findAll('nav.tabs button')[1]?.trigger('click');
+  expect(wrapper.emitted('go')).toEqual([[{ name: 'files', session: 's1', path: '' }]]);
+  await wrapper.setProps({ route: { name: 'files', session: 's1', path: 'src' } });
+  expect(wrapper.find('nav.tabs [aria-current="page"]').text()).toBe('Files');
+  await wrapper.setProps({ route: { name: 'diff', session: 's1', path: 'a.ts' } });
+  expect(wrapper.find('nav.tabs').exists()).toBe(false);
+  await wrapper.setProps({ route: { name: 'edit', session: 's1', path: 'a.ts', dir: 'src' } });
+  expect(wrapper.find('nav.tabs').exists()).toBe(false);
   await wrapper.setProps({ route: { name: 'session', session: 's1' } });
   expect(wrapper.findComponent({ name: 'SessionView' }).exists()).toBe(true);
   expect(wrapper.findComponent({ name: 'ChangesView' }).exists()).toBe(false);

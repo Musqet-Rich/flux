@@ -19,7 +19,7 @@ import SessionToolbar from './SessionToolbar.vue';
 
 // `pane`: the element beside the chat on a wide screen (ADR 0033), whose keys are its own.
 const props = defineProps<{ store: Store; session: string; pane?: HTMLElement | null }>();
-defineEmits<{ changes: []; files: []; closed: [] }>();
+defineEmits<{ changes: []; closed: [] }>();
 
 const list = ref<InstanceType<typeof SessionTimeline> | null>(null);
 const composer = ref<InstanceType<typeof Composer> | null>(null);
@@ -71,6 +71,9 @@ const onMain = computed(() => view.value === null);
 // running /compact turn on main with no boundary logged yet (useSessionTimeline).
 const compacting = computed(() => busy.value && onMain.value && awaitingCompaction.value);
 const ended = ref(false);
+// One Stop on screen while the agent runs: the composer's send button when the box is empty,
+// else the toolbar's, so a draft or a subagent's chat (which has no composer) never hides it.
+const toolbarStop = computed(() => busy.value && composer.value?.stoppable !== true);
 // The agents strip folded to one line, remembered per session on this device.
 const folded = computed(() => props.store.state.foldedStrips.includes(props.session));
 const fold = (next: boolean): void => {
@@ -109,7 +112,7 @@ const answer = (text: string): void => {
 const interrupt = (): void => {
   void props.store.interrupt(props.session);
 };
-// Esc stops the agent as the toolbar's Stop does, from anywhere on the screen, the composer
+// Esc stops the agent as the Stop button does, from anywhere on the screen, the composer
 // included, so a turn going wrong is one key away. Whatever is open and closes on Escape (a
 // menu, the slash list, the help modal, the Rename…/Delete… forms, the image overlay) marks
 // the key consumed, and that one only closes it: this listens on the window, so theirs, on
@@ -164,10 +167,9 @@ watch(
       :store="store"
       :session="session"
       :events="events"
-      :busy="busy"
+      :stoppable="toolbarStop"
       @interrupt="interrupt"
       @changes="$emit('changes')"
-      @files="$emit('files')"
       @closed="$emit('closed')"
     />
     <AgentStrip
@@ -206,8 +208,10 @@ watch(
       :comments="comments"
       :reply="reply"
       :hint="focusHint"
+      :busy="busy"
       @sent="catchUp"
       @unreply="cancelReply"
+      @interrupt="interrupt"
       @resized="keep"
     />
     <div v-else class="aside">
