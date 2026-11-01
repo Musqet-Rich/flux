@@ -1,7 +1,8 @@
 // The PWA's own error class (docs/engineering.md § TypeScript). `code` is an RPC error code from
 // the box (protocol.md § 7) or one of the client-side conditions: `offline`, `bad_pairing`,
-// `relay_refused`, `bad_reply`, `bad_version`, `insecure_transport`, `timeout`, and `aborted`
-// for a pairing the operator cancelled (pair-device.ts).
+// `relay_refused`, `bad_reply`, `bad_version`, `insecure_transport`, `timeout`, `aborted` for a
+// pairing the operator cancelled (pair-device.ts), and `unanswered` for a box that is present
+// but never answers this device's handshake (create-connection.ts).
 
 export class ClientError extends Error {
   readonly code: string;

@@ -51,6 +51,7 @@ const dropStash = (i: StoreInternals, id: string): void => {
 const blank = (i: StoreInternals): void => {
   const s = i.state;
   s.activeDaemon = null;
+  s.unknownDevice = null;
   s.status = 'stopped';
   s.daemon = null;
   s.daemonVersion = null;

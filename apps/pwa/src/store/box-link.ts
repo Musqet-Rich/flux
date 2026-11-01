@@ -18,7 +18,11 @@ import type { ErrorKind, LogView, StoreInternals } from './store-state.ts';
 
 type LinkOptions = Omit<ConnectionOptions, 'relayUrl' | 'keys' | 'boxPub'>;
 
+// While the open daemon no longer knows this device (`state.unknownDevice`, ADR 0037) the banner
+// says so, with its Forget; each call it refuses would only say the same again.
 const reportError = (i: StoreInternals, error: unknown, kind: ErrorKind = 'action'): void => {
+  const refused = error instanceof ClientError && error.code === 'not_paired';
+  if (refused && i.state.unknownDevice !== null) return;
   storeErrors.report(i, error, kind);
 };
 const clearError = storeErrors.clear;
@@ -42,12 +46,12 @@ const call = async <M extends keyof RpcMethods>(
   try {
     return await i.connection.call(method, params);
   } catch (error) {
-    // Only a box that has forgotten this device answers not_paired after pairing; the caller
-    // reports the reason the pair screen shows, not the box's terse message.
+    // Only a box that has forgotten this device answers not_paired after pairing. The pairing
+    // is not forgotten here on the box's word alone (ADR 0037): the open daemon is marked, and
+    // the banner offers the operator its Forget.
     if (!(error instanceof ClientError) || error.code !== 'not_paired') throw error;
-    const reason = revokedReason(i);
-    await unpair(i, reason);
-    throw new ClientError('not_paired', reason);
+    i.state.unknownDevice = 'not_paired';
+    throw new ClientError('not_paired', revokedReason(i));
   }
 };
 
@@ -176,8 +180,10 @@ const afterConnect = async (i: StoreInternals): Promise<void> => {
   }
   i.state.sessions = hello.sessions;
   i.state.agents = hello.agents ?? ['claude'];
-  // Back in touch with the box: whatever the outage said is over. A failed action's message
-  // keeps its own few seconds (a pairing that failed while this daemon was opened again).
+  // Back in touch with the box, and it knows this device: whatever the outage said is over. A
+  // failed action's message keeps its own few seconds (a pairing that failed while this daemon
+  // was opened again).
+  i.state.unknownDevice = null;
   storeErrors.clearConnection(i);
   i.vapidPublicKey = hello.vapidPublicKey ?? null;
   // Push is on offer once the box has a key, unless this page can never subscribe.
@@ -318,6 +324,8 @@ const onEphemeral = (i: StoreInternals, data: Ephemeral): void => {
 
 const onStatus = (i: StoreInternals, status: StoreInternals['state']['status']): void => {
   i.state.status = status;
+  // The relay says the daemon is not there after all: it is away, not one that ignores us.
+  if (status === 'no_host' && i.state.unknownDevice === 'unanswered') i.state.unknownDevice = null;
   // While pairing, the caller runs afterConnect once pair.request has been accepted; a hello
   // before that would be refused as not_paired.
   if (status === 'connected' && i.state.phase === 'paired') {
@@ -332,7 +340,7 @@ const onStatus = (i: StoreInternals, status: StoreInternals['state']['status']):
 // pairing under way beside the open daemon, or a daemon being switched away from, cannot touch
 // the state the open daemon's screens are showing.
 const options = (i: StoreInternals, link: object): LinkOptions => {
-  const { minBackoffMs, maxBackoffMs } = i.options;
+  const { minBackoffMs, maxBackoffMs, handshakeTimeoutMs } = i.options;
   const live = (): boolean => i.link === link;
   return {
     socket: i.options.socket,
@@ -346,10 +354,15 @@ const options = (i: StoreInternals, link: object): LinkOptions => {
       if (live()) onStatus(i, status);
     },
     onError: (error) => {
-      if (live()) reportError(i, error, 'connection');
+      if (!live()) return;
+      // A box that never answers this device has most likely forgotten it (create-connection.ts):
+      // the banner says so rather than the status bar (ADR 0037).
+      if (error.code === 'unanswered') i.state.unknownDevice = 'unanswered';
+      else reportError(i, error, 'connection');
     },
     ...(minBackoffMs === undefined ? {} : { minBackoffMs }),
     ...(maxBackoffMs === undefined ? {} : { maxBackoffMs }),
+    ...(handshakeTimeoutMs === undefined ? {} : { handshakeTimeoutMs }),
   };
 };
 

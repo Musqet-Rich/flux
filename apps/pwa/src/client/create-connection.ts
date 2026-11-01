@@ -46,6 +46,9 @@ export interface ConnectionOptions {
   maxBackoffMs?: number;
   keepaliveMs?: number;
   rpcTimeoutMs?: number;
+  // How long a box that is present may leave this device's handshake unanswered before the
+  // connection says so (`unanswered`, below).
+  handshakeTimeoutMs?: number;
 }
 
 interface State {
@@ -61,11 +64,14 @@ interface State {
   backoffMs: number;
   timer: ReturnType<typeof setTimeout> | null;
   keepalive: ReturnType<typeof setInterval> | null;
+  // Running while a handshake waits for the box's answer.
+  unanswered: ReturnType<typeof setTimeout> | null;
   waiters: { resolve: () => void; reject: (e: ClientError) => void }[];
   rpc: ReturnType<typeof createRpcClient>;
 }
 
 const defaultKeepaliveMs = 60_000;
+const defaultHandshakeTimeoutMs = 10_000;
 
 const setStatus = (state: State, status: ConnectionStatus): void => {
   if (state.status === status) return;
@@ -106,7 +112,13 @@ const keepAlive = (state: State): void => {
   }, state.options.keepaliveMs ?? defaultKeepaliveMs);
 };
 
+const stopWaiting = (state: State): void => {
+  if (state.unanswered !== null) clearTimeout(state.unanswered);
+  state.unanswered = null;
+};
+
 const dropChannel = (state: State, reason: string): void => {
+  stopWaiting(state);
   if (state.keepalive !== null) clearInterval(state.keepalive);
   state.keepalive = null;
   state.channel = null;
@@ -115,11 +127,28 @@ const dropChannel = (state: State, reason: string): void => {
   state.rpc.rejectAll(new ClientError('offline', reason));
 };
 
+// A box that is there answers a device it knows at once, and never answers one it does not
+// (protocol.md § 3: a revoked device's handshake is ignored outside a pairing window, ADR 0015);
+// a box the relay knows to be missing is said by `no_host`, which stops the wait. "There" is
+// only the relay holding the box's socket, with no heartbeat, so a box whose network dropped
+// without closing it looks the same for a while. A handshake left unanswered this long is
+// reported as `unanswered` (ADR 0037: the box may be away, or may have forgotten this device),
+// and the socket is closed to try again at the full backoff.
 const sendHello = async (state: State): Promise<void> => {
-  const { options } = state;
+  const { options, socket } = state;
   const hs = await deviceHandshake({ keys: options.keys, boxPub: options.boxPub });
+  // The socket closed, or the connection stopped, while the keys were made: nothing to wait on.
+  if (socket === null || state.socket !== socket || state.status === 'stopped') return;
   state.handshake = hs;
-  state.socket?.send(hs.frame);
+  socket.send(hs.frame);
+  stopWaiting(state);
+  state.unanswered = setTimeout(() => {
+    state.unanswered = null;
+    if (state.socket !== socket || state.channel !== null) return;
+    options.onError?.(new ClientError('unanswered', 'The daemon did not answer this device.'));
+    state.backoffMs = options.maxBackoffMs ?? 30_000;
+    socket.close();
+  }, options.handshakeTimeoutMs ?? defaultHandshakeTimeoutMs);
 };
 
 const onText = (state: State, text: string): void => {
@@ -175,6 +204,7 @@ const onBinary = async (state: State, socket: Socket, data: Bytes): Promise<void
   if (state.handshake === null) return;
   const channel = await state.handshake.complete(data);
   if (channel === null) return;
+  stopWaiting(state);
   state.channel = channel;
   state.call = callOn(state, socket);
   state.backoffMs = state.options.minBackoffMs ?? 1000;
@@ -291,6 +321,7 @@ export const createConnection = async (options: ConnectionOptions): Promise<Conn
     backoffMs: options.minBackoffMs ?? 1000,
     timer: null,
     keepalive: null,
+    unanswered: null,
     waiters: [],
     rpc: createRpcClient({
       send: (message) => {

@@ -1,6 +1,6 @@
 # 0015: Settings on the box, agent config as raw files, revocation as a notice
 
-Status: accepted, 2026-08-29. Amended by ADR 0037: with several daemons paired, a revoked device forgets that daemon and opens the next one paired, landing on the pair screen only when none is left. Implements prd.md P2 "edit the box-side Flux config and the agent's config" and "pair a second device, revoke a device".
+Status: accepted, 2026-08-29. Amended by ADR 0037: with several daemons paired, a `device.revoked` notice forgets that daemon and opens the next one paired, landing on the pair screen only when none is left; a `not_paired` answer, or a handshake left unanswered, marks the daemon as no longer knowing the device and offers Forget rather than forgetting it at once. Implements prd.md P2 "edit the box-side Flux config and the agent's config" and "pair a second device, revoke a device".
 
 ## Context
 

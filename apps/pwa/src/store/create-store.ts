@@ -46,6 +46,10 @@ export interface Store extends SettingsActions, SessionActions {
   // whatever it answers, and opens the next paired one or lands on the pair screen. Resolves to
   // whether the daemon forgot the device too.
   unpairDevice: () => Promise<boolean>;
+  // Forgets the open daemon on this device alone, for one that no longer knows the device
+  // (`state.unknownDevice`): nothing is asked of it. Opens the next paired daemon or lands on
+  // the pair screen.
+  forgetDaemon: () => Promise<void>;
   // Makes a session's log available in `state.logs`: cache first, then a sync.
   open: (session: string) => Promise<void>;
   answer: (session: string, askId: string, answer: string) => Promise<boolean>;
@@ -215,11 +219,12 @@ const internals = (options: StoreOptions): StoreInternals => {
 // The daemons this device is paired with (daemon-switch.ts, ADR 0037).
 const daemonActions = (
   i: StoreInternals,
-): Pick<Store, 'boot' | 'pair' | 'switchDaemon' | 'unpairDevice'> => ({
+): Pick<Store, 'boot' | 'pair' | 'switchDaemon' | 'unpairDevice' | 'forgetDaemon'> => ({
   boot: (daemon) => daemonSwitch.boot(i, daemon),
   pair: (relayUrl, fragment, signal) => daemonSwitch.pair(i, relayUrl, fragment, signal),
   switchDaemon: (daemon) => daemonSwitch.switchTo(i, daemon),
   unpairDevice: () => daemonSwitch.unpair(i),
+  forgetDaemon: () => daemonSwitch.forget(i, null),
 });
 
 export const createStore = (options: StoreOptions): Store => {

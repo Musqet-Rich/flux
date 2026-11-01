@@ -436,7 +436,7 @@ test('lists devices, revokes another, and revoking itself forgets the box', asyn
   expect(await store.refreshDevices()).toBe(false);
 });
 
-test('a revoked notice for this device, or a not_paired answer, lands on the pair screen', async () => {
+test('a revoked notice lands on the pair screen; a not_paired answer marks the daemon unknown', async () => {
   const first = await setup();
   await first.store.pair('https://relay.example', first.link());
   await first.relay.ephemeral({ type: 'device.revoked', deviceId: 'someone-else' });
@@ -456,8 +456,9 @@ test('a revoked notice for this device, or a not_paired answer, lands on the pai
   };
   second.relay.refuseCall('sessions.list', 'not_paired');
   await second.store.refreshSessions();
-  expect(second.store.state).toMatchObject({ phase: 'unpaired', sessions: [] });
-  expect(second.store.state.error?.message).toContain('no longer paired');
+  expect(second.store.state).toMatchObject({ phase: 'paired', unknownDevice: 'not_paired' });
+  await second.store.forgetDaemon();
+  expect(second.store.state).toMatchObject({ phase: 'unpaired', error: null, sessions: [] });
 });
 
 test('reads and saves settings', async () => {

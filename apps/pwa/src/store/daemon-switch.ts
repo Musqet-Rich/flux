@@ -136,6 +136,16 @@ const failed = async (
   boxLink.reportError(i, error);
 };
 
+// A daemon ignores a pairing handshake once the code it printed has expired or been used, so an
+// unanswered one on the pair screen points there.
+const firstPairingError = (error: ClientError): ClientError =>
+  error.code === 'unanswered'
+    ? new ClientError(
+        'unanswered',
+        'The daemon did not answer. The pairing code may have expired: run `flux pair` for a fresh one.',
+      )
+    : error;
+
 // Pairs from a link's fragment and opens the new daemon. While another daemon is open (the
 // "Pair another daemon" dialog) it stays open and on screen until the new one is paired; the
 // pairing connection's callbacks are not live until it is adopted.
@@ -151,13 +161,16 @@ const pair = async (
     boxLink.clearError(i);
   }
   const link = {};
+  const linked = boxLink.options(i, link);
   const options = {
-    ...boxLink.options(i, link),
-    // Why a first pairing cannot get through (the box on another protocol version) is all the
-    // pair screen has to show; beside an open daemon the dialog's own state says it is waiting
-    // until the connection is adopted, and from then it reports like any open daemon's.
+    ...linked,
+    // Once adopted the connection's failures are handled like any open daemon's (an unanswered
+    // handshake marks it unknown, ADR 0037). Before that, why a first pairing cannot get through
+    // (the box on another protocol version) is all the pair screen has to show, and beside an
+    // open daemon the dialog's own state says it is waiting.
     onError: (error: ClientError) => {
-      if (first || i.link === link) boxLink.reportError(i, error, 'connection');
+      if (i.link === link) linked.onError?.(error);
+      else if (first) boxLink.reportError(i, firstPairingError(error), 'connection');
     },
     relayUrl,
     fragment,
@@ -257,14 +270,21 @@ const unpair = async (i: StoreInternals): Promise<boolean> => {
   const { pairing, connection, deviceId } = i;
   if (pairing === null) return false;
   const name = i.state.daemon ?? pairing.name ?? 'The daemon';
-  let revoked = false;
-  if (connection !== null && deviceId !== null && connection.status() === 'connected') {
+  // A daemon that said `not_paired` has already forgotten this device; one that never answers
+  // most likely has, so neither is asked, and neither is said to keep listing it.
+  const unknown = i.state.unknownDevice;
+  let revoked = unknown === 'not_paired';
+  const asking = unknown === null && connection !== null && deviceId !== null;
+  if (asking && connection.status() === 'connected') {
     i.link = null;
     revoked = await daemonState.revoke(i, connection, deviceId);
   }
   const unreachable =
-    `${name} could not be reached, so this device was only forgotten here. ` +
-    `${name} will keep listing it until it is revoked from another device.`;
+    unknown === 'unanswered'
+      ? `${name} did not answer this device, so it was only forgotten here. ` +
+        `If ${name} still knows it, revoke it from another device.`
+      : `${name} could not be reached, so this device was only forgotten here. ` +
+        `${name} will keep listing it until it is revoked from another device.`;
   // A switch that started as Unpair was tapped may have opened another daemon meanwhile; the
   // operator confirmed forgetting this one, so it is forgotten whichever is open now.
   await forget(i, revoked ? null : unreachable, pairing);

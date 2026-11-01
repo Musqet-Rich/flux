@@ -14,7 +14,14 @@ import { pairedBox } from './paired-box.ts';
 
 export type PairDeviceOptions = Pick<
   ConnectionOptions,
-  'socket' | 'onEvent' | 'onEphemeral' | 'onStatus' | 'onError' | 'minBackoffMs' | 'maxBackoffMs'
+  | 'socket'
+  | 'onEvent'
+  | 'onEphemeral'
+  | 'onStatus'
+  | 'onError'
+  | 'minBackoffMs'
+  | 'maxBackoffMs'
+  | 'handshakeTimeoutMs'
 > & {
   relayUrl: string;
   fragment: string;

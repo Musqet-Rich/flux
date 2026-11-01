@@ -168,6 +168,10 @@ export interface StoreState {
   // none is); the picker shows itself once there are two (ADR 0037).
   daemons: DaemonChoice[];
   activeDaemon: string | null;
+  // The open daemon no longer knows this device (ADR 0037): it answered `not_paired`, or it is
+  // present but never answered this device's handshake (`unanswered`, most likely revoked from
+  // another device). The banner offers Forget; null while it knows the device.
+  unknownDevice: 'not_paired' | 'unanswered' | null;
   status: ConnectionStatus;
   daemon: string | null;
   // The daemon's app version from `hello` (ADR 0021); null until connected, or when talking to a
@@ -238,6 +242,8 @@ export interface StoreOptions {
   playSound?: (name: SoundName) => void;
   minBackoffMs?: number;
   maxBackoffMs?: number;
+  // How long a present daemon may leave the handshake unanswered (create-connection.ts).
+  handshakeTimeoutMs?: number;
   // Runs `fn` after `ms` and returns a cancel; defaults to setTimeout. Tests inject one they fire.
   schedule?: (fn: () => void, ms: number) => () => void;
 }
@@ -288,6 +294,7 @@ export const storeState = (): StoreState =>
     phase: 'booting',
     daemons: [],
     activeDaemon: null,
+    unknownDevice: null,
     status: 'stopped',
     daemon: null,
     daemonVersion: null,
