@@ -16,9 +16,9 @@ const { serial, publish, remember, leave, dropStash, enter, open, pick } = daemo
 // the box saying this device is no longer paired) opens the next or lands on the pair screen.
 //
 // Letting a daemon go keeps what is worth keeping: its cached logs stay in storage under its
-// own prefix and its unsent drafts wait in `i.stash` for it to open again. Everything else its
-// screens showed (sessions, settings, the runner's scrollback, thumbnails) belongs to its
-// connection and is fetched again. Forgetting a daemon throws all of it away, and its push
+// own prefix, and its unsent drafts, session list and thumbnails wait in `i.stash` for it to
+// open again. Everything else its screens showed (settings, devices, the runner's scrollback)
+// belongs to its connection and is fetched again. Forgetting a daemon throws all of it away, and its push
 // subscription with it; the device's own preferences (device-choices.ts, the appearance) are
 // never the daemon's and are never touched.
 //
