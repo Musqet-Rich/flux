@@ -1,6 +1,6 @@
 # 0002: Node 24 as the only server runtime
 
-Status: accepted, 2026-08-28.
+Status: accepted, 2026-08-28. The version floor is widened to Node 24 or later by 0035.
 
 ## Context
 

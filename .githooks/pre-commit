@@ -24,18 +24,18 @@
 set -eu
 
 if ! command -v node >/dev/null 2>&1; then
-  echo "pre-commit: node not found on PATH; Node 24 is required (.node-version)" >&2
+  echo "pre-commit: node not found on PATH; Node 24 or later is required (docs/adr/0035)" >&2
   exit 1
 fi
 
 major=$(node -p 'process.versions.node.split(".")[0]')
-if [ "$major" != "24" ]; then
-  echo "pre-commit: Node 24 required, found $(node --version)" >&2
+if [ "$major" -lt 24 ]; then
+  echo "pre-commit: Node 24 or later required, found $(node --version)" >&2
   exit 1
 fi
 
 if ! command -v corepack >/dev/null 2>&1; then
-  echo "pre-commit: corepack not found on PATH (ships with Node 24)" >&2
+  echo "pre-commit: corepack not found on PATH (ships with Node 24; on Node 25+ run: npm install -g corepack)" >&2
   exit 1
 fi
 
