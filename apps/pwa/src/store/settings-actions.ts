@@ -65,10 +65,14 @@ const saveSettings = async (i: StoreInternals, patch: SettingsPatch): Promise<vo
 // A daemon that lacks the method answers `not_found`/`unsupported`, and an offline box rejects;
 // either degrades to a `latest: null` result so Settings never offers to install what it could
 // not check. A genuine result (including `latest: null` from the box) is stored as-is.
+// Each fallback is for the daemon that was asked: one let go meanwhile (ADR 0037) leaves the
+// open daemon's state alone.
 const checkUpdate = async (i: StoreInternals): Promise<void> => {
+  const link = i.link;
   try {
     i.state.updateCheck = await boxLink.call(i, 'daemon.checkUpdate', {});
   } catch {
+    if (i.link !== link) return;
     i.state.updateCheck = {
       current: i.state.daemonVersion ?? '',
       latest: null,
@@ -97,9 +101,11 @@ const relistSkills = async (i: StoreInternals): Promise<void> => {
 };
 
 const refreshSkills = async (i: StoreInternals): Promise<void> => {
+  const link = i.link;
   try {
     await relistSkills(i);
   } catch {
+    if (i.link !== link) return;
     // Older daemon or offline: keep any list already fetched, else show none.
     i.state.skills = i.state.skills ?? [];
   }

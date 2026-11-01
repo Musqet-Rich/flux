@@ -39,9 +39,10 @@ export const manual: ManualSection[] = [
       'One device can be paired with several daemons (a work server, a hobby server, or two daemons',
       'on one machine) and has one open at a time: Settings › This device › Pair another daemon, or',
       'the daemon picker at the left of the header once two are paired, which also switches between',
-      'them. Each daemon keeps its own cached logs and unsent drafts on the device. Settings › This',
-      'device › Unpair this device asks the open daemon to forget the device and forgets that daemon',
-      'here; getting back needs a fresh `flux pair` on the daemon’s machine.',
+      'them. Each daemon keeps its own cached logs on the device, and its unsent drafts while the',
+      'app is open. Settings › This device › Unpair this device asks the open daemon to forget the',
+      'device and forgets that daemon here; getting back needs a fresh `flux pair` on the daemon’s',
+      'machine.',
     ].join(' '),
   },
   {

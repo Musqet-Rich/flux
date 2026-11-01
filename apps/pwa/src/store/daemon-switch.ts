@@ -18,9 +18,9 @@ const { serial, publish, remember, leave, dropStash, enter, open, pick } = daemo
 // Letting a daemon go keeps what is worth keeping: its cached logs stay in storage under its
 // own prefix, and its unsent drafts, session list and thumbnails wait in `i.stash` for it to
 // open again. Everything else its screens showed (settings, devices, the runner's scrollback)
-// belongs to its connection and is fetched again. Forgetting a daemon throws all of it away, and its push
-// subscription with it; the device's own preferences (device-choices.ts, the appearance) are
-// never the daemon's and are never touched.
+// belongs to its connection and is fetched again. Forgetting a daemon throws all of it away,
+// and its push subscription with it; the device's own preferences (device-choices.ts, the
+// appearance) are never the daemon's and are never touched.
 //
 // The changes run one after another (`serial`), so a second tap on the picker, or a revocation
 // arriving mid-switch, waits for the first to finish instead of interleaving with it.
@@ -177,6 +177,34 @@ const pair = async (
   return true;
 };
 
+// Takes a daemon's pairing, cache and push subscription out of storage and the browser. A write
+// that fails leaves the pairing in storage (`stuck`): the other daemons are still read back to
+// open the next, and the operator is told this one may return after a reload.
+const wipe = async (
+  i: StoreInternals,
+  pairing: Pairing,
+): Promise<{ saved: Pairings | null; stuck: boolean }> => {
+  const { storage, forgetPush } = i.options;
+  const without = (current: Pairings): Pairings => ({
+    active: current.active === pairing.id ? null : current.active,
+    entries: current.entries.filter((e) => e.id !== pairing.id),
+  });
+  let stuck = false;
+  let saved: Pairings | null;
+  try {
+    saved = await pairings.update(storage, without);
+  } catch {
+    stuck = true;
+    const current = await pairings.load(storage).catch(() => null);
+    saved = current === null ? null : without(current);
+  }
+  await storage.clear(pairing.cache).catch(() => null);
+  await storage.remove(pairedBox.storageKey).catch(() => null);
+  await forgetPush?.(pairing.id).catch(() => null);
+  if (pairing.rootPush) await forgetPush?.(null).catch(() => null);
+  return { saved, stuck };
+};
+
 // Forgets a daemon here, the open one unless `target` names another (an Unpair whose daemon a
 // switch let go meanwhile): its pairing, its cached logs, its drafts and its push subscription,
 // then, if nothing else is open, opens the next paired daemon with `reason` as a passing
@@ -194,26 +222,10 @@ const forget = (
   if (i.pairing?.id === pairing.id) leave(i, false);
   dropStash(i, pairing.id);
   return serial(i, async () => {
-    const { storage, forgetPush } = i.options;
-    const without = (current: Pairings): Pairings => ({
-      active: current.active === pairing.id ? null : current.active,
-      entries: current.entries.filter((e) => e.id !== pairing.id),
-    });
-    // A write that fails leaves the pairing in storage: the other daemons are still read back
-    // to open the next, and the operator is told this one may return after a reload.
-    let stuck = false;
-    let saved: Pairings | null;
-    try {
-      saved = await pairings.update(storage, without);
-    } catch {
-      stuck = true;
-      const current = await pairings.load(storage).catch(() => null);
-      saved = current === null ? null : without(current);
-    }
-    await storage.clear(pairing.cache).catch(() => null);
-    await storage.remove(pairedBox.storageKey).catch(() => null);
-    await forgetPush?.(pairing.id).catch(() => null);
-    if (pairing.rootPush) await forgetPush?.(null).catch(() => null);
+    // A switch queued before this step may have opened the daemon being forgotten again, so it
+    // is closed before the wipe and cannot subscribe to push again behind it.
+    if (i.pairing?.id === pairing.id) leave(i, false);
+    const { saved, stuck } = await wipe(i, pairing);
     const stuckNote = `${pairing.name ?? 'The daemon'} could not be forgotten on this device and may be back after a reload.`;
     const shown = stuck ? `${reason ?? ''} ${stuckNote}`.trim() : reason;
     i.state.daemons = i.state.daemons.filter((d) => d.id !== pairing.id);

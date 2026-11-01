@@ -93,12 +93,15 @@ const refreshSessions = (i: StoreInternals): Promise<void> => {
       if (i.link === link) i.state.sessions = sessions;
     } catch (error) {
       reportFor(i, link, error);
-    } finally {
-      i.refreshing = null;
     }
   };
-  i.refreshing = run();
-  return i.refreshing;
+  // Cleared only while it is still the refresh under way: one from a daemon let go finishing
+  // late must not clear the open daemon's.
+  const running = run().finally(() => {
+    if (i.refreshing === running) i.refreshing = null;
+  });
+  i.refreshing = running;
+  return running;
 };
 
 // Stores this device's push subscription on the box. Without `prompt` the browser is only asked
@@ -230,8 +233,9 @@ const onEvent = (i: StoreInternals, event: FluxEvent): void => {
   const receipt = log.receive(event);
   if (receipt === 'applied') logCache.publish(i, log);
   else if (receipt === 'gap') {
+    const link = i.link;
     void syncLog(i, log).catch((error: unknown) => {
-      reportError(i, error);
+      reportFor(i, link, error);
     });
   }
 };

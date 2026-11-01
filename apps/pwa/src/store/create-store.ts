@@ -91,6 +91,7 @@ const saveFile = async (
 ): Promise<SaveOutcome> => {
   const params =
     ifMatch === null ? { session, path, content } : { session, path, content, ifMatch };
+  const link = i.link;
   try {
     const { hash } = await boxLink.call(i, 'fs.write', params);
     boxLink.clearActionError(i);
@@ -99,7 +100,7 @@ const saveFile = async (
     if (error instanceof ClientError && error.code === 'conflict') {
       return { ok: false, conflict: true };
     }
-    boxLink.reportError(i, error);
+    boxLink.reportFor(i, link, error);
     return { ok: false, conflict: false };
   }
 };
@@ -121,12 +122,13 @@ const createHelpSession = async (i: StoreInternals, question: string): Promise<S
 
 // Like boxLink.attempt, for actions whose result the view needs (a sha, a URL).
 const outcome = async <T>(i: StoreInternals, action: () => Promise<T>): Promise<T | null> => {
+  const link = i.link;
   try {
     const result = await action();
     boxLink.clearActionError(i);
     return result;
   } catch (error) {
-    boxLink.reportError(i, error);
+    boxLink.reportFor(i, link, error);
     return null;
   }
 };
@@ -157,13 +159,14 @@ const shellRun = (i: StoreInternals, command: string, cwd?: string): Promise<str
 // The status bar's "Enable notifications": a refusal is an action error with the reason the
 // browser gave; one that says push can never work here takes the offer away for good.
 const enablePush = async (i: StoreInternals): Promise<boolean> => {
+  const link = i.link;
   try {
     return await boxLink.enablePush(i, true);
   } catch (error) {
     if (error instanceof ClientError && error.code === 'push_unsupported') {
       i.state.push = 'unavailable';
     }
-    boxLink.reportError(i, error);
+    boxLink.reportFor(i, link, error);
     return false;
   }
 };

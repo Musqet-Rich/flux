@@ -49,9 +49,9 @@ onMounted(() => {
           prints. That may not be easy to set up again if you are away from that machine.
         </p>
         <p>
-          The cached logs and unsent drafts for {{ name }} are removed from this device. Its own
-          settings, such as the theme, the send key and the sound, are kept, and so are any other
-          daemons it is paired with.
+          The cached logs and unsent drafts for {{ name }} are removed from this device. This
+          device's own settings, such as the theme, the send key and the sound, are kept, and so are
+          any other daemons it is paired with.
         </p>
       </div>
       <div class="actions">

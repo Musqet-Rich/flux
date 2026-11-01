@@ -221,13 +221,13 @@ export interface StoreOptions {
   // is applied before anything is on screen; the store only carries it to the views.
   appearance: Appearance;
   socket: SocketFactory;
-  // Resolves to the browser's PushSubscription JSON for `daemon`'s own service worker (ADR 0037),
-  // so each daemon's pushes arrive and say which daemon they are from. With `prompt` false it must not ask the
-  // user for permission (there is no gesture to ask under) and resolves to null when it cannot
-  // subscribe silently; with `prompt` true it rejects with a `ClientError` whose code says why
-  // (`push_unsupported`, `push_denied`, `push_no_worker`, `push_failed`). Left out where push
-  // can never work (the dev server, a browser without it): `state.push` then stays
-  // `unavailable` and the status bar offers nothing.
+  // Resolves to the browser's PushSubscription JSON for `daemon`'s own service worker (ADR
+  // 0037), so each daemon's pushes arrive and say which daemon they are from. With `prompt`
+  // false it must not ask the user for permission (there is no gesture to ask under) and
+  // resolves to null when it cannot subscribe silently; with `prompt` true it rejects with a
+  // `ClientError` whose code says why (`push_unsupported`, `push_denied`, `push_no_worker`,
+  // `push_failed`). Left out where push can never work (the dev server, a browser without it):
+  // `state.push` then stays `unavailable` and the status bar offers nothing.
   subscribePush?: (vapidPublicKey: string, prompt: boolean, daemon: string) => Promise<unknown>;
   // Lets the push subscription of one daemon go (subscribe-push.ts): the browser forgets it and,
   // for a daemon's own worker, the worker too. Null names the root worker, where the one

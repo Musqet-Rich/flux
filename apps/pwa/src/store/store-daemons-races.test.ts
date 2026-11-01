@@ -146,3 +146,47 @@ test('a tap on a root-worker notification opens the carried-over daemon', async 
   expect(again.state.activeDaemon).toBe(work.id);
   again.stop();
 });
+
+test('a git push in flight when another daemon opens says nothing on the new one', async () => {
+  const { work, hobby, make } = await twoDaemons.setup();
+  const store = make();
+  await store.pair('https://relay.example', work.link);
+  await store.pair('https://relay.example', hobby.link);
+  await store.switchDaemon(work.id);
+  await until(() => store.state.daemon === 'work');
+  work.relay.mute(true);
+  const pushing = store.push('s1');
+  await store.switchDaemon(hobby.id);
+  expect(await pushing).toBeNull();
+  await until(() => store.state.daemon === 'hobby');
+  expect(store.state.error).toBeNull();
+  store.stop();
+});
+
+test('a daemon reopened by a queued switch is let go before its push is forgotten', async () => {
+  const { work, hobby, make } = await twoDaemons.setup();
+  const order: string[] = [];
+  const store = make({
+    subscribePush: (_key, _prompt, id) => {
+      order.push(`subscribe:${id}`);
+      return Promise.resolve({ endpoint: `https://push.example/${id}` });
+    },
+    forgetPush: (id) => {
+      order.push(`forget:${String(id)}`);
+      return Promise.resolve();
+    },
+  });
+  await store.pair('https://relay.example', work.link);
+  await store.pair('https://relay.example', hobby.link);
+  order.splice(0);
+  const toWork = store.switchDaemon(work.id);
+  const backToHobby = store.switchDaemon(hobby.id);
+  const unpairing = store.unpairDevice();
+  await Promise.all([toWork, backToHobby, unpairing]);
+  await until(() => store.state.status === 'connected');
+  expect(store.state.activeDaemon).toBe(work.id);
+  expect(order).toContain(`forget:${hobby.id}`);
+  expect(order.slice(order.indexOf(`forget:${hobby.id}`))).not.toContain(`subscribe:${hobby.id}`);
+  await until(() => hobby.relay.guests() === 0);
+  store.stop();
+});
