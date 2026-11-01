@@ -88,6 +88,8 @@ test('a relative path is the worktree’s: the file is copied in, offered and lo
   const slice = await attachments.read(id, 0, 1024);
   expect(Buffer.from(slice.data, 'base64').toString()).toBe('figures');
   expect(await readdir(join(dir, 's1'))).toEqual([`${id}-report.pdf`]);
+  // Marked sent at its event, like a message's attachment, as well as offered.
+  expect(attachments.get('s1', [id])).toMatchObject([{ offered: true, sentSeq: 1 }]);
 });
 
 test('an absolute path anywhere readable is fine; an image is marked so; a blank note is none', async () => {

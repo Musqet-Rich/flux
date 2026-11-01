@@ -232,7 +232,12 @@ const offer = async (s: Shared, session: string, source: string): Promise<Attach
   const path = inside(s.dir, join(session, `${id}-${safe}`));
   const { size, hash } = await copyOfferedFile(source, path, attachment.limits.offerBytes);
   const mime = mimeFromName(safe);
-  s.sql.insertOffered.run(id, session, safe, mime, size, hash, s.now().toISOString());
+  try {
+    s.sql.insertOffered.run(id, session, safe, mime, size, hash, s.now().toISOString());
+  } catch (error) {
+    await rm(path, { force: true });
+    throw error;
+  }
   return s.record(id);
 };
 

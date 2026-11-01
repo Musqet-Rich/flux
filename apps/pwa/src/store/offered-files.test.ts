@@ -64,6 +64,14 @@ test('a refused read rejects, for the card to show; nothing lands in the status 
   store.stop();
 });
 
+test('a file that ends short of its size is refused, not saved truncated', async () => {
+  const { store } = await box();
+  await expect(
+    store.fetchAttachment({ ...report, size: bytes.length + 10, image: false }),
+  ).rejects.toThrow(`report.pdf ended after ${bytes.length} of ${bytes.length + 10} bytes`);
+  store.stop();
+});
+
 test('an offered image gets a thumbnail like a sent one; other offered files do not', async () => {
   const { store, calls } = await box();
   store.loadThumbnails('s1', [

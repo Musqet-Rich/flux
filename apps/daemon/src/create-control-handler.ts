@@ -20,7 +20,7 @@ import { managerControl } from './manager-control.ts';
 
 export interface ControlHandlerOptions extends ManagerControlOptions {
   asks: AskRegistry;
-  attachments: Pick<AttachmentStore, 'offer' | 'remove'>;
+  attachments: Pick<AttachmentStore, 'offer' | 'remove' | 'markSent'>;
   pairingUrl: () => string;
   revokeDevice: (deviceId: string) => Promise<void>;
   askTimeoutMs?: number;
@@ -37,8 +37,11 @@ const sourcePath = (worktree: string, path: string): string =>
 
 // The copy is taken first and the event logged after; a log that refuses the row takes the copy
 // back out, so no file sits on the box that no event names. Only the append is guarded: once the
-// row is in the log the file must stay, whatever the broadcast does. The agent gets the shape the
-// device sees, so its tool result can say what it offered.
+// row is in the log the file must stay, whatever the broadcast does; a rollback that fails too
+// reports the append's error, the one that matters. The row is then marked sent at the event's
+// seq, as a message's attachments are, so even a sweep that predates the `offered` mark (an older
+// daemon run on this database) sees a sent file and keeps it. The agent gets the shape the device
+// sees, so its tool result can say what it offered.
 const offer = async (
   options: ControlHandlerOptions,
   worktree: string,
@@ -53,9 +56,10 @@ const offer = async (
   try {
     logged = options.log.append(request.session, { type: 'file.offered', payload });
   } catch (error) {
-    await options.attachments.remove(id);
+    await options.attachments.remove(id).catch(() => null);
     throw error;
   }
+  options.attachments.markSent([id], logged.seq);
   options.emit(logged);
   return { attachment: shown };
 };

@@ -46,6 +46,7 @@ const setup = () => {
     attachments: {
       offer: () => Promise.reject(new Error('unused')),
       remove: () => Promise.resolve(),
+      markSent: () => {},
     },
     supervisor: () => supervisor,
     emit: () => {},

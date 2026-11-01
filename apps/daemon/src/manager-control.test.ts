@@ -80,6 +80,7 @@ const setup = (agents: AgentSpec[] = []) => {
     attachments: {
       offer: () => Promise.reject(new Error('unused')),
       remove: () => Promise.resolve(),
+      markSent: () => {},
     },
     supervisor: fakeSupervisor(sends),
     emit: (e) => {

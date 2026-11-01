@@ -2,6 +2,7 @@ import type { Attachment, FluxEvent } from '@flux/protocol';
 import { attachment, fluxEvent } from '@flux/protocol';
 
 import { base64 } from '../client/base64.ts';
+import { ClientError } from '../client/client-error.ts';
 import { uploadAttachment } from '../client/upload-attachment.ts';
 import { boxLink } from './box-link.ts';
 import type { ComposerDraft, PendingAttachment, StoreInternals } from './store-state.ts';
@@ -133,7 +134,9 @@ const ready = (i: StoreInternals, session: string): string[] =>
     .attachments.map((a) => (a.status === 'ready' ? a.id : null))
     .filter((id) => id !== null);
 
-// The whole file in `attach.read` pages, one after the other, as a Blob of its type.
+// The whole file in `attach.read` pages, one after the other, as a Blob of its type. A file that
+// ends short of the size it was logged with (its copy cut short on the box) is refused rather
+// than saved truncated.
 const fetchBlob = async (
   i: StoreInternals,
   a: Attachment,
@@ -156,6 +159,9 @@ const fetchBlob = async (
     await page();
   };
   await page();
+  if (offset < a.size) {
+    throw new ClientError('internal', `${a.name} ended after ${offset} of ${a.size} bytes`);
+  }
   return new Blob(parts, { type: a.mime });
 };
 
