@@ -4,10 +4,11 @@ import { fluxEvent, guards, protocolVersion } from '@flux/protocol';
 import { ClientError } from '../client/client-error.ts';
 import type { Connection, ConnectionOptions } from '../client/create-connection.ts';
 import type { SessionLog } from '../client/create-session-log.ts';
-import { pairedBox } from '../client/paired-box.ts';
 import { syncSession } from '../client/sync-session.ts';
 import { deviceChoices } from './device-choices.ts';
 import { logCache } from './log-cache.ts';
+import type { Pairing } from './pairings.ts';
+import { pairings } from './pairings.ts';
 import { storeErrors } from './store-errors.ts';
 import type { ErrorKind, LogView, StoreInternals } from './store-state.ts';
 
@@ -17,42 +18,24 @@ import type { ErrorKind, LogView, StoreInternals } from './store-state.ts';
 
 type LinkOptions = Omit<ConnectionOptions, 'relayUrl' | 'keys' | 'boxPub'>;
 
+// While the open daemon no longer knows this device (`state.unknownDevice`, ADR 0037) the banner
+// says so, with its Forget; each call it refuses would only say the same again.
 const reportError = (i: StoreInternals, error: unknown, kind: ErrorKind = 'action'): void => {
+  const refused = error instanceof ClientError && error.code === 'not_paired';
+  if (refused && i.state.unknownDevice !== null) return;
   storeErrors.report(i, error, kind);
 };
 const clearError = storeErrors.clear;
 const clearActionError = storeErrors.clearAction;
 
-// Forgets the box: the stored keys go, the connection stops, and the app lands on the pair
-// screen with `reason` as the error. Used when the box says this device is no longer paired.
-const unpair = async (i: StoreInternals, reason: string): Promise<void> => {
-  i.connection?.stop();
-  i.connection = null;
-  i.sync = null;
-  i.deviceId = null;
-  i.logs.clear();
-  logCache.cancelWrites(i);
-  i.state.logs = {};
-  i.state.sessions = [];
-  i.state.devices = [];
-  i.state.settings = null;
-  i.state.skills = null;
-  i.state.daemon = null;
-  i.state.daemonVersion = null;
-  i.state.update = { target: null, phase: null, failed: null };
-  i.state.updateCheck = null;
-  i.state.phase = 'unpaired';
-  reportError(i, reason, 'connection');
-  // The keys, then the old box's cached logs: another box's session ids must not collide.
-  await i.options.storage.remove(pairedBox.storageKey).catch(() => {
-    // Nothing to do: the keys are already out of memory and the next boot re-reads storage.
-  });
-  await i.options.storage.clear('log:').catch(() => {
-    // A stale cache costs a sync after the next pairing, nothing more.
-  });
-};
+// The box says this device is no longer paired: the open daemon is forgotten (daemon-switch.ts),
+// and another paired one opens with `reason` shown, or the app lands on the pair screen with it.
+const unpair = (i: StoreInternals, reason: string): Promise<void> => i.forget(reason);
 
-const revokedReason = 'This device is no longer paired with the box. Pair it again to continue.';
+// Named, since with several daemons paired (ADR 0037) the one that let go may not be the one
+// the app opens next.
+const revokedReason = (i: StoreInternals): string =>
+  `This device is no longer paired with ${i.state.daemon ?? i.pairing?.name ?? 'the daemon'}. Pair it again to continue.`;
 
 const call = async <M extends keyof RpcMethods>(
   i: StoreInternals,
@@ -63,23 +46,39 @@ const call = async <M extends keyof RpcMethods>(
   try {
     return await i.connection.call(method, params);
   } catch (error) {
-    // Only a box that has forgotten this device answers not_paired after pairing; the caller
-    // reports the reason the pair screen shows, not the box's terse message.
+    // Only a box that has forgotten this device answers not_paired after pairing. The pairing
+    // is not forgotten here on the box's word alone (ADR 0037): the open daemon is marked, and
+    // the banner offers the operator its Forget.
     if (!(error instanceof ClientError) || error.code !== 'not_paired') throw error;
-    await unpair(i, revokedReason);
-    throw new ClientError('not_paired', revokedReason);
+    i.state.unknownDevice = 'not_paired';
+    throw new ClientError('not_paired', revokedReason(i));
   }
 };
 
 // Runs an action for a view: a failure lands in `state.error` for the status bar and the view
 // gets false, never a rejection to handle. A success takes a previous action's failure with it.
+// A failure is shown only while the daemon it came from is still the open one: letting a
+// daemon go stops its connection, which rejects what it had in flight with "stopped", and that
+// is not news about the daemon opened instead (ADR 0037).
+const reportFor = (
+  i: StoreInternals,
+  link: object | null,
+  error: unknown,
+  kind: ErrorKind = 'action',
+): void => {
+  if (i.link === link) reportError(i, error, kind);
+};
+
 const attempt = async (i: StoreInternals, action: () => Promise<unknown>): Promise<boolean> => {
+  const link = i.link;
   try {
     await action();
-    storeErrors.clearAction(i);
+    // An action that ended by opening another daemon (removing this device from the open one)
+    // leaves what that switch said on screen.
+    if (i.link === link) storeErrors.clearAction(i);
     return true;
   } catch (error) {
-    reportError(i, error);
+    reportFor(i, link, error);
     return false;
   }
 };
@@ -93,37 +92,85 @@ const syncLog = async (i: StoreInternals, log: SessionLog): Promise<void> => {
 
 const refreshSessions = (i: StoreInternals): Promise<void> => {
   if (i.refreshing !== null) return i.refreshing;
+  const link = i.link;
   const run = async (): Promise<void> => {
     try {
-      i.state.sessions = await call(i, 'sessions.list', {});
+      const sessions = await call(i, 'sessions.list', {});
+      if (i.link === link) i.state.sessions = sessions;
     } catch (error) {
-      reportError(i, error);
-    } finally {
-      i.refreshing = null;
+      reportFor(i, link, error);
     }
   };
-  i.refreshing = run();
-  return i.refreshing;
+  // Cleared only while it is still the refresh under way: one from a daemon let go finishing
+  // late must not clear the open daemon's.
+  const running = run().finally(() => {
+    if (i.refreshing === running) i.refreshing = null;
+  });
+  i.refreshing = running;
+  return running;
 };
 
 // Stores this device's push subscription on the box. Without `prompt` the browser is only asked
 // for a subscription it can give silently (permission already granted); a tap on "Enable
 // notifications" calls this with `prompt` so the permission dialog has a gesture behind it.
 // `state.push` becomes `on` only once the box has the subscription, so a refusal is retried.
+// Each daemon's subscription is on a service worker of its own (ADR 0037). The pairing carried
+// over from before kept its subscription on the root worker; once its own is on the box, the old
+// one is let go, so the box's next push to it finds it gone and drops it.
 const enablePush = async (i: StoreInternals, prompt: boolean): Promise<boolean> => {
   const { subscribePush } = i.options;
   const key = i.vapidPublicKey;
+  const { pairing, link } = i;
   if (i.state.push === 'on' || key === null || subscribePush === undefined) return false;
-  const subscription = await subscribePush(key, prompt);
+  if (pairing === null) return false;
+  const subscription = await subscribePush(key, prompt, pairing.id);
+  // Another daemon opened while the worker registered or the permission prompt waited: this
+  // subscription is for the daemon let go, and must not be stored on the one now open.
+  if (i.link !== link) return false;
   if (!guards.isRecord(subscription)) return false;
   await call(i, 'push.subscribe', { subscription });
   i.state.push = 'on';
+  if (pairing.rootPush) await moveRootPush(i, pairing.id);
   return true;
 };
 
+// Best effort: a failed write is tried again on the next connect.
+const savePairing = async (
+  i: StoreInternals,
+  id: string,
+  change: Partial<Pick<Pairing, 'name' | 'rootPush'>>,
+): Promise<void> => {
+  await pairings
+    .update(i.options.storage, (current) => ({
+      ...current,
+      entries: current.entries.map((e) => (e.id === id ? { ...e, ...change } : e)),
+    }))
+    .catch(() => null);
+};
+
+const moveRootPush = async (i: StoreInternals, id: string): Promise<void> => {
+  await i.options.forgetPush?.(null).catch(() => null);
+  if (i.pairing?.id === id) i.pairing.rootPush = false;
+  await savePairing(i, id, { rootPush: false });
+};
+
+// The daemon's name names it in the picker, so a rename on the box shows on the next connect.
+const recordName = async (i: StoreInternals, name: string): Promise<void> => {
+  const pairing = i.pairing;
+  if (pairing === null || pairing.name === name) return;
+  pairing.name = name;
+  const choice = i.state.daemons.find((d) => d.id === pairing.id);
+  if (choice !== undefined) choice.name = name;
+  await savePairing(i, pairing.id, { name });
+};
+
 const afterConnect = async (i: StoreInternals): Promise<void> => {
+  const link = i.link;
   const hello = await call(i, 'hello', { protocol: protocolVersion });
+  // Switched to another daemon while hello was on its way: this one's answer is not for screen.
+  if (i.link !== link) return;
   i.state.daemon = hello.daemon;
+  void recordName(i, hello.daemon);
   i.state.daemonVersion = hello.version ?? null;
   i.state.home = hello.home ?? null;
   // A self-update succeeded when the box comes back on the version we asked it to install: the
@@ -133,8 +180,11 @@ const afterConnect = async (i: StoreInternals): Promise<void> => {
   }
   i.state.sessions = hello.sessions;
   i.state.agents = hello.agents ?? ['claude'];
-  // Back in touch with the box: whatever the outage said is over.
-  storeErrors.clear(i);
+  // Back in touch with the box, and it knows this device: whatever the outage said is over. A
+  // failed action's message keeps its own few seconds (a pairing that failed while this daemon
+  // was opened again).
+  i.state.unknownDevice = null;
+  storeErrors.clearConnection(i);
   i.vapidPublicKey = hello.vapidPublicKey ?? null;
   // Push is on offer once the box has a key, unless this page can never subscribe.
   const offerPush = i.vapidPublicKey !== null && i.options.subscribePush !== undefined;
@@ -191,8 +241,9 @@ const onEvent = (i: StoreInternals, event: FluxEvent): void => {
   const receipt = log.receive(event);
   if (receipt === 'applied') logCache.publish(i, log);
   else if (receipt === 'gap') {
+    const link = i.link;
     void syncLog(i, log).catch((error: unknown) => {
-      reportError(i, error);
+      reportFor(i, link, error);
     });
   }
 };
@@ -239,7 +290,7 @@ const onShellExit = (
 
 const onEphemeral = (i: StoreInternals, data: Ephemeral): void => {
   if (data.type === 'device.revoked') {
-    if (data.deviceId === i.deviceId) void unpair(i, revokedReason);
+    if (data.deviceId === i.deviceId) void unpair(i, revokedReason(i));
     return;
   }
   // The command-runner notices are session-less (ADR 0026): output accumulates on its run, exit
@@ -273,43 +324,58 @@ const onEphemeral = (i: StoreInternals, data: Ephemeral): void => {
 
 const onStatus = (i: StoreInternals, status: StoreInternals['state']['status']): void => {
   i.state.status = status;
+  // The relay says the daemon is not there after all: it is away, not one that ignores us.
+  if (status === 'no_host' && i.state.unknownDevice === 'unanswered') i.state.unknownDevice = null;
   // While pairing, the caller runs afterConnect once pair.request has been accepted; a hello
   // before that would be refused as not_paired.
   if (status === 'connected' && i.state.phase === 'paired') {
+    const link = i.link;
     void afterConnect(i).catch((error: unknown) => {
-      reportError(i, error, 'connection');
+      reportFor(i, link, error, 'connection');
     });
   }
 };
 
-const options = (i: StoreInternals): LinkOptions => {
-  const { minBackoffMs, maxBackoffMs } = i.options;
+// The callbacks of one connection, live only while `link` is the adopted one (`i.link`): a
+// pairing under way beside the open daemon, or a daemon being switched away from, cannot touch
+// the state the open daemon's screens are showing.
+const options = (i: StoreInternals, link: object): LinkOptions => {
+  const { minBackoffMs, maxBackoffMs, handshakeTimeoutMs } = i.options;
+  const live = (): boolean => i.link === link;
   return {
     socket: i.options.socket,
     onEvent: (event) => {
-      onEvent(i, event);
+      if (live()) onEvent(i, event);
     },
     onEphemeral: (data) => {
-      onEphemeral(i, data);
+      if (live()) onEphemeral(i, data);
     },
     onStatus: (status) => {
-      onStatus(i, status);
+      if (live()) onStatus(i, status);
     },
     onError: (error) => {
-      reportError(i, error, 'connection');
+      if (!live()) return;
+      // A box that never answers this device has most likely forgotten it (create-connection.ts):
+      // the banner says so rather than the status bar (ADR 0037).
+      if (error.code === 'unanswered') i.state.unknownDevice = 'unanswered';
+      else reportError(i, error, 'connection');
     },
     ...(minBackoffMs === undefined ? {} : { minBackoffMs }),
     ...(maxBackoffMs === undefined ? {} : { maxBackoffMs }),
+    ...(handshakeTimeoutMs === undefined ? {} : { handshakeTimeoutMs }),
   };
 };
 
-// Takes the connection boot or pairing made, and reads the device's own preferences once,
-// here rather than on every connect so a choice being saved is not overwritten by a reconnect.
-// The read comes first: nothing is handled until adoption is complete (onEvent's guard).
-const adopt = async (i: StoreInternals, connection: Connection): Promise<void> => {
+// Takes the connection boot, a switch or pairing made, and reads the device's own preferences
+// once, here rather than on every connect so a choice being saved is not overwritten by a
+// reconnect. The read comes first: nothing is handled until adoption is complete (onEvent's
+// guard). From here `link`'s callbacks are the live ones, and the status is the connection's.
+const adopt = async (i: StoreInternals, connection: Connection, link: object): Promise<void> => {
   await deviceChoices.load(i);
   i.connection = connection;
+  i.link = link;
   i.sync = syncSession(connection.call);
+  i.state.status = connection.status();
 };
 
 export const boxLink: {
@@ -320,6 +386,7 @@ export const boxLink: {
   refreshSessions: typeof refreshSessions;
   enablePush: typeof enablePush;
   reportError: typeof reportError;
+  reportFor: typeof reportFor;
   clearError: typeof clearError;
   clearActionError: typeof clearActionError;
   attempt: typeof attempt;
@@ -333,6 +400,7 @@ export const boxLink: {
   refreshSessions,
   enablePush,
   reportError,
+  reportFor,
   clearError,
   clearActionError,
   attempt,

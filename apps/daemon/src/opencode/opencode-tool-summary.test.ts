@@ -19,6 +19,9 @@ test('start summaries name the tool and its salient argument', () => {
   expect(opencodeToolSummary.start('flux_notify', { level: 'done', summary: 'built' }, cwd)).toBe(
     'notify done: built',
   );
+  expect(opencodeToolSummary.start('flux_file_send', { path: 'report.pdf' }, cwd)).toBe(
+    'offer file report.pdf',
+  );
   expect(opencodeToolSummary.start('webfetch', {}, cwd)).toBe('webfetch');
 });
 

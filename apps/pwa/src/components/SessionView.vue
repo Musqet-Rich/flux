@@ -11,14 +11,15 @@ import SessionTimeline from './SessionTimeline.vue';
 import SessionToolbar from './SessionToolbar.vue';
 
 // One session: its toolbar (SessionToolbar), the agents strip while it has a task row (a lone
-// `main` says nothing the toolbar does not), the timeline of the open chat (SessionTimeline:
-// main's or one subagent's rows, the streaming reply, the agent's open question) and the
-// composer, or on a subagent's chat the note that messages go to main. The store owns the data
-// and reports failures; this only renders and dispatches.
+// `main` says nothing the toolbar does not; folded to one line if the operator folded it), the
+// timeline of the open chat (SessionTimeline: main's or one subagent's rows, the streaming
+// reply, the agent's open question) and the composer, or on a subagent's chat the note that
+// messages go to main. The store owns the data and reports failures; this only renders and
+// dispatches.
 
 // `pane`: the element beside the chat on a wide screen (ADR 0033), whose keys are its own.
 const props = defineProps<{ store: Store; session: string; pane?: HTMLElement | null }>();
-defineEmits<{ changes: []; files: []; closed: [] }>();
+defineEmits<{ changes: []; closed: [] }>();
 
 const list = ref<InstanceType<typeof SessionTimeline> | null>(null);
 const composer = ref<InstanceType<typeof Composer> | null>(null);
@@ -70,6 +71,14 @@ const onMain = computed(() => view.value === null);
 // running /compact turn on main with no boundary logged yet (useSessionTimeline).
 const compacting = computed(() => busy.value && onMain.value && awaitingCompaction.value);
 const ended = ref(false);
+// One Stop on screen while the agent runs: the composer's send button when the box is empty,
+// else the toolbar's, so a draft or a subagent's chat (which has no composer) never hides it.
+const toolbarStop = computed(() => busy.value && composer.value?.stoppable !== true);
+// The agents strip folded to one line, remembered per session on this device.
+const folded = computed(() => props.store.state.foldedStrips.includes(props.session));
+const fold = (next: boolean): void => {
+  void props.store.setStripFolded(props.session, next);
+};
 // Replies go with the composer, which main alone has; a subagent's chat has none to reply from.
 const pick = (seq: number): void => {
   if (onMain.value) startReply(seq);
@@ -103,7 +112,7 @@ const answer = (text: string): void => {
 const interrupt = (): void => {
   void props.store.interrupt(props.session);
 };
-// Esc stops the agent as the toolbar's Stop does, from anywhere on the screen, the composer
+// Esc stops the agent as the Stop button does, from anywhere on the screen, the composer
 // included, so a turn going wrong is one key away. Whatever is open and closes on Escape (a
 // menu, the slash list, the help modal, the Rename…/Delete… forms, the image overlay) marks
 // the key consumed, and that one only closes it: this listens on the window, so theirs, on
@@ -158,10 +167,9 @@ watch(
       :store="store"
       :session="session"
       :events="events"
-      :busy="busy"
+      :stoppable="toolbarStop"
       @interrupt="interrupt"
       @changes="$emit('changes')"
-      @files="$emit('files')"
       @closed="$emit('closed')"
     />
     <AgentStrip
@@ -169,7 +177,9 @@ watch(
       :tasks="strip"
       :active="view"
       :busy="busy"
+      :folded="folded"
       @select="select"
+      @fold="fold"
     />
     <SessionTimeline
       ref="list"
@@ -177,6 +187,7 @@ watch(
       :earlier="earlier"
       :quote-of="quoteOf"
       :thumbs="thumbs"
+      :fetch-file="store.fetchAttachment"
       :on-main="onMain"
       :streaming="streaming"
       :thinking="thinkingText"
@@ -198,8 +209,10 @@ watch(
       :comments="comments"
       :reply="reply"
       :hint="focusHint"
+      :busy="busy"
       @sent="catchUp"
       @unreply="cancelReply"
+      @interrupt="interrupt"
       @resized="keep"
     />
     <div v-else class="aside">

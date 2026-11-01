@@ -4,7 +4,8 @@ import { afterEach, expect, test, vi } from 'vitest';
 import { icons } from '../icons/icons.ts';
 import { renderMarkdown } from './render-markdown.ts';
 
-const render = (text: string) => mount({ render: () => renderMarkdown(text) });
+const render = (text: string, options: { attachTo?: HTMLElement } = {}) =>
+  mount({ render: () => renderMarkdown(text) }, options);
 
 // Selector → text for each element expected, in document order, plus the html for injection.
 const cases: [string, string, [string, string][]][] = [
@@ -125,7 +126,7 @@ const classAllowed: Record<string, RegExp> = {
   DIV: /^(markdown|code-block)$/u,
   P: /^heading h[123]$/u,
   PRE: /^open$/u,
-  CODE: /^language-[\w+#.-]+$/u,
+  CODE: /^(language-[\w+#.-]+|copyable)$/u,
   // The resting face: no probe taps the button.
   BUTTON: /^icon-only copy$/u,
   svg: /^icon$/u,
@@ -148,6 +149,13 @@ const fixedAllowed: Record<string, Record<string, (value: string) => boolean>> =
   },
   path: { d: (v) => iconPaths.has(v) },
   SPAN: { role: (v) => v === 'status' },
+  // Inline code is its own Copy button (InlineCode.vue), at rest.
+  CODE: {
+    role: (v) => v === 'button',
+    tabindex: (v) => v === '0',
+    title: (v) => v === 'Copy',
+    'aria-description': (v) => v === 'Copy',
+  },
 };
 const attributesAllowed = (el: Element): boolean =>
   [...el.attributes].every(({ name, value }) => {
@@ -220,6 +228,79 @@ test('two fences copy their own bodies', async () => {
   expect(buttons.map((b) => b.attributes('aria-label'))).toEqual(['Copy code', 'Copy sh code']);
   await buttons[1]?.trigger('click');
   expect(writeText).toHaveBeenCalledWith('two');
+  wrapper.unmount();
+});
+
+// Inline code copies its own text on a tap or a key, flashes the outcome, then rests again.
+test('inline code copies on a tap and on Enter', async () => {
+  vi.useFakeTimers();
+  const writeText = vi.fn<() => Promise<void>>(() => Promise.resolve());
+  Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+  const wrapper = render('run `pnpm i` then `vp check`');
+  const spans = wrapper.findAll('code.copyable');
+  expect(spans.map((c) => c.text())).toEqual(['pnpm i', 'vp check']);
+  await spans[1]?.trigger('click');
+  expect(writeText).toHaveBeenLastCalledWith('vp check');
+  await vi.waitFor(() => {
+    expect(spans[1]?.classes()).toContain('copied');
+  });
+  expect(wrapper.findAll('[role="status"]').map((s) => s.text())).toEqual(['', 'Copied']);
+  await spans[0]?.trigger('keydown', { key: 'Enter' });
+  expect(writeText).toHaveBeenLastCalledWith('pnpm i');
+  await vi.waitFor(() => {
+    expect(spans[0]?.classes()).toContain('copied');
+  });
+  vi.advanceTimersByTime(1500);
+  await wrapper.vm.$nextTick();
+  expect(wrapper.findAll('code.copied')).toHaveLength(0);
+  wrapper.unmount();
+});
+
+test('a refused clipboard shows the failure', async () => {
+  const writeText = vi.fn<() => Promise<void>>(() => Promise.reject(new Error('denied')));
+  Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+  const wrapper = render('`x`');
+  await wrapper.find('code').trigger('click');
+  await vi.waitFor(() => {
+    expect(wrapper.find('code').classes()).toContain('failed');
+  });
+  expect(wrapper.find('code').attributes('title')).toBe('Copy failed');
+  expect(wrapper.find('[role="status"]').text()).toBe('Copy failed');
+  wrapper.unmount();
+});
+
+// Selecting part of a span by dragging is a selection, not a tap.
+test('a drag that selects inside the span copies nothing', async () => {
+  const writeText = vi.fn<() => Promise<void>>(() => Promise.resolve());
+  Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+  const wrapper = render('`abcdef`', { attachTo: document.body });
+  const text = wrapper.find('code').element.firstChild as Node;
+  window.getSelection()?.setBaseAndExtent(text, 1, text, 3);
+  await wrapper.find('code').trigger('click');
+  expect(writeText).not.toHaveBeenCalled();
+  window.getSelection()?.removeAllRanges();
+  wrapper.unmount();
+});
+
+// In a link the tap opens the link, so the code there is plain.
+test('code inside a link is not a copy button', () => {
+  const wrapper = render('[see `x`](https://x/) and `y`');
+  expect(wrapper.find('a code').attributes('role')).toBeUndefined();
+  expect(wrapper.findAll('code.copyable').map((c) => c.text())).toEqual(['y']);
+  wrapper.unmount();
+});
+
+test('Space copies; a held key, a modified key and a double-click do not', async () => {
+  const writeText = vi.fn<() => Promise<void>>(() => Promise.resolve());
+  Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+  const wrapper = render('`x`');
+  const code = wrapper.find('code');
+  await code.trigger('keydown', { key: ' ' });
+  await code.trigger('keydown', { key: ' ', repeat: true });
+  await code.trigger('keydown', { key: 'Enter', repeat: true });
+  await code.trigger('click', { detail: 2 });
+  await code.trigger('keydown', { key: 'Enter', ctrlKey: true });
+  expect(writeText).toHaveBeenCalledTimes(1);
   wrapper.unmount();
 });
 

@@ -1,15 +1,21 @@
 <script setup lang="ts">
 import type { SessionSummary } from '@flux/protocol';
 
+import type { Store } from '../store/create-store.ts';
 import type { SwitchKey } from '../store/store-state.ts';
+import DaemonPicker from './DaemonPicker.vue';
 import Icon from './Icon.vue';
 import SessionTabs from './SessionTabs.vue';
+import UnknownDevice from './UnknownDevice.vue';
 
-// The bar above every screen: the session tabs, then the command runner, help and settings
-// buttons. Its own component so Shell keeps its dependency budget; `screen` is the route name,
-// so the runner and settings buttons can show which of them is open.
+// The bar above every screen: the daemon picker once two daemons are paired (ADR 0037), the
+// session tabs, then the command runner, help and settings buttons; under it, the banner for an
+// open daemon that no longer knows this device. Its own component so Shell keeps its dependency
+// budget; `screen` is the route name, so the runner and settings buttons can show which of them
+// is open.
 
 defineProps<{
+  store: Store;
   sessions: SessionSummary[];
   active: string | null;
   chord: SwitchKey;
@@ -20,6 +26,7 @@ defineEmits<{ select: [session: string]; create: []; runner: []; help: []; setti
 
 <template>
   <header class="top">
+    <DaemonPicker :store="store" />
     <SessionTabs
       :sessions="sessions"
       :active="active"
@@ -57,6 +64,7 @@ defineEmits<{ select: [session: string]; create: []; runner: []; help: []; setti
       <Icon name="settings" />
     </button>
   </header>
+  <UnknownDevice :store="store" />
 </template>
 
 <style scoped>
@@ -69,7 +77,8 @@ defineEmits<{ select: [session: string]; create: []; runner: []; help: []; setti
   padding-top: env(safe-area-inset-top);
 }
 
-.top > :first-child {
+/* SessionTabs' root, `nav.tabs`, takes the room the buttons leave. */
+.tabs {
   flex: 1;
   min-width: 0;
 }

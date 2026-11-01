@@ -178,10 +178,15 @@ watch(
   background: var(--ok);
 }
 
+/* Tabular digits, room for two of them: a count ticking up in a busy session would otherwise
+   change the tab's width with every event and shake every tab after it. It widens only on
+   reaching a hundred. `ch` is the width of a zero in the pill's own font, which with tabular
+   figures is every digit's. */
 .unread {
   flex: none;
-  min-width: 1.1rem;
+  min-width: 2ch;
   padding: 0 0.3rem;
+  font-variant-numeric: tabular-nums;
   border-radius: 0.55rem;
   background: var(--accent);
   color: var(--accent-fg);

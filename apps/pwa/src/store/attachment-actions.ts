@@ -1,7 +1,8 @@
-import type { Attachment, FluxEvent } from '@flux/protocol';
+import type { Attachment, FluxEvent, RpcMethods } from '@flux/protocol';
 import { attachment, fluxEvent } from '@flux/protocol';
 
 import { base64 } from '../client/base64.ts';
+import { ClientError } from '../client/client-error.ts';
 import { uploadAttachment } from '../client/upload-attachment.ts';
 import { boxLink } from './box-link.ts';
 import type { ComposerDraft, PendingAttachment, StoreInternals } from './store-state.ts';
@@ -10,8 +11,9 @@ import type { ComposerDraft, PendingAttachment, StoreInternals } from './store-s
 // composer starts uploading at once; its chip follows `state.composers[session].attachments`,
 // which outlives the composer, so leaving the session and coming back keeps the draft. The
 // `File` objects and the in-flight state stay off the reactive state, in the internals.
-// Thumbnails of sent images are fetched with `attach.read` and kept as blob URLs per session
-// until `leave`.
+// Thumbnails of sent images, and of images the agent offered (`file.offered`, ADR 0036), are
+// fetched with `attach.read` and kept as blob URLs per session until `leave`. A file the agent
+// offered is fetched whole the same way when the operator taps Download or Share.
 
 export interface AttachmentActions {
   // The composer's draft for a session, created empty on first use.
@@ -19,8 +21,12 @@ export interface AttachmentActions {
   attach: (session: string, files: File[]) => void;
   removeAttachment: (session: string, key: string) => void;
   retryAttachment: (session: string, key: string) => void;
-  // Fetches the thumbnails of every image attached to a `msg.user` among `rows`, once each.
+  // Fetches the thumbnails of every image attached to a `msg.user` or offered in a
+  // `file.offered` among `rows`, once each.
   loadThumbnails: (session: string, rows: readonly FluxEvent[]) => void;
+  // The whole of a stored file as a Blob of its type, `onProgress` told the fraction fetched
+  // after each page. Rejects on failure; the caller shows it (nothing goes to `state.error`).
+  fetchAttachment: (a: Attachment, onProgress?: (fraction: number) => void) => Promise<Blob>;
   // Drops the session's thumbnails (the blob URLs are revoked).
   leave: (session: string) => void;
 }
@@ -33,9 +39,21 @@ const composer = (i: StoreInternals, session: string): ComposerDraft => {
   return i.state.composers[session] ?? { text: '', attachments: [] };
 };
 
+// A call on the connection an upload started on (ADR 0037): once another daemon is open, the
+// upload's ids mean nothing there, so its remaining calls fail rather than reach that daemon.
+const boundCall = <M extends keyof RpcMethods>(
+  i: StoreInternals,
+  method: M,
+  params: RpcMethods[M]['params'],
+  link: object | null = i.link,
+): Promise<RpcMethods[M]['result']> =>
+  i.link === link
+    ? boxLink.call(i, method, params)
+    : Promise.reject(new ClientError('offline', 'Another daemon was opened.'));
+
 // Best effort: the box sweeps what this misses (create-attachment-store.ts).
-const discard = (i: StoreInternals, id: string): void => {
-  void boxLink.call(i, 'attach.delete', { attachmentId: id }).catch(() => null);
+const discard = (i: StoreInternals, id: string, link: object | null = i.link): void => {
+  void boundCall(i, 'attach.delete', { attachmentId: id }, link).catch(() => null);
 };
 
 const run = async (i: StoreInternals, session: string, entry: PendingAttachment): Promise<void> => {
@@ -45,9 +63,10 @@ const run = async (i: StoreInternals, session: string, entry: PendingAttachment)
   entry.progress = 0;
   entry.error = null;
   entry.id = null;
+  const link = i.link;
   try {
     entry.id = await uploadAttachment({
-      call: (method, params) => boxLink.call(i, method, params),
+      call: (method, params) => boundCall(i, method, params, link),
       session,
       file,
       onBegun: (id) => {
@@ -59,10 +78,10 @@ const run = async (i: StoreInternals, session: string, entry: PendingAttachment)
       cancelled: () => !i.files.has(entry.key),
     });
     // Removed while `attach.end` was in flight: the box has a file nobody will send.
-    if (!i.files.has(entry.key)) discard(i, entry.id);
+    if (!i.files.has(entry.key)) discard(i, entry.id, link);
     entry.status = 'ready';
   } catch (error) {
-    if (entry.id !== null) discard(i, entry.id);
+    if (entry.id !== null) discard(i, entry.id, link);
     entry.id = null;
     entry.status = 'failed';
     entry.error = error instanceof Error ? error.message : String(error);
@@ -128,8 +147,14 @@ const ready = (i: StoreInternals, session: string): string[] =>
     .attachments.map((a) => (a.status === 'ready' ? a.id : null))
     .filter((id) => id !== null);
 
-// The whole file in `attach.read` pages, then a blob URL for the `<img>`.
-const fetchThumb = async (i: StoreInternals, a: Attachment): Promise<string> => {
+// The whole file in `attach.read` pages, one after the other, as a Blob of its type. A file that
+// ends short of the size it was logged with (its copy cut short on the box) is refused rather
+// than saved truncated.
+const fetchBlob = async (
+  i: StoreInternals,
+  a: Attachment,
+  onProgress: (fraction: number) => void,
+): Promise<Blob> => {
   const parts: Uint8Array<ArrayBuffer>[] = [];
   let offset = 0;
   const page = async (): Promise<void> => {
@@ -143,18 +168,31 @@ const fetchThumb = async (i: StoreInternals, a: Attachment): Promise<string> => 
     if (bytes.length === 0) return;
     parts.push(bytes);
     offset += bytes.length;
+    onProgress(a.size === 0 ? 1 : Math.min(1, offset / a.size));
     await page();
   };
   await page();
-  return URL.createObjectURL(new Blob(parts, { type: a.mime }));
+  if (offset < a.size) {
+    throw new ClientError('internal', `${a.name} ended after ${offset} of ${a.size} bytes`);
+  }
+  return new Blob(parts, { type: a.mime });
+};
+
+const ignore = (): void => {};
+
+// A blob URL for the `<img>`.
+const fetchThumb = async (i: StoreInternals, a: Attachment): Promise<string> =>
+  URL.createObjectURL(await fetchBlob(i, a, ignore));
+
+const imagesOf = (row: FluxEvent): Attachment[] => {
+  if (!fluxEvent.isKnown(row)) return [];
+  if (row.type === 'msg.user') return (row.payload.attachments ?? []).filter((a) => a.image);
+  if (row.type === 'file.offered' && row.payload.attachment.image) return [row.payload.attachment];
+  return [];
 };
 
 const attachedImages = (rows: readonly FluxEvent[]): Attachment[] =>
-  rows.flatMap((row) =>
-    fluxEvent.isKnown(row) && row.type === 'msg.user'
-      ? (row.payload.attachments ?? []).filter((a) => a.image)
-      : [],
-  );
+  rows.flatMap((row) => imagesOf(row));
 
 const loadThumbnails = (i: StoreInternals, session: string, rows: readonly FluxEvent[]): void => {
   for (const a of attachedImages(rows)) {
@@ -207,6 +245,7 @@ export const attachmentActions = (
   leave: (session) => {
     leave(i, session);
   },
+  fetchAttachment: (a, onProgress = ignore) => fetchBlob(i, a, onProgress),
   ready: (session) => ready(i, session),
   clear: (session) => {
     clear(i, session);

@@ -68,6 +68,7 @@ const digestLine = (event: FluxEvent): string | null => {
   if (event.type === 'notify')
     return `notify (${event.payload.level}): ${clip(event.payload.summary)}`;
   if (event.type === 'ask') return `ask: ${clip(event.payload.question)}`;
+  if (event.type === 'file.offered') return `offered file: ${event.payload.attachment.name}`;
   if (event.type === 'session.state') return `state: ${event.payload.state}`;
   return null;
 };

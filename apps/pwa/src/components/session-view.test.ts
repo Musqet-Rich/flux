@@ -72,7 +72,9 @@ test('raw, rate_limit and files.changed are kept in the log but not shown', asyn
   await flushPromises();
   expect(store.state.logs['s1']?.events.length).toBe(4);
   expect(wrapper.findAll('.item').map((i) => i.text())).toEqual(['hi']);
-  expect(wrapper.find('.toolbar button[aria-label="Changes (1)"]').exists()).toBe(true);
+  expect(wrapper.find('.toolbar button[aria-label="Changes and files, 1 changed"]').exists()).toBe(
+    true,
+  );
   store.stop();
 });
 
@@ -183,36 +185,55 @@ test('a failed action keeps the draft and surfaces the box error', async () => {
   store.stop();
 });
 
-test('offers to stop a running agent and asks the box to interrupt', async () => {
+// On main's chat Stop is the composer's send button while the box is empty; the toolbar keeps
+// one button for the side pane (Changes, with Files as its other tab).
+test('offers to stop a running agent from the composer and asks the box to interrupt', async () => {
   const box = await pairedStore([], { 'agent.interrupt': () => ({}) });
   const { store, relay, event } = box;
   const wrapper = mount(SessionView, { props: { store, session: 's1' } });
   const labels = (): (string | undefined)[] =>
     wrapper.findAll('.toolbar button').map((b) => b.attributes('aria-label'));
-  expect(labels()).toEqual(['Files', 'Changes (0)', 'Session menu']);
+  expect(labels()).toEqual(['Changes and files, 0 changed', 'Session menu']);
   await relay.emit(event(1, 'session.state', { state: 'running' }));
   await until(() => store.state.sessions[0]?.state === 'running');
   await flushPromises();
-  await wrapper.find('.toolbar button').trigger('click');
+  expect(labels()).toEqual(['Changes and files, 0 changed', 'Session menu']);
+  // A draft in the box makes the composer's button Send, so the toolbar has the Stop.
+  await wrapper.find('textarea').setValue('wait');
+  expect(labels()).toEqual(['Stop', 'Changes and files, 0 changed', 'Session menu']);
+  await wrapper.find('textarea').setValue('');
+  expect(labels()).toEqual(['Changes and files, 0 changed', 'Session menu']);
+  await wrapper.find('.composer button[aria-label="Stop"]').trigger('click');
   await until(() => box.calls('agent.interrupt').length === 1);
   expect(box.calls('agent.interrupt')).toEqual([{ session: 's1' }]);
-  await wrapper
-    .findAll('.toolbar button')
-    .find((b) => b.attributes('aria-label')?.startsWith('Changes') === true)
-    ?.trigger('click');
+  await wrapper.find('.toolbar button').trigger('click');
   expect(wrapper.emitted('changes')).toEqual([[]]);
   store.stop();
 });
 
-test('the Files button opens the worktree browser', async () => {
-  const box = await pairedStore([]);
-  const { store } = box;
+// A subagent's chat has no composer, so its Stop is the toolbar's.
+test('a running agent viewed from a subagent chat is stopped from the toolbar', async () => {
+  const box = await pairedStore([], { 'agent.interrupt': () => ({}) });
+  const { store, relay, event } = box;
   const wrapper = mount(SessionView, { props: { store, session: 's1' } });
-  await wrapper
-    .findAll('.toolbar button')
-    .find((b) => b.attributes('aria-label') === 'Files')
-    ?.trigger('click');
-  expect(wrapper.emitted('files')).toEqual([[]]);
+  await until(() => store.state.logs['s1'] !== undefined);
+  await relay.emit(event(1, 'session.state', { state: 'running' }));
+  await relay.emit(
+    event(2, 'task.started', {
+      taskId: 't1',
+      toolUseId: 'u1',
+      description: 'List files',
+      background: false,
+      agentType: 'Explore',
+    }),
+  );
+  await until(() => store.state.logs['s1']?.lastSeq === 2);
+  await flushPromises();
+  await wrapper.findAll('.agents .row')[1]?.trigger('click');
+  await flushPromises();
+  expect(wrapper.find('.composer').exists()).toBe(false);
+  await wrapper.find('.toolbar button[aria-label="Stop"]').trigger('click');
+  await until(() => box.calls('agent.interrupt').length === 1);
   store.stop();
 });
 
@@ -451,5 +472,29 @@ test('thumbnails are fetched again when a session already loaded is shown again'
   await flushPromises();
   expect(again.find('.files img').exists()).toBe(true);
   again.unmount();
+  store.stop();
+});
+
+// Folding is per session and per device: the strip shrinks to one line naming the open chat and
+// the count, opens again on a tap, and switching sessions and back keeps the fold.
+test('the strip folds to one line for this session only, and opens again', async () => {
+  const { box, wrapper } = await withSubagent();
+  const { store } = box;
+  await wrapper.find('.agents .fold').trigger('click');
+  await until(() => store.state.foldedStrips.includes('s1'));
+  await flushPromises();
+  expect(stripRows(wrapper)).toEqual(['main 1 subagent, 1 running']);
+  expect(wrapper.find('.agents .unfold').attributes('aria-expanded')).toBe('false');
+  expect(wrapper.findAll('.item').length).toBe(3);
+  await wrapper.setProps({ session: 's2' });
+  await flushPromises();
+  expect(store.state.foldedStrips).toEqual(['s1']);
+  await wrapper.setProps({ session: 's1' });
+  await flushPromises();
+  await wrapper.find('.agents .unfold').trigger('click');
+  await until(() => store.state.foldedStrips.length === 0);
+  await flushPromises();
+  expect(stripRows(wrapper)).toEqual(['main', 'Explore List files']);
+  expect(wrapper.find('.agents .fold').attributes('aria-expanded')).toBe('true');
   store.stop();
 });

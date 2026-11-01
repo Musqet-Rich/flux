@@ -10,13 +10,16 @@ import FilesView from './FilesView.vue';
 import Icon from './Icon.vue';
 
 // The screens of a session other than the chat: changes, the file browser, a diff, the editor,
-// one at a time by the route. On a phone this is the whole screen and each has its Back; on a
-// wide screen (ADR 0033, `paned`) it sits in a pane beside the chat under a strip of two
-// tabs, Changes and Files, and a close, and the Back to the chat inside a view is hidden
-// since the chat is right there. The tabs are navigation, not an ARIA tablist: each is a route,
-// the lit one `aria-current`. A diff belongs to Changes and the editor to wherever it was
-// opened from, so the parent is the lit one. Navigation goes back up as `go`; the close is its
-// own event so the parent can put the focus somewhere once the button is gone.
+// one at a time by the route, under a strip of two tabs, Changes and Files, so one toolbar
+// button reaches both. On a phone this is the whole screen and each view has its Back to the
+// chat; the strip shows over Changes and Files only, since a diff and the editor have their
+// own Back to where they were opened from. On a wide screen (ADR 0033, `paned`) it sits in a
+// pane beside the chat, the strip always there and with a close, and the Back to the chat
+// inside a view is hidden since the chat is right there. The tabs are navigation, not an ARIA
+// tablist: each is a route, the lit one `aria-current`. A diff belongs to Changes and the
+// editor to wherever it was opened from, so the parent is the lit one. Navigation goes back up
+// as `go`; the close is its own event so the parent can put the focus somewhere once the
+// button is gone.
 
 type PanelRoute = Extract<Route, { name: 'changes' | 'files' | 'diff' | 'edit' }>;
 
@@ -56,6 +59,9 @@ const backFromEdit = (): void => {
     go({ name: 'files', session: r.session, path: r.dir });
   else openChanges();
 };
+const tabbed = computed(
+  () => props.paned || props.route.name === 'changes' || props.route.name === 'files',
+);
 const tab = computed((): 'changes' | 'files' => {
   const r = props.route;
   if (r.name === 'files' || (r.name === 'edit' && r.dir !== undefined)) return 'files';
@@ -65,7 +71,7 @@ const tab = computed((): 'changes' | 'files' => {
 
 <template>
   <section class="panel" :class="{ paned }">
-    <nav v-if="paned" class="tabs" aria-label="Changes and files">
+    <nav v-if="tabbed" class="tabs" aria-label="Changes and files">
       <button
         type="button"
         class="tab"
@@ -83,6 +89,7 @@ const tab = computed((): 'changes' | 'files' => {
         Files
       </button>
       <button
+        v-if="paned"
         type="button"
         class="secondary icon-only close"
         aria-label="Close pane"

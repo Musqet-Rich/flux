@@ -28,7 +28,7 @@ export const manual: ManualSection[] = [
   },
   {
     title: 'Pairing a device',
-    keywords: ['pair', 'connect', 'qr', 'device', 'scan', 'link', 'setup'],
+    keywords: ['pair', 'connect', 'qr', 'device', 'scan', 'link', 'setup', 'daemon', 'unpair'],
     body: [
       'Run `flux pair` on the box (or start `flux daemon` at a terminal): it prints a QR code and a',
       'one-time URL above it. In the web app, tap Pair and either scan the QR with the camera or',
@@ -36,6 +36,13 @@ export const manual: ManualSection[] = [
       'if it lapses. Any number of devices can pair. Each paired device is trusted until you revoke',
       'it — from another device in Settings, or with `flux devices rm <id>` on the box — which cuts',
       'it off at once. The relay never sees the pairing secret; possession of the QR is the proof.',
+      'One device can be paired with several daemons (a work server, a hobby server, or two daemons',
+      'on one machine) and has one open at a time: Settings › This device › Pair another daemon, or',
+      'the daemon picker at the left of the header once two are paired, which also switches between',
+      'them. Each daemon keeps its own cached logs on the device, and its unsent drafts while the',
+      'app is open. Settings › This device › Unpair this device asks the open daemon to forget the',
+      'device and forgets that daemon here; getting back needs a fresh `flux pair` on the daemon’s',
+      'machine.',
     ].join(' '),
   },
   {
@@ -109,8 +116,8 @@ export const manual: ManualSection[] = [
       'vocabulary). Role is extra system-prompt text appended after Flux’s own prompt, so it can',
       'steer the agent but can never sever your operator channel. Tools has four modes: `all` (the full',
       'toolset), `allow` (only the listed tools), `deny` (everything except the listed tools) and',
-      '`none` (no built-in tools). Whatever the mode, the Flux tools floor — flux_ask, flux_notify,',
-      'flux_compact and flux_help — is always available, so even a locked-down read-only Agent can',
+      '`none` (no built-in tools). Whatever the mode, the Flux tools floor (flux_ask, flux_notify,',
+      'flux_compact, flux_file_send and flux_help) is always available, so even a locked-down Agent can',
       'still reach you and look things up. Fields you leave unset fall back to the box default.',
     ].join(' '),
   },
@@ -138,6 +145,18 @@ export const manual: ManualSection[] = [
     ].join(' '),
   },
   {
+    title: 'Files from the agent',
+    keywords: ['download', 'file', 'files', 'send', 'share', 'save', 'deliverable', 'export'],
+    body: [
+      'An agent can offer you a file with the flux_file_send tool: a report, an export, an image you',
+      'asked for. It appears in the chat as a card with the name, size and the agent’s note; Download',
+      'saves it to your device, and on a phone that can share files a Share button opens the share',
+      'sheet (Save to Files, AirDrop). The box copies the file when the agent offers it, so later edits',
+      'do not change what you get, and keeps it with the session’s attachments until the session is',
+      'deleted. Up to 50 MiB per file.',
+    ].join(' '),
+  },
+  {
     title: 'Compaction',
     keywords: ['compact', 'compaction', 'context', 'token', 'shrink', 'window'],
     body: [
@@ -153,7 +172,8 @@ export const manual: ManualSection[] = [
     title: 'Settings',
     keywords: ['settings', 'config', 'configuration', 'repos', 'notifications', 'devices'],
     body: [
-      'The Settings screen holds: paired devices (with Revoke); the box’s runtime settings —',
+      'The Settings screen holds: paired devices (with Revoke); this device’s own choices and the',
+      'daemons it is paired with (Pair another daemon, Unpair this device); the box’s runtime settings:',
       'repositories directory, default harness, and which events send a push notification — which you',
       'can change live; environment-only values (relay URL, data dir) shown read-only; your saved',
       'Agents and Skills; and the agent’s own global config (CLAUDE.md and settings.json) as two',

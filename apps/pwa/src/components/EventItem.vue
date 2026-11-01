@@ -5,11 +5,13 @@ import { computed, ref } from 'vue';
 
 import { renderMarkdown } from '../markdown/render-markdown.ts';
 import { describeEvent } from './describe-event.ts';
+import type { FetchFile } from './event-view.ts';
+import FileOffer from './FileOffer.vue';
 import Icon from './Icon.vue';
 import MessageAttachments from './MessageAttachments.vue';
 import MessageMenu from './MessageMenu.vue';
 
-// One entry of the session timeline. Every event type renders as one of nine shapes
+// One entry of the session timeline. Every event type renders as one of ten shapes
 // (describe-event.ts, event-view.ts) so the template stays a switch on `kind`; the detail (tool
 // input/output) opens on tap, a `link` opens in a new tab, a `warning` keeps its text (hook
 // stderr) behind a disclosure, a `divider` rules across the timeline where the agent's context
@@ -17,11 +19,20 @@ import MessageMenu from './MessageMenu.vue';
 // subagent's final report (what the parent actually read) behind a disclosure, rendered as
 // Markdown like any reply. A message bubble carries a menu (MessageMenu) and, when it answers an
 // earlier message, that message's first line as a chip (`quote`, looked up by the parent) that
-// scrolls to it. A signal row (a task, a PR, a failed hook, a compaction) opens with its icon.
+// scrolls to it. A signal row (a task, a PR, a failed hook, a compaction) opens with its icon. A
+// `offered` row is a file the agent offered (ADR 0036), drawn as a download card (FileOffer) when
+// the parent passes the fetch it needs, and as a plain note of its name otherwise. The card is
+// keyed by the file: rows are keyed by `seq`, which is per session, so without it a card switched
+// to another session's row at the same `seq` would keep the first file's bytes.
 
 const props = withDefaults(
-  defineProps<{ event: FluxEvent; quote?: string | null; thumbs?: Record<string, string> }>(),
-  { quote: null, thumbs: () => ({}) },
+  defineProps<{
+    event: FluxEvent;
+    quote?: string | null;
+    thumbs?: Record<string, string>;
+    fetchFile?: FetchFile | null;
+  }>(),
+  { quote: null, thumbs: () => ({}), fetchFile: null },
 );
 defineEmits<{ task: [toolUseId: string]; reply: [seq: number]; jump: [seq: number] }>();
 const expanded = ref(false);
@@ -47,6 +58,11 @@ const toggle = (): void => {
   expanded.value = !expanded.value;
 };
 const isMessage = computed(() => view.value.kind === 'user' || view.value.kind === 'assistant');
+const offered = computed(() => (view.value.kind === 'offered' ? (view.value.file ?? null) : null));
+const offeredThumb = computed(() =>
+  offered.value === null ? null : (props.thumbs[offered.value.id] ?? null),
+);
+const offeredName = computed(() => `File offered: ${offered.value?.name ?? ''}`);
 // The chip shows the quoted message's first non-blank line only; a source not in the log
 // (an older device's partial sync) still gets a chip that says what the row is.
 const quoteLine = computed(
@@ -78,6 +94,15 @@ const quoteLine = computed(
         :thumbs="thumbs"
       />
     </template>
+    <FileOffer
+      v-else-if="offered !== null && fetchFile !== null"
+      :key="offered.id"
+      :file="offered"
+      :note="view.text"
+      :thumb="offeredThumb"
+      :fetch-file="fetchFile"
+    />
+    <span v-else-if="offered !== null" class="note">{{ offeredName }}</span>
     <template v-else-if="view.kind === 'tool'">
       <button type="button" class="summary" :disabled="!hasDetail" @click="toggle">
         {{ view.text }}
@@ -176,6 +201,12 @@ const quoteLine = computed(
   background: var(--panel-2);
 }
 
+/* A file the agent offered sits on the agent's side, as wide as a reply may be. */
+.offered {
+  align-self: flex-start;
+  max-width: 85%;
+}
+
 /* Code panels and table headers in the user bubble sit on the accent colour, so the panel tint
    is a shade of it rather than the assistant's panel token. Code inside a fence keeps the
    global reset, or it would be tinted twice. */
@@ -187,6 +218,20 @@ const quoteLine = computed(
 
 .user :deep(.markdown pre code) {
   background: transparent;
+}
+
+/* The tick's green and the cross's red are unreadable on the accent, so a copied inline span
+   (InlineCode.vue) keeps the bubble's text colour and shows a ring in it: solid for copied,
+   dashed for failed. */
+.user :deep(.markdown code.copied),
+.user :deep(.markdown code.failed) {
+  color: inherit;
+  box-shadow: none;
+  outline: 2px solid currentcolor;
+}
+
+.user :deep(.markdown code.failed) {
+  outline-style: dashed;
 }
 
 .user :deep(.markdown pre),

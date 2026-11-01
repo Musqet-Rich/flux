@@ -1,9 +1,10 @@
 import { guards } from './guards.ts';
 
 // A file the operator attached to a message (protocol.md § 5, `msg.user.attachments`, and § 7,
-// the `attach.*` methods). Files travel over the encrypted channel in base64 chunks, so the
-// caps here keep every frame under the relay's 1 MiB limit and every file within what the box
-// is willing to hold for one message (ADR 0020).
+// the `attach.*` methods), or one the agent offered back with `flux_file_send` (`file.offered`,
+// ADR 0036). Files travel over the encrypted channel in base64 chunks, so the caps here keep
+// every frame under the relay's 1 MiB limit and every file within what the box is willing to
+// hold for one message (ADR 0020) or one offer.
 
 const { isString, isBoolean, isInteger, isRecord } = guards;
 
@@ -12,7 +13,8 @@ export interface Attachment {
   name: string;
   mime: string;
   size: number;
-  // The box could send it to the agent as an image block (an image type within the limit).
+  // The box could send it to the agent as an image block (an image type within the limit); on
+  // an offered file, that the device can show it as a thumbnail by the same rule.
   image: boolean;
 }
 
@@ -27,6 +29,8 @@ export interface AttachmentLimits {
   readBytes: number;
   // Largest image sent to the agent as a content block (the model API's own limit is ~5 MB).
   imageBytes: number;
+  // Bytes per file the agent offers with `flux_file_send` (ADR 0036); the box refuses more.
+  offerBytes: number;
 }
 
 const limits: AttachmentLimits = {
@@ -35,6 +39,7 @@ const limits: AttachmentLimits = {
   chunkBytes: 512 * 1024,
   readBytes: 512 * 1024,
   imageBytes: 5 * 1024 * 1024,
+  offerBytes: 50 * 1024 * 1024,
 };
 
 const imageTypes = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];

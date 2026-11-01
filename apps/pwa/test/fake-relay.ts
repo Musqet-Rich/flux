@@ -48,6 +48,9 @@ export interface FakeRelay {
   // Makes the box drop every data frame unanswered, as it does for a channel whose keys differ
   // from the device's (protocol.md § 3, key confirmation); the handshake still completes.
   mute: (on: boolean) => void;
+  // Makes the box ignore every handshake, as it does a device it has forgotten outside a
+  // pairing window (ADR 0015): the device hears nothing back.
+  ignoreHandshakes: (on: boolean) => void;
   guests: () => number;
 }
 
@@ -69,6 +72,7 @@ interface State {
   refusedCalls: Map<string, string>;
   version: number;
   muted: boolean;
+  deaf: boolean;
 }
 
 const later = (fn: () => void): void => {
@@ -152,7 +156,9 @@ const boxHandshake = async (state: State, guest: Guest, payload: Bytes): Promise
 
 const boxReceive = async (state: State, guest: Guest, data: Bytes): Promise<void> => {
   const decoded = frame.decode(data);
-  if (decoded.kind === frame.kind.handshake) return boxHandshake(state, guest, decoded.payload);
+  if (decoded.kind === frame.kind.handshake) {
+    return state.deaf ? undefined : boxHandshake(state, guest, decoded.payload);
+  }
   if (guest.channel === null || state.muted) return;
   const plaintext = await guest.channel.open(data);
   if (plaintext === null) return;
@@ -241,6 +247,9 @@ const boxControls = (state: State): Omit<FakeRelay, 'socket' | 'boxPub' | 'calls
     mute: (on) => {
       state.muted = on;
     },
+    ignoreHandshakes: (on) => {
+      state.deaf = on;
+    },
   };
 };
 
@@ -258,6 +267,7 @@ export const createFakeRelay = async (handlers: Handlers): Promise<FakeRelay> =>
     refusedCalls: new Map(),
     version: protocolVersion,
     muted: false,
+    deaf: false,
   };
   return {
     socket: () => guestSocket(state),

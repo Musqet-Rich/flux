@@ -9,20 +9,23 @@ import arrowLeft from '@phosphor-icons/core/regular/arrow-left.svg?path';
 import arrowsClockwise from '@phosphor-icons/core/regular/arrows-clockwise.svg?path';
 import bell from '@phosphor-icons/core/regular/bell.svg?path';
 import broom from '@phosphor-icons/core/regular/broom.svg?path';
+import caretDown from '@phosphor-icons/core/regular/caret-down.svg?path';
 import caretRight from '@phosphor-icons/core/regular/caret-right.svg?path';
 import check from '@phosphor-icons/core/regular/check.svg?path';
 import checkCircle from '@phosphor-icons/core/regular/check-circle.svg?path';
 import circleFill from '@phosphor-icons/core/fill/circle-fill.svg?path';
 import copy from '@phosphor-icons/core/regular/copy.svg?path';
 import dotsThree from '@phosphor-icons/core/regular/dots-three.svg?path';
+import downloadSimple from '@phosphor-icons/core/regular/download-simple.svg?path';
+import exportIcon from '@phosphor-icons/core/regular/export.svg?path';
 import file from '@phosphor-icons/core/regular/file.svg?path';
 import floppyDisk from '@phosphor-icons/core/regular/floppy-disk.svg?path';
-import folder from '@phosphor-icons/core/regular/folder.svg?path';
 import gearSix from '@phosphor-icons/core/regular/gear-six.svg?path';
 import gitCommit from '@phosphor-icons/core/regular/git-commit.svg?path';
 import gitDiff from '@phosphor-icons/core/regular/git-diff.svg?path';
 import gitPullRequest from '@phosphor-icons/core/regular/git-pull-request.svg?path';
 import link from '@phosphor-icons/core/regular/link.svg?path';
+import linkBreak from '@phosphor-icons/core/regular/link-break.svg?path';
 import paperPlaneRight from '@phosphor-icons/core/regular/paper-plane-right.svg?path';
 import paperclip from '@phosphor-icons/core/regular/paperclip.svg?path';
 import pencilSimple from '@phosphor-icons/core/regular/pencil-simple.svg?path';
@@ -59,10 +62,11 @@ export const icons = {
   discard: arrowCounterClockwise,
   dot: circleFill,
   down: arrowDown,
+  download: downloadSimple,
   edit: pencilSimple,
+  expand: caretDown,
   failed: xCircle,
   file,
-  files: folder,
   forward: caretRight,
   from: arrowLeft,
   help: question,
@@ -82,10 +86,12 @@ export const icons = {
   save: floppyDisk,
   send: paperPlaneRight,
   settings: gearSix,
+  share: exportIcon,
   stop,
   succeeded: checkCircle,
   task: robot,
   trash,
+  unpair: linkBreak,
   verified: sealCheck,
   warning,
 } as const;

@@ -40,6 +40,8 @@ const startSummary = (name: string, args: unknown, cwd: string): string => {
       return clip(`ask: ${str(input['question'])}`);
     case 'flux_notify':
       return clip(`notify ${str(input['level'])}: ${str(input['summary'])}`);
+    case 'flux_file_send':
+      return clip(`offer file ${relative(input['path'], cwd)}`);
     default:
       return clip(name);
   }

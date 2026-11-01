@@ -17,17 +17,19 @@ import SessionMenu from './SessionMenu.vue';
 // a small chip naming what the agent is running as `model:effort` from the log's latest
 // `agent.spec` (ADR 0028; the harness alone until the agent has said, and on the chip's title
 // after), a link to the session's PR once the log has a `pr.published`, Stop while the agent
-// runs (Esc does the same, wired in SessionView), Files, Changes (with the latest changed-file
-// count) and the session menu. The buttons are icons with their names on `aria-label`/`title`:
+// runs and the composer's send button is not Stop (`stoppable`: on a subagent's chat, or with
+// a draft in the box; Esc does the same anywhere, wired in SessionView), Changes and files
+// (with the latest changed-file count; it opens the panel on Changes, Files being its other
+// tab) and the session menu. The buttons are icons with their names on `aria-label`/`title`:
 // the row has to fit a phone beside the place (ADR 0029).
 
 const props = defineProps<{
   store: Store;
   session: string;
   events: readonly FluxEvent[];
-  busy: boolean;
+  stoppable: boolean;
 }>();
-defineEmits<{ changes: []; files: []; interrupt: []; closed: [] }>();
+defineEmits<{ changes: []; interrupt: []; closed: [] }>();
 
 const summary = computed(() => props.store.state.sessions.find((s) => s.session === props.session));
 // The session id stands in until the list has the session (a reload straight onto it).
@@ -79,7 +81,7 @@ const prNumber = computed(() => (pr.value?.identifier === '' ? '' : `#${pr.value
 // the timeline. `ChangesView` reads the same last event when its fresher `git.status` has not run.
 const changed = useLogFold(() => props.events, logFold.latest('files.changed'));
 const changedCount = computed(() => changed.value?.files.length ?? 0);
-const changesLabel = computed(() => `Changes (${changedCount.value})`);
+const changesLabel = computed(() => `Changes and files, ${changedCount.value} changed`);
 </script>
 
 <template>
@@ -103,7 +105,7 @@ const changesLabel = computed(() => `Changes (${changedCount.value})`);
       <Icon name="pullRequest" />{{ prNumber }}
     </a>
     <button
-      v-if="busy"
+      v-if="stoppable"
       type="button"
       class="secondary icon-only"
       aria-label="Stop"
@@ -111,15 +113,6 @@ const changesLabel = computed(() => `Changes (${changedCount.value})`);
       @click="$emit('interrupt')"
     >
       <Icon name="stop" />
-    </button>
-    <button
-      type="button"
-      class="secondary icon-only"
-      aria-label="Files"
-      title="Files"
-      @click="$emit('files')"
-    >
-      <Icon name="files" />
     </button>
     <button
       type="button"
@@ -147,7 +140,7 @@ const changesLabel = computed(() => `Changes (${changedCount.value})`);
 
 /* The place and the chip share whatever the buttons leave: a flex basis of zero, so they never
    push a button off a phone's width, and the row only wraps in the one state where the buttons
-   alone are wider than the screen (a PR link and Stop beside Files, Changes and the menu),
+   alone are wider than the screen (a PR link and Stop beside Changes and the menu),
    which drops the menu to a second line rather than clipping it. Inside, the chip is sized first
    and the place takes what is left, down to nothing on a phone, the repository going before
    the branch: the branch is the part only this strip shows, since the tab's title is the one

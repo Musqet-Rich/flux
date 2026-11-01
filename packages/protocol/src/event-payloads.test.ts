@@ -5,6 +5,7 @@ import { eventPayloads } from './event-payloads.ts';
 
 const ref = { path: 'src/a.ts', rev: 'worktree', range: { startLine: 1, endLine: 3 } };
 const usage = { input: 1, output: 2, cacheRead: 3, cacheWrite: 4 };
+const offered = { id: 'a', name: 'report.pdf', mime: 'application/pdf', size: 12, image: false };
 
 // [type, value, accepted]. Each type has its minimal valid payload, a fuller one where optional
 // fields exist, and one rejection per field or constraint.
@@ -102,6 +103,11 @@ const cases: [EventType, unknown, boolean][] = [
   ['ask.answered', { askId: 'a', answer: 'y', by: 'box' }, false],
   ['notify', { level: 'done', summary: 's' }, true],
   ['notify', { level: 'urgent', summary: 's' }, false],
+  ['file.offered', { attachment: offered }, true],
+  ['file.offered', { attachment: offered, note: 'The report you asked for' }, true],
+  ['file.offered', { attachment: offered, note: 1 }, false],
+  ['file.offered', { attachment: { id: 'a', name: 'n' } }, false],
+  ['file.offered', { note: 'n' }, false],
   ['files.changed', { files: [] }, true],
   ['files.changed', { files: [{ path: 'a', status: 'R', from: 'b' }] }, true],
   ['files.changed', { files: [{ path: 'a', status: 'X' }] }, false],

@@ -8,4 +8,13 @@ const available = (): boolean =>
   'Notification' in window &&
   !import.meta.env.DEV;
 
-export const pushSupport: { available: typeof available } = { available };
+// Where a daemon's own service worker is registered (ADR 0037): the same /sw.js under a scope of
+// its own, so each daemon's subscription has a worker of its own (a browser keeps one
+// subscription per worker, tied to one sender's key) and the worker knows from its scope which
+// daemon a push came from (sw.ts reads it back). No page lives under the scope; it is a name.
+const scope = (daemon: string): string => `/push/${encodeURIComponent(daemon)}/`;
+
+export const pushSupport: { available: typeof available; scope: typeof scope } = {
+  available,
+  scope,
+};

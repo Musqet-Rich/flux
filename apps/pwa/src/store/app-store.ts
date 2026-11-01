@@ -1,6 +1,7 @@
 import { appAppearance } from '../appearance/app-appearance.ts';
 import { createIndexedDbStorage } from '../client/create-indexed-db-storage.ts';
 import { socket } from '../client/socket.ts';
+import { forgetPush } from '../push/forget-push.ts';
 import { pushSupport } from '../push/push-support.ts';
 import { subscribePush } from '../push/subscribe-push.ts';
 import { createSoundPlayer } from '../sound/create-sound-player.ts';
@@ -18,7 +19,7 @@ export const appStore: Store = createStore({
   storage: createIndexedDbStorage(),
   appearance: appAppearance,
   socket,
-  ...(pushSupport.available() ? { subscribePush } : {}),
+  ...(pushSupport.available() ? { subscribePush, forgetPush } : {}),
   playSound: player.play,
 });
 
