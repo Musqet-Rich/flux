@@ -453,3 +453,27 @@ test('thumbnails are fetched again when a session already loaded is shown again'
   again.unmount();
   store.stop();
 });
+
+// Folding is per session and per device: the strip shrinks to one line naming the open chat and
+// the count, opens again on a tap, and switching sessions and back keeps the fold.
+test('the strip folds to one line for this session only, and opens again', async () => {
+  const { box, wrapper } = await withSubagent();
+  const { store } = box;
+  await wrapper.find('.agents .fold').trigger('click');
+  await until(() => store.state.foldedStrips.includes('s1'));
+  await flushPromises();
+  expect(stripRows(wrapper)).toEqual(['main 1 subagent, 1 running']);
+  expect(wrapper.find('.agents .unfold').attributes('aria-expanded')).toBe('false');
+  expect(wrapper.findAll('.item').length).toBe(3);
+  await wrapper.setProps({ session: 's2' });
+  await flushPromises();
+  expect(store.state.foldedStrips).toEqual(['s1']);
+  await wrapper.setProps({ session: 's1' });
+  await flushPromises();
+  await wrapper.find('.agents .unfold').trigger('click');
+  await until(() => store.state.foldedStrips.length === 0);
+  await flushPromises();
+  expect(stripRows(wrapper)).toEqual(['main', 'Explore List files']);
+  expect(wrapper.find('.agents .fold').attributes('aria-expanded')).toBe('true');
+  store.stop();
+});

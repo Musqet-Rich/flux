@@ -2,6 +2,7 @@ import type { SettingsPatch } from '@flux/protocol';
 
 import type { SoundName } from '../sound/notification-sounds.ts';
 import { boxLink } from './box-link.ts';
+import { foldedStrips } from './folded-strips.ts';
 import { notificationSound } from './notification-sound.ts';
 import { sendKey } from './send-key.ts';
 import type { SendKey, StoreInternals, SwitchKey } from './store-state.ts';
@@ -27,6 +28,8 @@ export interface SettingsActions {
   setSwitchKey: (name: SwitchKey) => Promise<boolean>;
   // Keeps where the divider was dragged to on this device (split-at.ts, ADR 0033).
   setSplitAt: (at: number) => Promise<boolean>;
+  // Folds or opens one session's agents strip on this device (folded-strips.ts).
+  setStripFolded: (session: string, folded: boolean) => Promise<boolean>;
   // Asks the daemon to discover the latest release and dry-run verify it (ADR 0021/0022). It
   // never surfaces an error: a daemon too old to have the method degrades to a `latest: null`
   // sentinel so Settings shows "couldn't check for updates" instead of hard-failing.
@@ -116,6 +119,8 @@ export const settingsActions = (i: StoreInternals): SettingsActions => ({
   setSendKey: (name) => boxLink.attempt(i, () => sendKey.set(i, name)),
   setSwitchKey: (name) => boxLink.attempt(i, () => switchKey.set(i, name)),
   setSplitAt: (at) => boxLink.attempt(i, () => splitAt.set(i, at)),
+  setStripFolded: (session, folded) =>
+    boxLink.attempt(i, () => foldedStrips.set(i, session, folded)),
   checkUpdate: () => checkUpdate(i),
   updateDaemon: (target) => boxLink.attempt(i, () => updateDaemon(i, target)),
   refreshSkills: () => refreshSkills(i),
