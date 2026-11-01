@@ -154,9 +154,10 @@ const pair = async (
   const options = {
     ...boxLink.options(i, link),
     // Why a first pairing cannot get through (the box on another protocol version) is all the
-    // pair screen has to show; beside an open daemon the dialog's own state says it is waiting.
+    // pair screen has to show; beside an open daemon the dialog's own state says it is waiting
+    // until the connection is adopted, and from then it reports like any open daemon's.
     onError: (error: ClientError) => {
-      if (first) boxLink.reportError(i, error, 'connection');
+      if (first || i.link === link) boxLink.reportError(i, error, 'connection');
     },
     relayUrl,
     fragment,

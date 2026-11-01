@@ -190,3 +190,15 @@ test('a daemon reopened by a queued switch is let go before its push is forgotte
   await until(() => hobby.relay.guests() === 0);
   store.stop();
 });
+
+test('a daemon paired beside another reports its connection failures once it is open', async () => {
+  const { work, hobby, make } = await twoDaemons.setup();
+  const store = make();
+  await store.pair('https://relay.example', work.link);
+  await store.pair('https://relay.example', hobby.link);
+  hobby.relay.boxVersion(99);
+  hobby.relay.dropGuests();
+  await until(() => store.state.error !== null);
+  expect(store.state.error?.kind).toBe('connection');
+  store.stop();
+});

@@ -1,6 +1,6 @@
 # 0037: Several daemons on one device: pairings by room id, one connection open, per-daemon cache and push
 
-Status: accepted, 2026-11-01.
+Status: accepted, 2026-11-01. Implements prd.md P3 "Multiple boxes from one PWA".
 
 ## Context
 

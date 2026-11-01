@@ -76,7 +76,7 @@ Ordered by priority. P1 is the minimum useful product.
 
 - Desktop shell (Tauri or Electron-lite) if the PWA proves limiting on desktop.
 - iOS.
-- Multiple boxes from one PWA.
+- Multiple boxes from one PWA (done: several daemons on one device, ADR 0037).
 - Session templates (repo + branch naming + agent config).
 
 ## Success criteria for phase 1
