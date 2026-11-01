@@ -189,6 +189,20 @@ const quoteLine = computed(
   background: transparent;
 }
 
+/* The tick's green and the cross's red are unreadable on the accent, so a copied inline span
+   (InlineCode.vue) keeps the bubble's text colour and shows a ring in it: solid for copied,
+   dashed for failed. */
+.user :deep(.markdown code.copied),
+.user :deep(.markdown code.failed) {
+  color: inherit;
+  box-shadow: none;
+  outline: 2px solid currentcolor;
+}
+
+.user :deep(.markdown code.failed) {
+  outline-style: dashed;
+}
+
 .user :deep(.markdown pre),
 .user :deep(.markdown th),
 .user :deep(.markdown td) {
