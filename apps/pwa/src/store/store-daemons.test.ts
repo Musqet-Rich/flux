@@ -164,3 +164,18 @@ test('the single pairing from before opens on upgrade with its cache, and its pu
   expect(await storage.get(pairedBox.storageKey)).toBeUndefined();
   store.stop();
 });
+
+test('revoking this device from Settings › Devices opens the other and says so', async () => {
+  const { work, hobby, make } = await setup();
+  const store = make();
+  await store.pair('https://relay.example', work.link);
+  await store.pair('https://relay.example', hobby.link);
+  await until(() => store.state.daemon === 'hobby');
+  store.state.devices = [
+    { deviceId: 'dev-hobby', pairedAt: '2026-01-01T00:00:00Z', current: true },
+  ];
+  expect(await store.removeDevice('dev-hobby')).toBe(true);
+  expect(store.state.activeDaemon).toBe(work.id);
+  expect(store.state.error?.message).toBe('This device was removed from hobby.');
+  store.stop();
+});

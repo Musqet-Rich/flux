@@ -69,7 +69,9 @@ const attempt = async (i: StoreInternals, action: () => Promise<unknown>): Promi
   const link = i.link;
   try {
     await action();
-    storeErrors.clearAction(i);
+    // An action that ended by opening another daemon (removing this device from the open one)
+    // leaves what that switch said on screen.
+    if (i.link === link) storeErrors.clearAction(i);
     return true;
   } catch (error) {
     reportFor(i, link, error);
