@@ -10,6 +10,11 @@ import { ClientError } from '../client/client-error.ts';
 // its thumbnail like a sent one, and any offered file is fetched whole through `attach.read`,
 // page by page, as a Blob of its type, with the fraction fetched reported as it goes.
 
+// The SHA-256 of some bytes, as a hex string: two half-MiB files compared at a glance.
+const digest = async (data: ArrayBuffer | Uint8Array<ArrayBuffer>): Promise<string> =>
+  Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', data)), (b) =>
+    b.toString(16).padStart(2, '0'),
+  ).join('');
 const page = 512 * 1024;
 const bytes = new Uint8Array(page + 3).map((_, at) => at % 251);
 const report = { id: 'f-1', name: 'report.pdf', mime: 'application/pdf', size: bytes.length };
@@ -40,7 +45,9 @@ test('an offered file comes back whole as a Blob of its type, with progress per 
     seen.push(fraction);
   });
   expect(blob.type).toBe('application/pdf');
-  expect(new Uint8Array(await blob.arrayBuffer())).toEqual(bytes);
+  // Compared by digest: `toEqual` walks half a MiB element by element, which on a machine loaded
+  // by other work outlasts the test's timeout.
+  expect(await digest(await blob.arrayBuffer())).toEqual(await digest(bytes));
   expect(seen).toEqual([page / bytes.length, 1]);
   expect(calls('attach.read')).toEqual([
     { attachmentId: 'f-1', offset: 0, length: page },
