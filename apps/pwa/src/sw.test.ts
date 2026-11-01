@@ -67,6 +67,7 @@ test('a tap opens a new window at the session with the daemon in the query', asy
 });
 
 test('a tap with the app open tells its window to open the daemon and the session', async () => {
+  openWindow.mockClear();
   windows.push({ focus, navigate: () => Promise.resolve(null), postMessage });
   await settle((waitUntil) => {
     listeners.get('notificationclick')?.({
@@ -76,5 +77,5 @@ test('a tap with the app open tells its window to open the daemon and the sessio
   });
   expect(focus).toHaveBeenCalled();
   expect(postMessage).toHaveBeenCalledWith({ type: 'flux.open', daemon: 'abc', session: 's1' });
-  expect(openWindow).toHaveBeenCalledTimes(1);
+  expect(openWindow).not.toHaveBeenCalled();
 });

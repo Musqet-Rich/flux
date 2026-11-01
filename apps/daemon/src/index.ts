@@ -216,13 +216,13 @@ const daemon = await createDaemon({
 // running out, kills every agent's group and exits at once rather than let a stuck agent keep
 // two daemons alive or outlive this one.
 const shutdownBudgetMs = 10_000;
+const exitNow = (why: string): void => {
+  console.error(`flux daemon: ${why}, killing agents and exiting now`);
+  daemon.abandon();
+  process.exit(1);
+};
 const installShutdown = (): void => {
   let stopping = false;
-  const exitNow = (why: string): void => {
-    console.error(`flux daemon: ${why}, killing agents and exiting now`);
-    daemon.abandon();
-    process.exit(1);
-  };
   const shutdown = (signal: string): void => {
     if (stopping) {
       exitNow(`second ${signal}`);

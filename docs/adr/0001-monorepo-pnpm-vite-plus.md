@@ -19,3 +19,7 @@ One repository. pnpm 11 workspaces with `apps/*` and `packages/*`. Vite+ (`vp`) 
 ## Status, 2026-08-29
 
 vite-plus 0.3.0 is installed and `vp run` drives package builds. `pnpm run check` calls `oxfmt`, `oxlint`, `tsc`/`vue-tsc` and `vitest` directly because `vp check` at this version reads only `vite.config.ts` blocks (not the rc files), typechecks with tsgolint instead of `tsc`/`vue-tsc`, and does not run tests. Revisit when it honours rc files; the config files need no change either way.
+
+## Status, 2026-11-01
+
+vite-plus moves to 1.4.0 for the security fixes in 1.1.0 and later (its own launch-editor and `server.fs` advisories, and oxfmt's tinypool). The reasons above for not using `vp check` still hold at 1.4.0: it reads only `vite.config.ts` blocks and recommends against the rc files, typechecks with tsgolint, and does not run tests. No script calls `vp` (builds run `vite build` and `tsdown` directly), so the 2026-08-29 note that `vp run` drives builds is out of date. 1.x bundles Vitest 5 and, under `strictPeerDependencies`, needs one `peerDependencyRules` allowance in `pnpm-workspace.yaml` (see the comment there and the vite-plus row in 0010).

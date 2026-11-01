@@ -335,7 +335,11 @@ type Ephemeral =
   | {
       type: 'update.failed';
       reason:
-        'bad_signature' | 'download_failed' | 'already_current' | 'unsupported' | 'disk_error';
+        | 'bad_signature'
+        | 'download_failed'
+        | 'already_current'
+        | 'unsupported'
+        | 'disk_error';
     } // self-update aborted
   | { type: 'shell.output'; runId: string; stream: 'stdout' | 'stderr'; chunk: string } // command-runner output (ADR 0026)
   | {
