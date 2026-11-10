@@ -174,7 +174,7 @@ test('clear, archive, reopen and delete a session', async () => {
   ]);
   await writeFile(join(worktree, 'wip.txt'), 'not committed\n');
   await expect(call(d, 'sessions.archive', { session, removeWorktree: true })).rejects.toThrow(
-    'dirty: worktree has 1 uncommitted file',
+    'dirty: The worktree has 1 uncommitted file.',
   );
   expect(await call(d, 'sessions.list', {})).toEqual([
     expect.objectContaining({ archived: false }),

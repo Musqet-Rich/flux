@@ -1,4 +1,4 @@
-import { mkdir, readdir, rm } from 'node:fs/promises';
+import { mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { expect, test } from 'vitest';
 
@@ -90,6 +90,82 @@ test('only a worktree under the data directory is ever removed', async () => {
   expect(closed).toEqual(['s1']);
   expect(sessions.get('s1').archived).toBe(false);
   expect(await git.branches(repo)).toEqual(['main']);
+});
+
+// A commit adding a file named after its subject, so no two share a patch.
+const commitIn = async (cwd: string, subject: string): Promise<string> => {
+  await writeFile(join(cwd, `${subject}.txt`), `${subject}\n`);
+  gitIn(cwd, ['add', '-A']);
+  gitIn(cwd, [
+    '-c',
+    'user.name=Test',
+    '-c',
+    'user.email=t@example.com',
+    'commit',
+    '-q',
+    '-m',
+    subject,
+  ]);
+  return gitIn(cwd, ['rev-parse', '--short=7', 'HEAD']).trim();
+};
+
+// The refusal says what is at risk and lists the commits, so the operator can judge them. A
+// branch kept by the delete holds its commits, so only a deleted one's are named.
+test('removing a worktree with work only on this machine is refused, naming it', async () => {
+  const { worktreesDir, ctx, sessions, create } = await setup();
+  const worktree = join(worktreesDir, 's2');
+  await create('s2', worktree);
+  const sha = await commitIn(worktree, 'keep me');
+  gitIn(worktree, ['switch', '-q', '--detach']);
+  await writeFile(join(worktree, 'c.txt'), 'c\n');
+  await expect(
+    sessionLifecycle.archive(ctx, { session: 's2', removeWorktree: true }),
+  ).rejects.toMatchObject({ code: 'dirty', message: 'The worktree has 1 uncommitted file.' });
+  await expect(
+    sessionLifecycle.archive(ctx, { session: 's2', removeWorktree: true, deleteBranch: true }),
+  ).rejects.toMatchObject({
+    code: 'dirty',
+    message: [
+      'The worktree has 1 uncommitted file.',
+      '1 commit exists only on this machine:',
+      `${sha} keep me`,
+      'HEAD is detached.',
+    ].join('\n'),
+  });
+  expect(sessions.get('s2').archived).toBe(false);
+});
+
+test('the refusal names ten commits, counts the rest, and says which are possibly merged', async () => {
+  const { root, repo, worktreesDir, ctx, create } = await setup();
+  const origin = join(root, 'origin.git');
+  gitIn(root, ['init', '-q', '--bare', origin]);
+  gitIn(repo, ['remote', 'add', 'origin', origin]);
+  gitIn(repo, ['push', '-q', 'origin', 'main']);
+  gitIn(repo, ['remote', 'set-head', 'origin', 'main']);
+  const worktree = join(worktreesDir, 's2');
+  await create('s2', worktree);
+  const merged = await commitIn(worktree, 'merged');
+  // One after another: each commit's parent is the one before.
+  const shas = await Array.from({ length: 11 }, (_, i) => `c${i}`).reduce<Promise<string[]>>(
+    async (done, subject) => [...(await done), await commitIn(worktree, subject)],
+    Promise.resolve([]),
+  );
+  await commitIn(repo, 'main moved on');
+  gitIn(repo, ['-c', 'user.name=Test', '-c', 'user.email=t@example.com', 'cherry-pick', merged]);
+  gitIn(repo, ['push', '-q', 'origin', 'main']);
+  await expect(
+    sessionLifecycle.archive(ctx, { session: 's2', removeWorktree: true, deleteBranch: true }),
+  ).rejects.toMatchObject({
+    code: 'dirty',
+    message: [
+      '12 commits exist only on this machine, 1 possibly merged:',
+      ...shas
+        .toReversed()
+        .slice(0, 10)
+        .map((sha, i) => `${sha} c${10 - i}`),
+      'and 2 more, 1 possibly merged',
+    ].join('\n'),
+  });
 });
 
 // The branch on the summary follows HEAD (`session.head`), but the one archive deletes is

@@ -1,6 +1,6 @@
 # 0018: Session lifecycle: clear, archive with worktree removal, unarchive
 
-Status: accepted, 2026-08-29. § 1's last sentence, the marker shown as a rule with the history above it, is amended by 0034: the timeline opens at the marker, and a typed `/clear` is this clear.
+Status: accepted, 2026-08-29. § 1's last sentence, the marker shown as a rule with the history above it, is amended by 0034: the timeline opens at the marker, and a typed `/clear` is this clear. § 2's unpushed commits are redefined by 0039: the commits the delete would lose, listed in the refusal.
 
 ## Context
 

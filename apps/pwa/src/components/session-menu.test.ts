@@ -6,7 +6,8 @@ import { until } from '../../test/until.ts';
 import { ClientError } from '../client/client-error.ts';
 import SessionMenu from './SessionMenu.vue';
 
-const dirty = '2 uncommitted files and 1 unpushed commit';
+const dirty =
+  'The worktree has 2 uncommitted files.\n1 commit exists only on this machine:\nabc1234 keep me';
 const escape = 'Escape';
 
 // The menu is busy until the box has answered; `busy` is the component's own ref.
@@ -80,7 +81,7 @@ test('delete confirms what to remove; a dirty refusal asks again before discardi
     { session: 's1', removeWorktree: true, deleteBranch: true, discard: false },
   ]);
   await settled(wrapper);
-  expect(wrapper.find('.dirty').text()).toBe(`${dirty}. Discard it?`);
+  expect(wrapper.findAll('.question').map((p) => p.text())).toEqual([dirty, 'Discard it?']);
   expect(wrapper.emitted('closed')).toBeUndefined();
   expect(wrapper.find('button[type="submit"]').text()).toBe('Discard changes');
   await wrapper.find('form.confirm').trigger('submit');

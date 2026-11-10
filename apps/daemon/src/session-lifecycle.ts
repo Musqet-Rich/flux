@@ -1,5 +1,6 @@
 import { access } from 'node:fs/promises';
 
+import type { LocalCommit, Unpushed } from './create-git-service.ts';
 import type { SessionRecord } from './create-session-store.ts';
 import { DaemonError } from './daemon-error.ts';
 import type { HandlerContext } from './handler-context.ts';
@@ -56,30 +57,68 @@ const closeAgent = async (ctx: Ctx, session: string): Promise<void> => {
   });
 };
 
-// What removing the worktree would lose: files not committed, commits not pushed.
-const refuseDirty = async (ctx: Ctx, record: SessionRecord): Promise<void> => {
-  const [files, commits] = await Promise.all([
+// The commits a refusal names, so the operator can judge them; the rest are counted.
+const shownCommits = 10;
+
+const commitLine = (commit: LocalCommit): string =>
+  `${commit.sha.slice(0, 7)} ${commit.subject}${commit.possiblyMerged ? ' (possibly merged)' : ''}`;
+
+// What is at risk, worded as such (ADR 0039): files not committed, and the commits the delete
+// would lose, each listed. A detached HEAD is said: the commits only it reaches are on no branch.
+const dirtyMessage = (files: number, unpushed: Unpushed): string | null => {
+  const { commits, detached } = unpushed;
+  if (files === 0 && commits.length === 0) return null;
+  const parts: string[] = [];
+  if (files > 0) parts.push(`The worktree has ${plural(files, 'uncommitted file')}.`);
+  if (commits.length > 0) {
+    const merged = commits.filter((c) => c.possiblyMerged).length;
+    const verb = commits.length === 1 ? 'exists' : 'exist';
+    const hedge = merged === 0 ? '' : `, ${merged} possibly merged`;
+    const hidden = commits.slice(shownCommits);
+    const hiddenMerged = hidden.filter((c) => c.possiblyMerged).length;
+    const hiddenHedge = hiddenMerged === 0 ? '' : `, ${hiddenMerged} possibly merged`;
+    parts.push(
+      [
+        `${plural(commits.length, 'commit')} ${verb} only on this machine${hedge}:`,
+        ...commits.slice(0, shownCommits).map((c) => commitLine(c)),
+        ...(hidden.length > 0 ? [`and ${hidden.length} more${hiddenHedge}`] : []),
+        ...(detached ? ['HEAD is detached.'] : []),
+      ].join('\n'),
+    );
+  }
+  return parts.join('\n');
+};
+
+// What removing the worktree, and deleting the branch when asked, would lose: a kept branch
+// survives the worktree, so only the deleted one is passed.
+const refuseDirty = async (
+  ctx: Ctx,
+  record: SessionRecord,
+  deleteBranch: boolean,
+): Promise<void> => {
+  const [files, unpushed] = await Promise.all([
     ctx.git.status(record.worktree),
-    ctx.git.unpushed(record.worktree, record.base),
+    ctx.git.unpushed(record.worktree, deleteBranch ? record.branch : null),
   ]);
-  if (files.length === 0 && commits === 0) return;
-  const parts = [
-    ...(files.length === 0 ? [] : [plural(files.length, 'uncommitted file')]),
-    ...(commits === 0 ? [] : [plural(commits, 'unpushed commit')]),
-  ];
-  throw new DaemonError('dirty', `worktree has ${parts.join(' and ')}`);
+  const message = dirtyMessage(files.length, unpushed);
+  if (message !== null) throw new DaemonError('dirty', message);
 };
 
 // Only a worktree the daemon made (under its own directory) is ever removed: a row naming
 // anything else, the repository itself above all, is refused before git sees it. A worktree
 // already gone (removed by hand) has nothing to check; git is told, so the branch is free.
-const removeWorktree = async (ctx: Ctx, record: SessionRecord, discard: boolean): Promise<void> => {
+const removeWorktree = async (
+  ctx: Ctx,
+  record: SessionRecord,
+  discard: boolean,
+  deleteBranch: boolean,
+): Promise<void> => {
   inside(ctx.worktreesDir, record.worktree);
   if (!(await exists(record.worktree))) {
     await ctx.git.pruneWorktrees(record.repo);
     return;
   }
-  if (!discard) await refuseDirty(ctx, record);
+  if (!discard) await refuseDirty(ctx, record, deleteBranch);
   await ctx.git.removeWorktree(record.repo, record.worktree, discard);
 };
 
@@ -87,7 +126,7 @@ const archive = async (ctx: Ctx, params: ArchiveParams): Promise<Record<string, 
   const record = ctx.sessions.get(params.session);
   await closeAgent(ctx, record.session);
   if (params.removeWorktree === true) {
-    await removeWorktree(ctx, record, params.discard === true);
+    await removeWorktree(ctx, record, params.discard === true, params.deleteBranch === true);
     if (params.deleteBranch === true) await ctx.git.deleteBranch(record.repo, record.branch);
     // Deleting the session (its worktree gone) takes the files the operator sent it (ADR 0020);
     // a plain archive keeps them, so a reopened session still shows its images.

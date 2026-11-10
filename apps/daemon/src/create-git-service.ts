@@ -12,6 +12,22 @@ import { runCommand } from './run-command.ts';
 // `gh` for pull requests. No git library. Every method takes the directory to run in; the daemon
 // passes the worktree.
 
+// A commit a delete would lose (ADR 0039): `possiblyMerged` when a remote default branch or an
+// upstream holds a patch-equivalent (`git cherry`), as a rebase or a one-commit squash leaves. A
+// squash of several commits matches none of them, so its absence proves nothing.
+export interface LocalCommit {
+  sha: string;
+  subject: string;
+  possiblyMerged: boolean;
+}
+
+export interface Unpushed {
+  // HEAD on no branch: its commits are the worktree's own, attributed to no branch.
+  detached: boolean;
+  // Newest first.
+  commits: LocalCommit[];
+}
+
 export interface DiffOptions {
   path?: string;
   from?: string;
@@ -37,8 +53,9 @@ export interface GitService extends GitActions {
   // `git branch -D`: git itself refuses the branch checked out anywhere, the daemon refuses
   // nothing more, so the operator can delete an unmerged branch on purpose.
   deleteBranch: (repo: string, branch: string) => Promise<void>;
-  // Commits not on the branch's upstream; without an upstream, everything since `base`.
-  unpushed: (worktree: string, base: string) => Promise<number>;
+  // What a delete would lose (ADR 0039): commits reachable from HEAD, and from `branch` when it
+  // is deleted too, that no remote-tracking ref and no surviving local branch holds.
+  unpushed: (worktree: string, branch: string | null) => Promise<Unpushed>;
   listRepos: (root: string) => Promise<Repo[]>;
 }
 
@@ -133,12 +150,118 @@ const listRepos = async (git: Runner, root: string): Promise<Repo[]> => {
   return repos.filter((repo): repo is Repo => repo !== null);
 };
 
-const unpushed = async (git: Runner, worktree: string, base: string): Promise<number> => {
-  const upstream = await git(worktree, ['rev-parse', '--verify', '--quiet', '@{upstream}']).then(
-    (out) => out.trim(),
-    () => base,
+const lines = (out: string): string[] => out.split('\n').filter((line) => line !== '');
+
+interface LocalRef {
+  sha: string;
+  upstream: string;
+}
+
+// The local branches named, by full ref: tip and upstream (empty without one). A branch that
+// does not exist is simply absent; any other failure throws, so the check never narrows quietly.
+const localRefs = async (
+  git: Runner,
+  worktree: string,
+  refs: string[],
+): Promise<Map<string, LocalRef>> => {
+  const out = await git(worktree, [
+    'for-each-ref',
+    '--format=%(refname) %(objectname) %(upstream)',
+    ...refs,
+  ]);
+  return new Map(
+    lines(out).map((line) => {
+      const [ref = '', sha = '', upstream = ''] = line.split(' ');
+      return [ref, { sha, upstream }];
+    }),
   );
-  return Number((await git(worktree, ['rev-list', '--count', `${upstream}..HEAD`])).trim());
+};
+
+// Where a squash or rebase of these commits would have landed: each remote's default branch
+// (`<remote>/HEAD`, or its `main` or `master` for a remote added without one) and the given
+// upstreams, those that exist as remote-tracking refs.
+const mergeTargets = async (
+  git: Runner,
+  worktree: string,
+  upstreams: string[],
+): Promise<string[]> => {
+  const [remotes, refs] = await Promise.all([
+    git(worktree, ['remote']),
+    git(worktree, ['for-each-ref', '--format=%(refname) %(symref)', 'refs/remotes/']),
+  ]);
+  const remote = new Map(
+    lines(refs).map((line) => {
+      const [ref = '', symref = ''] = line.split(' ');
+      return [ref, symref];
+    }),
+  );
+  const defaults = lines(remotes).flatMap((name) => {
+    const head = remote.get(`refs/remotes/${name}/HEAD`) ?? '';
+    if (head !== '') return [head];
+    return [`refs/remotes/${name}/main`, `refs/remotes/${name}/master`];
+  });
+  return [...new Set([...defaults, ...upstreams])].filter((ref) => remote.has(ref));
+};
+
+// `git cherry <target> <ref>`: `- sha` is a commit the target already has the patch of.
+const patchEquivalents = async (
+  git: Runner,
+  worktree: string,
+  targets: string[],
+  refs: string[],
+): Promise<Set<string>> => {
+  const outs = await Promise.all(
+    targets.flatMap((target) => refs.map((ref) => git(worktree, ['cherry', target, ref]))),
+  );
+  return new Set(
+    outs
+      .flatMap((out) => lines(out))
+      .flatMap((line) => (line.startsWith('- ') ? [line.slice(2)] : [])),
+  );
+};
+
+// What the delete would lose (ADR 0039): commits reachable from HEAD, and from `branch` when it
+// goes too, that no remote-tracking ref holds and no surviving local branch keeps.
+const unpushed = async (
+  git: Runner,
+  worktree: string,
+  branch: string | null,
+): Promise<Unpushed> => {
+  const headRef = (await git(worktree, ['rev-parse', '--symbolic-full-name', 'HEAD'])).trim();
+  const detached = headRef === 'HEAD';
+  const headSha = (await git(worktree, ['rev-parse', 'HEAD'])).trim();
+  const branchRef = branch === null ? null : `refs/heads/${branch}`;
+  const named = [
+    ...new Set([...(detached ? [] : [headRef]), ...(branchRef === null ? [] : [branchRef])]),
+  ];
+  const local =
+    named.length === 0 ? new Map<string, LocalRef>() : await localRefs(git, worktree, named);
+  const deleted = branchRef === null ? undefined : local.get(branchRef);
+  const refs = [
+    'HEAD',
+    ...(deleted === undefined || deleted.sha === headSha ? [] : [branchRef ?? '']),
+  ];
+  const survivors = [
+    '--remotes',
+    ...(deleted === undefined || branch === null ? [] : [`--exclude=${branch}`]),
+    '--branches',
+  ];
+  const listed = lines(
+    await git(worktree, ['log', '--format=%H%x1f%s', ...refs, '--not', ...survivors, '--']),
+  );
+  if (listed.length === 0) return { detached, commits: [] };
+  const upstreams = [...local.values()].map((ref) => ref.upstream).filter((ref) => ref !== '');
+  const merged = await patchEquivalents(
+    git,
+    worktree,
+    await mergeTargets(git, worktree, upstreams),
+    refs,
+  );
+  const commits = listed.map((line) => {
+    const [sha = '', subject = ''] = line.split('\u001F');
+    return { sha, subject, possiblyMerged: merged.has(sha) };
+  });
+  return { detached, commits };
 };
 
 export const createGitService = (options: GitServiceOptions = {}): GitService => {
@@ -180,7 +303,7 @@ export const createGitService = (options: GitServiceOptions = {}): GitService =>
     deleteBranch: async (repo, branch) => {
       await git(repo, ['branch', '-D', branch]);
     },
-    unpushed: (worktree, base) => unpushed(git, worktree, base),
+    unpushed: (worktree, branch) => unpushed(git, worktree, branch),
     listRepos: (root) => listRepos(git, root),
   };
 };

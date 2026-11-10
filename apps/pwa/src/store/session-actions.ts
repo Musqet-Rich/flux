@@ -25,8 +25,9 @@ export interface DeleteOptions {
   discard: boolean;
 }
 
-// `dirty` carries the box's message (counts of uncommitted files and unpushed commits) when the
-// worktree holds work that exists nowhere else; null for any other failure, already reported.
+// `dirty` carries the box's message (uncommitted files and the commits only on the box, listed)
+// when the worktree holds work that exists nowhere else; null for any other failure, already
+// reported.
 export type DeleteOutcome = { ok: true } | { ok: false; dirty: string | null };
 
 export interface SessionActions extends AttachmentActions {
