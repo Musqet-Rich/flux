@@ -7,7 +7,7 @@ import Icon from './Icon.vue';
 
 // The inline confirm behind "Delete…": what to remove, then, when the box refuses because the
 // worktree holds work that exists nowhere else (`dirty`), the same request again with the
-// box's counts and an explicit "Discard changes". Escape cancels (useEscape).
+// box's account of what is at risk and an explicit "Discard changes". Escape cancels (useEscape).
 
 const props = defineProps<{ dirty: string | null; busy: boolean }>();
 const emit = defineEmits<{ confirm: [options: DeleteOptions]; cancel: [] }>();
@@ -41,7 +41,10 @@ useEscape(cancel);
         Delete branch
       </label>
     </template>
-    <p v-else class="question dirty">{{ dirty }}. Discard it?</p>
+    <template v-else>
+      <p class="question dirty">{{ dirty }}</p>
+      <p class="question">Discard it?</p>
+    </template>
     <div class="actions">
       <button type="button" class="secondary" @click="cancel">Cancel</button>
       <button type="submit" class="danger" :disabled="busy">
@@ -68,6 +71,9 @@ useEscape(cancel);
 
 .dirty {
   color: var(--warn);
+  /* The box lists the commits at risk one per line. */
+  white-space: pre-line;
+  overflow-wrap: anywhere;
 }
 
 .option {

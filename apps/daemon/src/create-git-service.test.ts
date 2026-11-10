@@ -164,20 +164,186 @@ test('a branch of a worktree that is gone can be deleted once pruned', async () 
   expect(await git.branches(repo)).toEqual(['main']);
 });
 
-test('unpushed counts commits beyond the upstream, or beyond the base without one', async () => {
+const commit = async (cwd: string, file: string, subject: string): Promise<string> => {
+  await writeFile(join(cwd, file), `${subject}\n`);
+  sh(cwd, ['add', file]);
+  sh(cwd, ['commit', '-q', '-m', subject]);
+  return sh(cwd, ['rev-parse', 'HEAD']).trim();
+};
+
+// A bare `origin` holding main; `origin/HEAD` set as a clone has it unless `remoteAdded`.
+const withOrigin = (remoteAdded = false): void => {
+  const origin = join(root, 'origin.git');
+  sh(root, ['init', '-q', '--bare', origin]);
+  sh(repo, ['remote', 'add', 'origin', origin]);
+  sh(repo, ['push', '-q', 'origin', 'main']);
+  if (!remoteAdded) sh(repo, ['remote', 'set-head', 'origin', 'main']);
+};
+
+const session = async (): Promise<string> => {
   const path = join(root, 'wt');
   await git.addWorktree(repo, path, 'flux/task', 'main');
-  expect(await git.unpushed(path, 'main')).toBe(0);
-  await writeFile(join(path, 'b.txt'), 'b\n');
-  sh(path, ['add', 'b.txt']);
-  sh(path, ['commit', '-q', '-m', 'one']);
-  await writeFile(join(path, 'c.txt'), 'c\n');
-  sh(path, ['add', 'c.txt']);
-  sh(path, ['commit', '-q', '-m', 'two']);
-  expect(await git.unpushed(path, 'main')).toBe(2);
-  sh(repo, ['branch', 'tracker', 'flux/task~1']);
-  sh(path, ['branch', '--set-upstream-to=tracker']);
-  expect(await git.unpushed(path, 'main')).toBe(1);
+  return path;
+};
+
+test('unpushed lists the commits a deleted branch alone holds, newest first', async () => {
+  withOrigin();
+  const path = await session();
+  expect(await git.unpushed(path, 'flux/task')).toEqual({ detached: false, commits: [] });
+  const one = await commit(path, 'b.txt', 'one');
+  const two = await commit(path, 'c.txt', 'two');
+  expect(await git.unpushed(path, 'flux/task')).toEqual({
+    detached: false,
+    commits: [
+      { sha: two, subject: 'two', possiblyMerged: false },
+      { sha: one, subject: 'one', possiblyMerged: false },
+    ],
+  });
+  sh(path, ['push', '-q', 'origin', 'flux/task~1:refs/heads/partial']);
+  expect((await git.unpushed(path, 'flux/task')).commits.map((c) => c.sha)).toEqual([two]);
+});
+
+// Removing the worktree alone leaves the branch, and every commit on it, in the repository.
+test('a branch the delete keeps holds its commits', async () => {
+  withOrigin();
+  const path = await session();
+  await commit(path, 'b.txt', 'kept');
+  expect(await git.unpushed(path, null)).toEqual({ detached: false, commits: [] });
+});
+
+// A session opened on an existing branch has that branch's tip as its base, so the base cannot
+// stand in for what is safe: the branch's own local commits are what the delete would lose.
+test('a session on an existing branch counts the local commits the branch had', async () => {
+  withOrigin();
+  sh(repo, ['branch', 'feature']);
+  sh(repo, ['push', '-q', '-u', 'origin', 'feature']);
+  sh(repo, ['switch', '-q', 'feature']);
+  const local = await commit(repo, 'f.txt', 'local only');
+  sh(repo, ['switch', '-q', 'main']);
+  const path = join(root, 'wt');
+  await git.addWorktree(repo, path, 'feature', null);
+  expect(await git.unpushed(path, 'feature')).toEqual({
+    detached: false,
+    commits: [{ sha: local, subject: 'local only', possiblyMerged: false }],
+  });
+});
+
+// The 2026-11-10 report: the agent built from `git switch --detach origin/dev`, and the
+// commits dev had gained since were counted as the worktree's.
+test('a detached HEAD ahead of the session branch on the remote has nothing unpushed', async () => {
+  withOrigin();
+  const path = await session();
+  await commit(repo, 'd.txt', 'someone else');
+  await commit(repo, 'e.txt', 'and again');
+  sh(repo, ['push', '-q', 'origin', 'main']);
+  sh(path, ['switch', '-q', '--detach', 'origin/main']);
+  expect(await git.unpushed(path, 'flux/task')).toEqual({ detached: true, commits: [] });
+});
+
+test('a detached HEAD is evaluated on its own unless its branch is being deleted', async () => {
+  withOrigin();
+  const path = await session();
+  const onBranch = await commit(path, 'b.txt', 'on the branch');
+  sh(path, ['switch', '-q', '--detach', 'main']);
+  const detached = await commit(path, 'c.txt', 'detached');
+  expect(await git.unpushed(path, null)).toEqual({
+    detached: true,
+    commits: [{ sha: detached, subject: 'detached', possiblyMerged: false }],
+  });
+  expect((await git.unpushed(path, 'flux/task')).commits.map((c) => c.sha).toSorted()).toEqual(
+    [detached, onBranch].toSorted(),
+  );
+});
+
+test('commits pushed under another branch name are not unpushed', async () => {
+  withOrigin();
+  const path = await session();
+  await commit(path, 'b.txt', 'one');
+  sh(path, ['push', '-q', 'origin', 'flux/task:refs/heads/fix/elsewhere']);
+  expect(await git.unpushed(path, 'flux/task')).toEqual({ detached: false, commits: [] });
+});
+
+// A squash merge leaves the branch's commits on no remote; one whose patch the default branch
+// holds is flagged, but as possibly merged, so the operator can judge.
+test('a commit whose patch is on the remote default branch is possibly merged', async () => {
+  withOrigin();
+  const path = await session();
+  const merged = await commit(path, 'b.txt', 'squashed upstream');
+  const local = await commit(path, 'c.txt', 'only here');
+  await commit(repo, 'd.txt', 'main moved on');
+  sh(repo, ['cherry-pick', merged]);
+  sh(repo, ['push', '-q', 'origin', 'main']);
+  expect(await git.unpushed(path, 'flux/task')).toEqual({
+    detached: false,
+    commits: [
+      { sha: local, subject: 'only here', possiblyMerged: false },
+      { sha: merged, subject: 'squashed upstream', possiblyMerged: true },
+    ],
+  });
+});
+
+// `git remote add` sets no `origin/HEAD`: `origin/main` stands in, and the upstream counts too.
+test('without a remote HEAD, main and the upstream are where a patch is looked for', async () => {
+  withOrigin(true);
+  const path = await session();
+  const onMain = await commit(path, 'b.txt', 'picked to main');
+  const onUpstream = await commit(path, 'c.txt', 'picked to the upstream');
+  await commit(repo, 'd.txt', 'main moved on');
+  sh(repo, ['cherry-pick', onMain]);
+  sh(repo, ['push', '-q', 'origin', 'main']);
+  sh(repo, ['branch', 'review', 'main~1']);
+  sh(repo, ['switch', '-q', 'review']);
+  sh(repo, ['cherry-pick', onUpstream]);
+  sh(repo, ['switch', '-q', 'main']);
+  sh(repo, ['push', '-q', 'origin', 'review']);
+  sh(repo, ['branch', '-q', '-D', 'review']);
+  sh(path, ['branch', '-q', '--set-upstream-to=origin/review']);
+  const { commits } = await git.unpushed(path, 'flux/task');
+  expect(commits.map((c) => [c.subject, c.possiblyMerged])).toEqual([
+    ['picked to the upstream', true],
+    ['picked to main', true],
+  ]);
+});
+
+// A fork: `origin` was cloned and has a HEAD, `upstream` was added and has none.
+test('a remote without a HEAD is searched on its main even when another has one', async () => {
+  withOrigin();
+  const upstream = join(root, 'upstream.git');
+  sh(root, ['init', '-q', '--bare', upstream]);
+  sh(repo, ['remote', 'add', 'upstream', upstream]);
+  const path = await session();
+  const picked = await commit(path, 'b.txt', 'squashed into upstream');
+  await commit(repo, 'd.txt', 'upstream moved on');
+  sh(repo, ['cherry-pick', picked]);
+  sh(repo, ['push', '-q', 'upstream', 'main']);
+  sh(repo, ['reset', '-q', '--hard', 'origin/main']);
+  expect(await git.unpushed(path, 'flux/task')).toEqual({
+    detached: false,
+    commits: [{ sha: picked, subject: 'squashed into upstream', possiblyMerged: true }],
+  });
+});
+
+test('without any remote, the commits no other branch holds are what is unpushed', async () => {
+  const path = await session();
+  const one = await commit(path, 'b.txt', 'one');
+  expect(await git.unpushed(path, 'flux/task')).toEqual({
+    detached: false,
+    commits: [{ sha: one, subject: 'one', possiblyMerged: false }],
+  });
+});
+
+// Revisions end at `--`, so a file named like one is not an ambiguous argument.
+test('a file named HEAD in the worktree does not break the check', async () => {
+  const path = await session();
+  await writeFile(join(path, 'HEAD'), 'x\n');
+  expect((await git.unpushed(path, 'flux/task')).commits).toEqual([]);
+});
+
+test('a branch that is already gone is not an error', async () => {
+  const path = await session();
+  sh(path, ['switch', '-q', '--detach']);
+  sh(repo, ['branch', '-q', '-D', 'flux/task']);
+  expect(await git.unpushed(path, 'flux/task')).toEqual({ detached: true, commits: [] });
 });
 
 test('show sends the first MiB of a large file, committed or not, and hashes all of it', async () => {
