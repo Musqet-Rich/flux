@@ -78,14 +78,14 @@ watch(
   />
   <HelpModal v-if="helpOpen" :store="store" @created="onHelpCreated" @close="helpOpen = false" />
   <main class="body">
-    <template v-if="route.name === 'sessions'">
+    <div v-if="route.name === 'sessions'" class="list">
       <section class="empty">
         <p v-if="live.length === 0">No sessions yet.</p>
         <p v-else>Pick a session above.</p>
         <button type="button" @click="go({ name: 'new' })">New session</button>
       </section>
       <ArchivedSessions :store="store" @reopened="openSession" />
-    </template>
+    </div>
     <NewSessionView v-else-if="route.name === 'new'" :store="store" @created="openSession" />
     <SettingsView
       v-else-if="route.name === 'settings'"
@@ -117,6 +117,15 @@ watch(
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+/* Scrolls as one: a long archived list would otherwise run off the bottom, out of reach. */
+.list {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
 }
 
 .empty {
