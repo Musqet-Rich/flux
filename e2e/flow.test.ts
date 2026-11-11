@@ -66,6 +66,10 @@ const composerMetrics = `(() => {
   };
 })()`;
 
+// How far the list screen has scrolled: a wheel moves it only if it is a scroll area, where a
+// script could still scroll a clipped box a person cannot.
+const listScrollTop = "document.querySelector('main > .list').scrollTop";
+
 // The newest agent row's Manager tick, in px: Chromium draws it 13 square, and a checkbox that
 // took the shared input width (base.css) would fill the row instead.
 const managerTickWidth = `(() => {
@@ -398,8 +402,17 @@ const archiveAndReopen = async (page: Page): Promise<void> => {
   const tabs = page.getByRole('navigation', { name: 'Sessions' }).getByRole('button');
   await expect(tabs).toHaveCount(1);
   await expect(tabs).toHaveAccessibleName('New session');
+  // A window too short for the list: its rows are reached by scrolling the list screen, not lost
+  // below the status bar.
+  await page.setViewportSize({ width: 375, height: 200 });
   await page.getByText('Archived (1)').click();
-  await page.getByRole('button', { name: 'Reopen' }).click();
+  await page.locator('main > .list').hover();
+  await page.mouse.wheel(0, 400);
+  await expect.poll(() => page.evaluate(listScrollTop)).toBeGreaterThan(0);
+  const reopen = page.getByRole('button', { name: 'Reopen' });
+  await expect(reopen).toBeInViewport();
+  await page.setViewportSize({ width: 375, height: 812 });
+  await reopen.click();
   await expect(page).toHaveURL(/\/s\/[0-9a-f-]{36}$/u);
   await expect(page.locator('.toolbar .branch')).toHaveText('(e2e/greeting)');
   await expect(items).toHaveText(before);

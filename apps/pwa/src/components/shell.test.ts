@@ -8,8 +8,9 @@ import HelpModal from './HelpModal.vue';
 import Shell from './Shell.vue';
 
 // Shell owns the ⓘ "Ask about Flux" entry point: it opens the help modal and, on a created help
-// session, navigates to it and closes the modal. The routed screens are stubbed so the test stays
-// on the shell's own wiring.
+// session, navigates to it and closes the modal. It also groups the sessions screen into one
+// container (the scroll itself is checked in e2e). The routed screens are stubbed so the test
+// stays on the shell's own wiring.
 
 const memoryHistory = (): RouterHistory => {
   let path = '/';
@@ -82,5 +83,15 @@ test('navigates to a created help session and closes the modal', async () => {
   await flushPromises();
   expect(router.current.route).toMatchObject({ name: 'session', session: 'help-1' });
   expect(wrapper.findComponent(HelpModal).exists()).toBe(false);
+  box.store.stop();
+});
+
+test('the sessions screen groups the empty state and the archived list in one container', async () => {
+  const box = await pairedStore([]);
+  const router = createRouter(memoryHistory());
+  const wrapper = mount(Shell, { props: { store: box.store, router }, global: { stubs } });
+  const list = wrapper.get('main > .list');
+  expect(list.find('.empty').exists()).toBe(true);
+  expect(list.find('archived-sessions-stub').exists()).toBe(true);
   box.store.stop();
 });
