@@ -168,6 +168,8 @@ Hono on Node 24. Two jobs:
 2. `GET /ws/:room` WebSocket. First frame declares role `host` or `guest`. One host per room; the second host is rejected. Frames from host fan out to all guests; frames from a guest go to the host only. Frames are opaque binary. No persistence, no logging of room ids beyond ephemeral metrics.
    The relay holds no state beyond live connections. Web Push is sent by the daemon directly (`adr/0013`).
 
+A 30-second WebSocket ping drops sockets whose peer vanished without closing, which would otherwise hold the host slot and refuse the box's own reconnect (`adr/0040`).
+
 Limits: max frame size, max guests per room, per-IP connection rate. All hard-coded initially. Behind a reverse proxy every socket is the proxy's address, so the deployment sets `FLUX_TRUST_PROXY=1` and the rate key is the last hop of `X-Forwarded-For` (`client-key.ts`); without the flag the header is ignored.
 
 ## PWA

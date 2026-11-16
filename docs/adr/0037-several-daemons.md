@@ -1,6 +1,6 @@
 # 0037: Several daemons on one device: pairings by room id, one connection open, per-daemon cache and push
 
-Status: accepted, 2026-11-01. Implements prd.md P3 "Multiple boxes from one PWA".
+Status: accepted, 2026-11-01. Implements prd.md P3 "Multiple boxes from one PWA". The relay's heartbeat (ADR 0040) shortens the "looks present for minutes" below to 30 to 60 seconds.
 
 ## Context
 

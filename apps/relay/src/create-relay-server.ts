@@ -22,6 +22,8 @@ export interface RelayServerOptions {
   maxGuests?: number;
   connectionsPerMinute?: number;
   joinTimeoutMs?: number;
+  // How often every socket is pinged; one that has not answered the last ping is dropped.
+  heartbeatMs?: number;
   // Key the per-IP limit on X-Forwarded-For (see client-key.ts). Only behind a reverse proxy.
   trustProxy?: boolean;
 }
@@ -103,6 +105,43 @@ const attach = (socket: WebSocket, roomId: string, rooms: Rooms, joinTimeoutMs: 
   });
 };
 
+// A peer that vanished without closing (a box rebooted, slept or lost its network) leaves a
+// socket nothing will ever close, and a host's socket holds its room's host slot, so the box's
+// own reconnect is refused `host_present` until it goes (ADR 0040). Every socket is pinged each
+// interval and dropped if the previous ping went unanswered; WebSocket clients answer pings on
+// their own, the daemon's and the browser's alike, so nothing on the wire changes.
+interface Heartbeat {
+  track: (socket: WebSocket) => void;
+  stop: () => void;
+}
+
+const heartbeat = (wss: WebSocketServer, intervalMs: number): Heartbeat => {
+  const answered = new WeakSet<WebSocket>();
+  const track = (socket: WebSocket): void => {
+    answered.add(socket);
+    socket.on('pong', () => {
+      answered.add(socket);
+    });
+  };
+  const timer = setInterval(() => {
+    for (const socket of wss.clients) {
+      if (!answered.has(socket)) {
+        socket.terminate();
+        continue;
+      }
+      answered.delete(socket);
+      socket.ping();
+    }
+  }, intervalMs);
+  timer.unref();
+  return {
+    track,
+    stop: () => {
+      clearInterval(timer);
+    },
+  };
+};
+
 const createApp = (pwaDir: string): Hono => {
   const app = new Hono();
   app.use('*', async (c, next) => {
@@ -145,6 +184,8 @@ export const createRelayServer = (options: RelayServerOptions): RelayServer => {
     maxPayload: options.maxFrameBytes ?? 1024 * 1024,
   });
 
+  const beat = heartbeat(wss, options.heartbeatMs ?? 30_000);
+
   server.on('upgrade', (request, socket, head) => {
     const roomId = roomPath.exec(request.url ?? '')?.[1];
     if (roomId === undefined || !limiter.allow(clientKey(request, trustProxy))) {
@@ -152,12 +193,14 @@ export const createRelayServer = (options: RelayServerOptions): RelayServer => {
       return;
     }
     wss.handleUpgrade(request, socket, head, (ws) => {
+      beat.track(ws);
       attach(ws, roomId, rooms, joinTimeoutMs);
     });
   });
 
   const close = (): Promise<void> =>
     new Promise((resolve, reject) => {
+      beat.stop();
       for (const client of wss.clients) client.terminate();
       wss.close();
       server.close((err) => {
