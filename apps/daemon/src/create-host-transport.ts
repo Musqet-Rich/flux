@@ -1,4 +1,5 @@
 import type { Bytes, Wire } from '@flux/protocol';
+import { subscribe, unsubscribe } from 'node:diagnostics_channel';
 import { protocolVersion, relayEndpoint, relayMessage } from '@flux/protocol';
 
 import type { DeviceChannels } from './create-device-channels.ts';
@@ -27,6 +28,8 @@ export interface HostTransportOptions {
   channels: DeviceChannels;
   minBackoffMs?: number;
   maxBackoffMs?: number;
+  // How long the relay may go without pinging before its socket is given up as dead (ADR 0041).
+  relaySilenceMs?: number;
   onStatus?: (status: TransportStatus) => void;
 }
 
@@ -41,6 +44,8 @@ interface State {
   stopped: boolean;
   backoffMs: number;
   timer: ReturnType<typeof setTimeout> | null;
+  // Runs out when the relay's pings stop; armed by the first ping on each socket.
+  watchdog: ReturnType<typeof setTimeout> | null;
   // Incoming frames are handled one at a time so each channel's nonce counters stay ordered.
   queue: Promise<void>;
 }
@@ -63,6 +68,42 @@ const scheduleReconnect = (state: State): void => {
     connect(state);
   }, state.backoffMs);
   state.backoffMs = Math.min(max, state.backoffMs * 2);
+};
+
+const disarm = (state: State): void => {
+  if (state.watchdog !== null) clearTimeout(state.watchdog);
+  state.watchdog = null;
+};
+
+// The relay pings every socket (ADR 0040), but a relay that vanished without closing (its host
+// rebooted, the network between went down) leaves this socket open for as long as TCP takes to
+// notice, while devices cannot reach the box. The platform WebSocket hides pings from its own
+// API and cannot send one, so the daemon watches the relay's through undici's diagnostics
+// channel instead (ADR 0041): once a ping has come, silence for `relaySilenceMs` gives the
+// socket up. A relay that never pings (one built before ADR 0040) is never judged.
+const pingChannel = 'undici:websocket:ping';
+
+const onPing = (state: State, message: unknown): void => {
+  if (typeof message !== 'object' || message === null) return;
+  const socket = state.socket;
+  if (socket === null || !('websocket' in message) || message.websocket !== socket) return;
+  disarm(state);
+  state.watchdog = setTimeout(() => {
+    state.watchdog = null;
+    abandon(state, socket);
+  }, state.options.relaySilenceMs ?? 75_000);
+};
+
+// The socket is forgotten at once rather than waiting for its close, which on a dead path may
+// not come for minutes; its close, when it does come, is no longer the transport's socket.
+const abandon = (state: State, socket: WebSocket): void => {
+  if (state.socket !== socket) return;
+  console.error('flux daemon: relay went quiet; reconnecting');
+  state.socket = null;
+  socket.close();
+  state.options.channels.reset();
+  setStatus(state, 'connecting');
+  scheduleReconnect(state);
 };
 
 const onText = (state: State, text: string): void => {
@@ -123,6 +164,7 @@ const connect = (state: State): void => {
   socket.addEventListener('error', () => {});
   socket.addEventListener('close', () => {
     if (state.socket !== socket) return;
+    disarm(state);
     state.socket = null;
     state.options.channels.reset();
     setStatus(state, state.stopped ? 'stopped' : 'connecting');
@@ -139,20 +181,27 @@ export const createHostTransport = (options: HostTransportOptions): HostTranspor
     stopped: true,
     backoffMs: options.minBackoffMs ?? 1000,
     timer: null,
+    watchdog: null,
     queue: Promise.resolve(),
   };
   const out = (data: Bytes): void => {
     send(state, data);
+  };
+  const ping = (message: unknown): void => {
+    onPing(state, message);
   };
   return {
     start: () => {
       if (!state.stopped) return;
       state.url = relayEndpoint.websocket(options.relayUrl, options.roomId);
       state.stopped = false;
+      subscribe(pingChannel, ping);
       connect(state);
     },
     stop: () => {
       state.stopped = true;
+      unsubscribe(pingChannel, ping);
+      disarm(state);
       if (state.timer !== null) clearTimeout(state.timer);
       state.timer = null;
       state.socket?.close();
