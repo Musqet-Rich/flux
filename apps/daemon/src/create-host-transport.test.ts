@@ -1,7 +1,8 @@
 import type { Bytes, Channel, Wire } from '@flux/protocol';
 import { bytes, handshake } from '@flux/protocol';
 import type { AddressInfo } from 'node:net';
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { channel as diagnosticsChannel } from 'node:diagnostics_channel';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { WebSocket as ServerSocket } from 'ws';
 import { WebSocketServer } from 'ws';
 
@@ -37,6 +38,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.useRealTimers();
   for (const socket of server.clients) socket.terminate();
   await new Promise<void>((resolve) => {
     server.close(() => {
@@ -95,7 +97,7 @@ const untilStatus = (
     check();
   });
 
-const setup = async () => {
+const setup = async (relaySilenceMs?: number) => {
   const box = await handshake.generateKeyPair(true);
   const dev = await handshake.generateKeyPair(true);
   const received: Wire[] = [];
@@ -126,11 +128,12 @@ const setup = async () => {
     channels,
     minBackoffMs: 10,
     maxBackoffMs: 20,
+    ...(relaySilenceMs === undefined ? {} : { relaySilenceMs }),
     onStatus: (status) => {
       statuses.push(status);
     },
   });
-  return { box, dev, transport, received, statuses };
+  return { box, dev, transport, received, statuses, channels };
 };
 
 test('joins as host, completes a device handshake and answers an rpc', async () => {
@@ -199,4 +202,65 @@ test('reconnects after the relay drops the connection', async () => {
   await untilStatus(statuses, 'connected', 2);
   expect(statuses).toEqual(['connecting', 'connected', 'connecting', 'connected']);
   transport.stop();
+});
+
+// Resolves once the daemon has answered a ping, and so, in the same step, seen it.
+const pinged = (socket: ServerSocket): Promise<void> =>
+  new Promise((resolve) => {
+    socket.once('pong', () => {
+      resolve();
+    });
+    socket.ping();
+  });
+
+// Timers are driven by hand: the transport's, and undici's and ws's own, which only matters if
+// a connect were pending during an advance (none is). The sockets stay real (ADR 0041).
+test('gives up a relay that stops pinging, and never judges one that has not pinged', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  const { transport, statuses, channels } = await setup(1000);
+  const reset = vi.spyOn(channels, 'reset');
+  transport.start();
+  const first = await untilHosts(1);
+  await untilStatus(statuses, 'connected');
+  const firstClosed = new Promise<void>((resolve) => {
+    first.once('close', () => {
+      resolve();
+    });
+  });
+  vi.advanceTimersByTime(60_000);
+  await pinged(first);
+  vi.advanceTimersByTime(999);
+  await pinged(first);
+  vi.advanceTimersByTime(999);
+  expect(statuses).toEqual(['connecting', 'connected']);
+  expect(reset).not.toHaveBeenCalled();
+  vi.advanceTimersByTime(1);
+  expect(statuses).toEqual(['connecting', 'connected', 'connecting']);
+  expect(reset).toHaveBeenCalledTimes(1);
+  await firstClosed;
+  vi.advanceTimersByTime(20);
+  await untilHosts(2);
+  await untilStatus(statuses, 'connected', 2);
+  vi.advanceTimersByTime(60_000);
+  expect(statuses).toEqual(['connecting', 'connected', 'connecting', 'connected']);
+  transport.stop();
+  expect(diagnosticsChannel('undici:websocket:ping').hasSubscribers).toBe(false);
+});
+
+test("one socket's pings say nothing about another's", async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  const pingedOne = await setup(1000);
+  const quiet = await setup(1000);
+  pingedOne.transport.start();
+  const host = await untilHosts(1);
+  await untilStatus(pingedOne.statuses, 'connected');
+  quiet.transport.start();
+  await untilHosts(2);
+  await untilStatus(quiet.statuses, 'connected');
+  await pinged(host);
+  vi.advanceTimersByTime(1000);
+  expect(pingedOne.statuses).toEqual(['connecting', 'connected', 'connecting']);
+  expect(quiet.statuses).toEqual(['connecting', 'connected']);
+  pingedOne.transport.stop();
+  quiet.transport.stop();
 });
