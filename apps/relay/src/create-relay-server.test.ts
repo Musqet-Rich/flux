@@ -1,14 +1,16 @@
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { ClientRequest } from 'node:http';
 import { request as httpRequest } from 'node:http';
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
 import type { RelayServer } from './create-relay-server.ts';
 import { createRelayServer } from './create-relay-server.ts';
 
 // Real server, real sockets, ephemeral port (engineering.md § Testing). The client is the
-// platform WebSocket, except the proxy tests, which send the upgrade by hand to set a header.
+// platform WebSocket, except the proxy tests, which send the upgrade by hand to set a header,
+// and the heartbeat's dead peer, which upgrades by hand and then never answers a ping.
 
 const room = 'AAAAAAAAAAAAAAAAAAAAAA';
 let server: RelayServer;
@@ -24,6 +26,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.useRealTimers();
   await server.close();
 });
 
@@ -157,6 +160,102 @@ test('a silent connection is dropped after the join timeout', async () => {
   expect(await c.closed).toBe(1008);
 });
 
+// A WebSocket upgrade sent by hand, for the tests that need what the platform client hides.
+const upgrade = (headers: Record<string, string>): ClientRequest =>
+  httpRequest({
+    host: '127.0.0.1',
+    port,
+    path: `/ws/${room}`,
+    headers: {
+      connection: 'Upgrade',
+      upgrade: 'websocket',
+      'sec-websocket-version': '13',
+      'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==', // RFC 6455 sample key, secrets-allow
+      ...headers,
+    },
+  });
+
+// A peer that vanished without closing its socket (a box that rebooted, a phone that lost its
+// network): it upgrades and joins by hand, then never answers a ping again. The join is one
+// masked text frame with the mask all zeros, so the bytes go as they are; its 7-bit length
+// holds up to 125 bytes. The first bytes back are the join's reply: no heartbeat has run yet.
+const deadPeer = (request: object): Promise<{ reply: string; closed: Promise<void> }> =>
+  new Promise((resolve, reject) => {
+    const req = upgrade({});
+    req.once('upgrade', (_response, socket) => {
+      const closed = new Promise<void>((_resolve) => {
+        socket.once('close', () => {
+          _resolve();
+        });
+      });
+      const joinBytes = new TextEncoder().encode(JSON.stringify(request));
+      expect(joinBytes.length).toBeLessThan(126);
+      socket.write(new Uint8Array([0x81, 0x80 | joinBytes.length, 0, 0, 0, 0, ...joinBytes]));
+      socket.once('data', (data: Buffer) => {
+        // An unmasked server text frame: two header bytes, then the reply.
+        resolve({ reply: data.subarray(2).toString(), closed });
+      });
+    });
+    req.once('error', reject);
+    req.end();
+  });
+
+// The heartbeat's interval is driven by hand, one round per tick, so no test waits on a clock.
+const fakeHeartbeat = async (maxGuests: number): Promise<() => void> => {
+  await server.close();
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+  server = createRelayServer({ pwaDir, maxGuests, heartbeatMs: 1000 });
+  port = await server.listen(0);
+  return () => {
+    vi.advanceTimersByTime(1000);
+  };
+};
+
+test('peers that stop answering pings are dropped, freeing their places (ADR 0040)', async () => {
+  const tick = await fakeHeartbeat(1);
+  const host2 = await deadPeer(host);
+  const guest2 = await deadPeer(guest);
+  expect([host2.reply, guest2.reply]).toEqual(['{"ok":true}', '{"ok":true}']);
+  const refused = await connect();
+  expect(await joined(refused, host)).toBe('{"ok":false,"error":"host_present"}');
+  const full = await connect();
+  expect(await joined(full, guest)).toBe('{"ok":false,"error":"room_full"}');
+  tick(); // pinged
+  tick(); // unanswered, dropped
+  await Promise.all([host2.closed, guest2.closed]);
+  const h = await connect();
+  const g = await connect();
+  expect(await joined(h, host)).toBe('{"ok":true}');
+  expect(await joined(g, guest)).toBe('{"ok":true}');
+});
+
+// A frame each way after a ping round proves both ends have answered it: each read the ping
+// before the frame that followed it, and its pong went out ahead of its own next frame.
+const roundTrip = async (h: Client, g: Client): Promise<void> => {
+  h.socket.send(new Uint8Array([2, 1]));
+  expect(await g.next()).toEqual(new Uint8Array([2, 1]));
+  g.socket.send(new Uint8Array([2, 2]));
+  expect(await h.next()).toEqual(new Uint8Array([2, 2]));
+  h.socket.send(new Uint8Array([2, 3]));
+  expect(await g.next()).toEqual(new Uint8Array([2, 3]));
+};
+
+test('peers that answer pings stay connected round after round', async () => {
+  const tick = await fakeHeartbeat(1);
+  const h = await connect();
+  const g = await connect();
+  expect(await joined(h, host)).toBe('{"ok":true}');
+  expect(await joined(g, guest)).toBe('{"ok":true}');
+  tick();
+  await roundTrip(h, g);
+  tick();
+  await roundTrip(h, g);
+  tick();
+  await roundTrip(h, g);
+  expect(h.socket.readyState).toBe(WebSocket.OPEN);
+  expect(g.socket.readyState).toBe(WebSocket.OPEN);
+});
+
 test('bad room paths never upgrade', async () => {
   await expect(connect('/ws/short')).rejects.toThrow('connect failed');
   await expect(connect('/other')).rejects.toThrow('connect failed');
@@ -166,18 +265,7 @@ test('bad room paths never upgrade', async () => {
 // header is honoured; a distinct spoofed address per connection then never trips it.
 const forwarded = (address: string): Promise<'open' | 'refused'> =>
   new Promise((resolve) => {
-    const req = httpRequest({
-      host: '127.0.0.1',
-      port,
-      path: `/ws/${room}`,
-      headers: {
-        connection: 'Upgrade',
-        upgrade: 'websocket',
-        'sec-websocket-version': '13',
-        'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==', // RFC 6455 sample key, secrets-allow
-        'x-forwarded-for': address,
-      },
-    });
+    const req = upgrade({ 'x-forwarded-for': address });
     req.once('upgrade', (_response, socket) => {
       socket.destroy();
       resolve('open');

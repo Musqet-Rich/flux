@@ -45,3 +45,4 @@ Format: Context, Decision, Consequences. Keep each under a page.
 | 0037 | Several daemons on one device: pairings by room id, one connection open, per-daemon cache and push | accepted |
 | 0038 | No localhost preview in Flux: the operator brings their own tunnel                                 | accepted |
 | 0039 | The delete refusal names the commits it would lose, on no remote and no kept branch                | accepted |
+| 0040 | The relay pings every socket and drops the ones that stop answering                                | accepted |
