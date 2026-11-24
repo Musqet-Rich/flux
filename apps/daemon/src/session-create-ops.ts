@@ -16,8 +16,8 @@ import { resolveAgent } from './resolve-agent.ts';
 // handler and the manager open op (ADR 0025) both go through `fromParams`, so they resolve
 // identically; the Help path never touches `reposDir`.
 
-// Resolve a wire `sessions.create`: the repo under `reposDir` (the `inside` guard rejects
-// traversal, so a foreign path never reaches disk) and the Agent fields (inline → saved Agent →
+// Resolve a wire `sessions.create`: the repo under `reposDir` (the `inside` guard is lexical: it
+// rejects `..` traversal, while a symlink the operator put in `reposDir` is followed) and the Agent fields (inline → saved Agent →
 // default). An unknown `agent` name is `bad_params` here, before any worktree is made.
 const resolveParams = (
   ctx: HandlerContext,
