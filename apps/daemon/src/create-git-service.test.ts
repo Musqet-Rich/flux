@@ -1,9 +1,9 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { beforeEach, expect, test } from 'vitest';
+import { beforeEach, expect, onTestFinished, test } from 'vitest';
 
 import { createGitService } from './create-git-service.ts';
 import { DaemonError } from './daemon-error.ts';
@@ -380,5 +380,25 @@ test('listRepos finds git repositories directly under a root, with their branche
   sh(repo, ['branch', 'other']);
   expect(await git.listRepos(root)).toEqual([
     { path: repo, name: 'app', branches: ['main', 'other'] },
+  ]);
+});
+
+test('listRepos follows a symlink to a repository elsewhere and lists it under the link', async () => {
+  const elsewhere = await mkdtemp(join(tmpdir(), 'flux-linked-'));
+  const linked = join(elsewhere, 'kept-apart');
+  await mkdir(linked);
+  sh(linked, ['init', '-q', '-b', 'trunk']);
+  sh(linked, ['commit', '-q', '--allow-empty', '-m', 'init']);
+  onTestFinished(() => rm(elsewhere, { recursive: true, force: true }));
+  await symlink(linked, join(root, 'alias'));
+  await symlink(join(elsewhere, 'gone'), join(root, 'dangling'));
+  await writeFile(join(elsewhere, 'file.txt'), 'x');
+  await symlink(join(elsewhere, 'file.txt'), join(root, 'to-a-file'));
+  await symlink(join(root, 'loop-b'), join(root, 'loop-a'));
+  await symlink(join(root, 'loop-a'), join(root, 'loop-b'));
+  const repos = await git.listRepos(root);
+  expect(repos.toSorted((a, b) => a.name.localeCompare(b.name))).toEqual([
+    { path: join(root, 'alias'), name: 'alias', branches: ['trunk'] },
+    { path: repo, name: 'app', branches: ['main'] },
   ]);
 });

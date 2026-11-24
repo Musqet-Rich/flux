@@ -139,9 +139,16 @@ const listRepos = async (git: Runner, root: string): Promise<Repo[]> => {
   const entries = await readdir(root, { withFileTypes: true }).catch(() => {
     throw new DaemonError('not_found', `repositories directory ${root} is missing or unreadable`);
   });
-  const candidates = entries.filter((e) => e.isDirectory()).map((e) => join(root, e.name));
+  // A symlink to a repo elsewhere counts, so repos kept outside `root` can be linked in; it is
+  // listed under the link's name and path (a repo linked twice is listed twice). `stat` follows
+  // the link; a dangling or looping one is skipped.
+  const candidates = entries
+    .filter((e) => e.isDirectory() || e.isSymbolicLink())
+    .map((e) => join(root, e.name));
   const repos = await Promise.all(
     candidates.map(async (path): Promise<Repo | null> => {
+      const dir = await stat(path).catch(() => null);
+      if (dir === null || !dir.isDirectory()) return null;
       const gitDir = await stat(join(path, '.git')).catch(() => null);
       if (gitDir === null) return null;
       return { path, name: basename(path), branches: await localBranches(git, path) };

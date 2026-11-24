@@ -483,7 +483,7 @@ interface AgentTools {
 }
 
 interface FluxSettings {
-  reposDir: string; // absolute; where `repos.list` and `sessions.create` look
+  reposDir: string; // absolute; where `repos.list` and `sessions.create` look (direct children only; a symlink to a repo elsewhere counts, under the link's name)
   defaultHarness: 'claude' | 'pi' | 'opencode'; // must be in hello.agents; settings.set answers agent_unavailable otherwise
   notifyOnAsk: boolean; // push on `ask`
   notifyOnIdle: boolean; // push on running → idle
